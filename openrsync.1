@@ -1,0 +1,119 @@
+.\"	$OpenBSD$
+.\"
+.\" Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd $Mdocdate$
+.Dt OPENRSYNC 1
+.Os
+.Sh NAME
+.Nm openrsync
+.Nd synchronise local and remote files
+.Sh SYNOPSIS
+.Nm openrsync
+.Op Fl nv
+.Ar src...
+.Ar dst
+.Sh DESCRIPTION
+The
+.Nm
+utility synchronises files in the destination directory
+.Ar dst
+with one or more source files
+.Ar src .
+Either the source or the destination (but not both) may be on a remote
+host.
+If so, the remote host is connected to using
+.Xr ssh 1 .
+The arguments are as follows:
+.Bl -tag -width Ds
+.It Fl n
+Dry-run mode.
+Does not actually modify the destination.
+.It Fl v
+Increase verbosity.
+Maybe specified more than once, with four times being the maximum
+recognised.
+.El
+.Pp
+.Nm
+is compatible with GNU
+.Xr rsync 1
+protocol version 20, although the GNU utility must be forced to use MD5
+hashing as illustrated in the
+.Sx EXAMPLES .
+.\" The following requests should be uncommented and used where appropriate.
+.\" .Sh CONTEXT
+.\" For section 9 functions only.
+.\" .Sh RETURN VALUES
+.\" For sections 2, 3, and 9 function return values only.
+.\" .Sh ENVIRONMENT
+.\" For sections 1, 6, 7, and 8 only.
+.\" .Sh FILES
+.\" .Sh EXIT STATUS
+.\" For sections 1, 6, and 8 only.
+.Sh EXAMPLES
+To update the out-of-date remote files
+.Pa host:dest/bar
+and
+.Pa host:dest/baz
+with the local
+.Pa ../src/bar
+and
+.Pa ../src/baz :
+.Pp
+.Dl % openrsync ../src/bar ../src/baz host:dest
+.Pp
+To update the out-of-date local files
+.Pa bar
+and
+.Pa baz
+with the remote files
+.Pa host:src/bar
+and
+.Pa host:src/baz :
+.Pp
+.Dl % openrsync host:src/bar :src/baz \&.
+.Pp
+To update the out-of-date local files
+.Pa ../dest/bar
+and
+.Pa ../dest/baz
+with
+.Pa bar
+and
+.Pa baz :
+.Pp
+.Dl % openrsync bar baz ../dest
+.Pp
+To update the out-of-date remote files in
+.Pa host:dest
+on a remote host running
+.Nm
+with the local host running GNU
+.Xr rsync 1 :
+.Pp
+.Dl % rsync --checksum-choice=md5 ../dest/* host:dest
+.\" .Sh DIAGNOSTICS
+.\" For sections 1, 4, 6, 7, 8, and 9 printf/stderr messages only.
+.\" .Sh ERRORS
+.\" For sections 2, 3, 4, and 9 errno settings only.
+.Sh SEE ALSO
+.Xr ssh 1 ,
+.Xr rsync 5
+.\" .Sh STANDARDS
+.\" .Sh HISTORY
+.\" .Sh AUTHORS
+.\" .Sh CAVEATS
+.\" .Sh BUGS

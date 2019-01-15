@@ -30,11 +30,11 @@ It is compatible with version 20 of the reference utility, although it
 requires the use of MD5 checksums instead of MD4.
 .Ss Data types
 The binary protocol encodes all data in little-endian format.
-Longs are signed 64-bit, integers are signed 32-bit, shorts are signed
-16-bit, bytes are unsigned 8-bit.
+Integers are signed 32-bit, shorts are signed 16-bit, bytes are unsigned
+8-bit.
 A long is variable-length.
 For values less than the maximum integer, the value is transmitted and
-read as an integer.
+read as a 32-bit integer.
 For values greater, the value is transmitted first as a maximum integer,
 then a 64-bit signed integer.
 .Pp
@@ -45,10 +45,10 @@ For non-whole-file long checksums, the sum is made over the checksum
 seed first (serialised in little-endian format), then the data.
 .Ss Client process
 The client can operate in sender or receiver mode depending upon the
-command-line source and destination files.
+command-line source and destination.
 .Pp
-If the destination file (sink) is remote, the client is in sender mode:
-the client will push its data to the server.
+If the destination directory (sink) is remote, the client is in sender
+mode: the client will push its data to the server.
 If the source file is remote, it is in receiver mode: the server pushes
 to the client.
 If neither are remote, the client operates in sender mode.
@@ -175,8 +175,8 @@ status byte (integer)
 filename length (integer)...
 .El
 .Ss Server process
-The server can operate in sender, receiver, or local mode depending upon
-how the client starts the server.
+The server can operate in sender or receiver mode depending upon how the
+client starts the server.
 This may be directly from the parent process (when invoked for local
 files) or indirectly via a remote shell.
 .Pp
