@@ -177,7 +177,6 @@ void		  rsync_errx1(const struct opts *,
 			const char *, size_t, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
 
-char 		**fargs_cmdline(const struct opts *, const struct fargs *);
 void		  fargs_free(struct fargs *);
 struct fargs	 *fargs_parse(const struct opts *, size_t, char *[]);
 
