@@ -43,8 +43,9 @@ fargs_free(struct fargs *p)
 	if (NULL == p)
 		return;
 
-	for (i = 0; i < p->sourcesz; i++)
-		free(p->sources[i]);
+	if (NULL != p->sources)
+		for (i = 0; i < p->sourcesz; i++)
+			free(p->sources[i]);
 
 	free(p->sources);
 	free(p->sink);
@@ -68,7 +69,7 @@ fargs_parse(const struct opts *opts, size_t argc, char *argv[])
 {
 	struct fargs	 *f = NULL;
 	char		 *cp;
-	size_t		  i, j, len;
+	size_t		  i, j, len = 0;
 
 	assert(argc > 1);
 
