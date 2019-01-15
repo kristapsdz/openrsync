@@ -148,9 +148,6 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 			goto out;
 		}
 
-		LOG2(opts, "sender matching "
-			"blocks for %s", fl[idx].path);
-		
 		if ( ! blkset_match(opts, sess, 
 		    fdout, blks, fl[idx].path, csum_length)) {
 			ERRX1(opts, "blkset_match");
