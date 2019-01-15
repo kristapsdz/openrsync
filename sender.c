@@ -66,8 +66,6 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 
 	/* Now send them to the receiver server. */
 
-	LOG2(opts, "sender sending %zu filenames", flsz);
-
 	if ( ! flist_send(opts, fdout, fl, flsz)) {
 		ERRX1(opts, "flist_send");
 		goto out;
