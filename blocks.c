@@ -151,8 +151,8 @@ blk_match_part(const struct opts *opts, const char *path,
 		if (NULL == blk)
 			continue;
 
-		LOG3(opts, "%s: flushed %llu B before %zu B block", 
-			path, offs - last, blk->len);
+		LOG3(opts, "%s: flushed %llu B before %zu B block (%zu)", 
+			path, offs - last, blk->len, blk->idx);
 
 		/* Flush what we have and follow with our tag. */
 
@@ -246,10 +246,11 @@ blk_match(const struct opts *opts, const struct sess *sess,
 		blk_match_part(opts, path, fd, map, 
 			st.st_size, blks, sess, csum_length);
 		LOG2(opts, "%s: sent chunked %zu blocks of "
-			"%llu B", path, blks->blksz, st.st_size);
+			"%zu B (%zu B remainder)", path, blks->blksz, 
+			blks->len, blks->rem);
 	} else {
 		blk_match_full(opts, fd, map, st.st_size);
-		LOG2(opts, "%s: sent %llu B", path, st.st_size);
+		LOG2(opts, "%s: sent un-chunked %llu B", path, st.st_size);
 	}
 
 	/* Now write the full file hash. */
@@ -434,6 +435,7 @@ blk_merge(const struct opts *opts, int fd, int ffd,
 	const void *map, size_t mapsz)
 {
 	size_t		 sz, tok;
+	int32_t		 rawtok;
 	char		*buf = NULL;
 	void		*pp;
 	ssize_t		 ssz;
@@ -446,73 +448,74 @@ blk_merge(const struct opts *opts, int fd, int ffd,
 	MD5Init(&ctx);
 
 	for (;;) {
-		if ( ! io_read_size(opts, fd, &sz)) {
-			ERRX1(opts, "io_read_size: data block size");
+		if ( ! io_read_int(opts, fd, &rawtok)) {
+			ERRX1(opts, "io_read_int: data block size");
 			goto out;
-		} else if (NULL == (pp = realloc(buf, sz))) {
-			ERR(opts, "realloc");
-			goto out;
-		} 
-
-		buf = pp;
-		if ( ! io_read_buf(opts, fd, buf, sz)) {
-			ERRX1(opts, "io_read_int: data block");
-			goto out;
-		}
-
-		if ((ssz = write(outfd, buf, sz)) < 0) {
-			ERR(opts, "write: temporary file");
-			goto out;
-		} else if ((size_t)ssz != sz) {
-			ERRX(opts, "write: short write");
-			goto out;
-		}
-
-		total += sz;
-		LOG2(opts, "%s: received %zd bytes, "
-			"now %llu total", path, ssz, total);
-
-		MD5Update(&ctx, buf, sz);
-
-		if ( ! io_read_size(opts, fd, &tok)) {
-			ERRX1(opts, "io_read_int: token");
-			goto out;
-		} else if (0 == tok)
+		} else if (0 == rawtok) 
 			break;
 
-		if (tok >= block->blksz) {
-			ERRX(opts, "token not in block set");
-			goto out;
+		if (rawtok > 0) {
+			sz = rawtok;
+			if (NULL == (pp = realloc(buf, sz))) {
+				ERR(opts, "realloc");
+				goto out;
+			} 
+			buf = pp;
+			if ( ! io_read_buf(opts, fd, buf, sz)) {
+				ERRX1(opts, "io_read_int: data block");
+				goto out;
+			}
+
+			if ((ssz = write(outfd, buf, sz)) < 0) {
+				ERR(opts, "write: temporary file");
+				goto out;
+			} else if ((size_t)ssz != sz) {
+				ERRX(opts, "write: short write");
+				goto out;
+			}
+
+			total += sz;
+			LOG2(opts, "%s: received %zd bytes, "
+				"now %llu total", path, ssz, total);
+
+			MD5Update(&ctx, buf, sz);
+		} else {
+			tok = -rawtok - 1;
+			if (tok >= block->blksz) {
+				ERRX(opts, "token not in block set");
+				goto out;
+			}
+
+			/* 
+			 * Now we read from our block.
+			 * We should only be at this point if we have a
+			 * block to read from, i.e., if we were able to
+			 * map our origin file and create a block
+			 * profile from it.
+			 */
+
+			assert(MAP_FAILED != map);
+
+			ssz = write(outfd, 
+				map + block->blks[tok].offs, 
+				block->blks[tok].len);
+
+			if (ssz < 0) {
+				ERR(opts, "write: temporary file");
+				goto out;
+			} else if ((size_t)ssz != block->blks[tok].len) {
+				ERRX(opts, "write: short write");
+				goto out;
+			}
+
+			total += block->blks[tok].len;
+			LOG2(opts, "%s: copied %zu bytes, now %llu total", 
+				path, block->blks[tok].len, total);
+
+			MD5Update(&ctx, 
+				map + block->blks[tok].offs, 
+				block->blks[tok].len);
 		}
-
-		/* 
-		 * Now we read from our block.
-		 * We should only be at this point if we have a block to
-		 * read from, i.e., if we were able to map our origin
-		 * file and create a block profile from it.
-		 */
-
-		assert(MAP_FAILED != map);
-
-		ssz = write(outfd, 
-			map + block->blks[tok].offs, 
-			block->blks[tok].len);
-
-		if (ssz < 0) {
-			ERR(opts, "write: temporary file");
-			goto out;
-		} else if ((size_t)ssz != sz) {
-			ERRX(opts, "write: short write");
-			goto out;
-		}
-
-		total += block->blks[tok].len;
-		LOG2(opts, "%s: copied %zu bytes, now %llu total", 
-			path, block->blks[tok].len, total);
-
-		MD5Update(&ctx, 
-			map + block->blks[tok].offs, 
-			block->blks[tok].len);
 	}
 
 	/* Make sure our resulting MD5 hashes match. */
@@ -538,13 +541,18 @@ out:
 
 /*
  * Prepare the overall block set's metadata.
+ * We always have at least one block.
  */
 static void
 blk_set_blocksize(struct blkset *p, off_t sz)
 {
 
-	p->blksz = sz / MAX_CHUNK;
-	p->rem = sz % MAX_CHUNK;
+	if (0 == (p->blksz = sz / MAX_CHUNK)) {
+		p->blksz = 1;
+		p->rem = sz;
+	} else 
+		p->rem = sz % MAX_CHUNK;
+
 	p->len = MAX_CHUNK;
 }
 
