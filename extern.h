@@ -34,6 +34,14 @@
 #define MAX_CHUNK	(32 * 1024)
 
 /*
+ * The sender and receiver use a two-phase synchronisation process.
+ * The first uses two-byte hashes; the second, 16-byte.
+ * (The second must hold a full MD5 digest.)
+ */
+#define	CSUM_LENGTH_PHASE1 (2)
+#define	CSUM_LENGTH_PHASE2 (16)
+
+/*
  * Operating mode for a client or a server.
  * Sender means we synchronise local files with those from remote.
  * Receiver is the opposite.
@@ -100,8 +108,8 @@ struct	blk {
 	off_t		 offs; /* offset in file */
 	size_t		 idx; /* block index */
 	size_t		 len; /* bytes in block */
-	uint32_t	 chksum_short; /* 4-byte checksum */
-	unsigned char	 chksum_long[16]; /* 16-byte checksum */
+	uint32_t	 chksum_short; /* fast checksum */
+	unsigned char	 chksum_long[CSUM_LENGTH_PHASE2]; /* slow checksum */
 };
 
 /*
@@ -136,7 +144,9 @@ struct	sess {
 #define WARNX(_opts, _fmt, ...) \
 	rsync_warnx((_opts), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
 #define WARN(_opts, _fmt, ...) \
-	rsync_warn((_opts), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+	rsync_warn((_opts), 0, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+#define WARN1(_opts, _fmt, ...) \
+	rsync_warn((_opts), 1, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
 #define ERR(_opts, _fmt, ...) \
 	rsync_err((_opts), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
 #define ERRX(_opts, _fmt, ...) \
@@ -151,9 +161,9 @@ void		  rsync_log(const struct opts *,
 void		  rsync_warnx1(const struct opts *, 
 			const char *, size_t, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
-void		  rsync_warn(const struct opts *, 
+void		  rsync_warn(const struct opts *, int,
 			const char *, size_t, const char *, ...)
-			__attribute__((format(printf, 4, 5)));
+			__attribute__((format(printf, 5, 6)));
 void		  rsync_warnx(const struct opts *, 
 			const char *, size_t, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
@@ -180,6 +190,7 @@ int		  flist_send(const struct opts *,
 int		  io_read_buf(const struct opts *, int, void *, size_t);
 int		  io_read_byte(const struct opts *, int, uint8_t *);
 int		  io_read_int(const struct opts *, int, int32_t *);
+int		  io_read_size(const struct opts *, int, size_t *);
 int		  io_read_long(const struct opts *, int, int64_t *);
 int		  io_write_buf(const struct opts *, 
 			int, const void *, size_t);
@@ -196,14 +207,14 @@ int		  rsync_sender(const struct opts *, const struct sess *,
 int		  rsync_client(const struct opts *, int, size_t, char *[]);
 int		  rsync_server(const struct opts *, size_t, char *[]);
 
-struct blkset	 *blkset_recv(const struct opts *, int, size_t, const char *);
-int		  blkset_recv_ack(const struct opts *, 
+struct blkset	 *blk_recv(const struct opts *, int, size_t, const char *);
+int		  blk_recv_ack(const struct opts *, 
 			int , const struct blkset *, int32_t);
-void		  blkset_free(struct blkset *);
-int		  blkset_match(const struct opts *, const struct sess *,
+int		  blk_match(const struct opts *, const struct sess *,
 			int, const struct blkset *, const char *, size_t);
-int		  blkset_send(const struct opts *, int, int, int, 
-			const char *, size_t, const struct sess *);
+int		  blk_send(const struct opts *, int, int, int, 
+			const char *, size_t, const struct sess *, size_t);
+void		  blkset_free(struct blkset *);
 
 uint32_t	  hash_fast(const void *, size_t);
 void		  hash_slow(const void *, size_t, 

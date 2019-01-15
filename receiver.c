@@ -87,6 +87,12 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 		goto out;
 	}
 
+	/*
+	 * FIXME: we never use the full checksum amount.
+	 * I think this should happen if we fail in our reconstitution,
+	 * but at the moment I'm not sure.
+	 */
+
 	LOG2(opts, "receiver ready for "
 		"2-checksum data: %s", root);
 
@@ -116,9 +122,9 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 		 * This performs most of the work.
 		 */
 
-		if ( ! blkset_send(opts, fdin, 
-		    fdout, dfd, fl[i].filename, i, sess)) {
-			ERRX1(opts, "blkset_send");
+		if ( ! blk_send(opts, fdin, 
+		    fdout, dfd, fl[i].path, i, sess, 2)) {
+			ERRX1(opts, "blk_send");
 			goto out;
 		}
 	}

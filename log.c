@@ -161,14 +161,18 @@ rsync_warnx(const struct opts *opts, const char *fname,
 
 /*
  * Prints a warning with an errno.
+ * It uses a level detector for when to inhibit printing.
  */
 void
-rsync_warn(const struct opts *opts, const char *fname, 
-	size_t line, const char *fmt, ...)
+rsync_warn(const struct opts *opts, int level,
+	const char *fname, size_t line, const char *fmt, ...)
 {
 	char	*buf = NULL;
 	va_list	 ap;
 	int	 er = errno;
+
+	if (opts->verbose < level)
+		return;
 
 	if (NULL != fmt) {
 		va_start(ap, fmt);

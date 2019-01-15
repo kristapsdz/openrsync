@@ -178,6 +178,29 @@ io_read_long(const struct opts *opts, int fd, int64_t *val)
 	return 1;
 }
 
+/*
+ * One thing we often need to do is read a size_t.
+ * These are transmitted as int32_t, so make sure that the value
+ * transmitted is not out of range.
+ * FIXME: I assume that size_t can handle int32_t's max.
+ */
+int
+io_read_size(const struct opts *opts, int fd, size_t *val)
+{
+	int32_t	oval;
+
+	if ( ! io_read_int(opts, fd, &oval)) {
+		ERRX(opts, "io_read_int");
+		return 0;
+	} else if (oval < 0) {
+		ERRX(opts, "io_read_size: negative value");
+		return 0;
+	}
+
+	*val = oval;
+	return 1;
+}
+
 int
 io_read_int(const struct opts *opts, int fd, int32_t *val)
 {
