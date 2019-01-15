@@ -25,9 +25,6 @@
 
 #include "extern.h"
 
-#define	CSUM_LENGTH_PHASE1	 2
-#define	CSUM_LENGTH_PHASE2	 MD5_DIGEST_LENGTH
-
 /*
  * A client sender manages the read-only source files and sends data to
  * the receiver as requested.
@@ -44,7 +41,7 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 	struct flist	*fl = NULL;
 	size_t		 flsz = 0, phase = 0,
 			 csum_length = CSUM_LENGTH_PHASE1;
-	int		 rc = 0;
+	int		 rc = 0, c;
 	int32_t		 idx;
 	struct blkset	*blks = NULL;
 
@@ -138,24 +135,23 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 		 * don't have.
 		 */
 
-		blks = blkset_recv
-			(opts, fdin, csum_length, fl[idx].path);
+		blks = blk_recv(opts, fdin, csum_length, fl[idx].path);
 		if (NULL == blks) {
-			ERRX1(opts, "blkset_recv");
+			ERRX1(opts, "blk_recv");
 			goto out;
-		} else if ( ! blkset_recv_ack(opts, fdout, blks, idx)) {
-			ERRX1(opts, "blkset_recv_ack");
-			goto out;
-		}
-
-		if ( ! blkset_match(opts, sess, 
-		    fdout, blks, fl[idx].path, csum_length)) {
-			ERRX1(opts, "blkset_match");
-			blkset_free(blks);
+		} else if ( ! blk_recv_ack(opts, fdout, blks, idx)) {
+			ERRX1(opts, "blk_recv_ack");
 			goto out;
 		}
 
+		c = blk_match(opts, sess, fdout, 
+			blks, fl[idx].path, csum_length);
 		blkset_free(blks);
+
+		if ( ! c) {
+			ERRX1(opts, "blk_match");
+			goto out;
+		}
 	}
 
 	/* Write our final acknowledgement. */
