@@ -14,10 +14,10 @@ OBJS	 = blocks.o \
 
 CFLAGS	+= -W -Wall -Wextra -Wno-unused-parameter
 
-rsync: $(OBJS)
+openrsync: $(OBJS)
 	$(CC) -o $@ $(OBJS)
 
 clean:
-	rm -f $(OBJS) rsync
+	rm -f $(OBJS) openrsync
 
 $(OBJS): extern.h
