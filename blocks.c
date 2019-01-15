@@ -127,9 +127,10 @@ blkset_match_find(const struct opts *opts, const void *buf,
  * Return zero on failure, non-zero on success.
  */
 static int
-blkset_match_blocks(const struct opts *opts, int fd, 
-	const void *buf, off_t size, const struct blkset *blks,
-	const struct sess *sess, size_t csum_length)
+blkset_match_blocks(const struct opts *opts, const char *path,
+	int fd, const void *buf, off_t size, 
+	const struct blkset *blks, const struct sess *sess, 
+	size_t csum_length)
 {
 	off_t	 	 offs, last, end, nf;
 	struct blk	*blk;
@@ -152,9 +153,8 @@ blkset_match_blocks(const struct opts *opts, int fd,
 		if (NULL == blk)
 			continue;
 
-		LOG3(opts, "sender flushing %llu "
-			"bytes before block of %zu", 
-			offs - last, blk->len);
+		LOG3(opts, "%s: sender flushing %llu B before "
+			"block of %zu B", path, offs - last, blk->len);
 		nf = 0;
 
 		/* Flush what we have and follow with our tag. */
@@ -171,7 +171,8 @@ blkset_match_blocks(const struct opts *opts, int fd,
 		last = offs + 1;
 	}
 
-	LOG3(opts, "sender flushing %llu remaining bytes", size - last);
+	LOG3(opts, "%s: sender flushing %llu "
+		"B remaining", path, size - last);
 
 	/* Emit remaining data and send terminator. */
 
@@ -245,13 +246,13 @@ blkset_match(const struct opts *opts, const struct sess *sess,
 	 */
 
 	if (st.st_size && blks->blksz) {
-		LOG2(opts, "transmitting %zu blocks of %llu "
-			"bytes: %s", blks->blksz, st.st_size, path);
-		blkset_match_blocks(opts, fd, map, 
+		LOG2(opts, "%s: transmitting %zu blocks of %llu B", 
+			path, blks->blksz, st.st_size);
+		blkset_match_blocks(opts, path, fd, map, 
 			st.st_size, blks, sess, csum_length);
 	} else {
-		LOG2(opts, "transmitting full file "
-			"of %llu bytes: %s", st.st_size, path);
+		LOG2(opts, "%s: transmitting full file "
+			"of %llu B", path, st.st_size);
 		blkset_match_full(opts, fd, map, st.st_size);
 	}
 
@@ -262,7 +263,6 @@ blkset_match(const struct opts *opts, const struct sess *sess,
 		goto out;
 	}
 
-	LOG2(opts, "transmitted blocks: %s", path);
 	rc = 1;
 out:
 	munmap(map, mapsz);
@@ -355,9 +355,9 @@ blkset_recv(const struct opts *opts,
 	}
 	s->rem = i;
 
-	LOG2(opts, "read block prologue: %zu blocks of "
-		"%zu bytes, %zu remainder", 
-		s->blksz, s->len, s->rem);
+	LOG2(opts, "%s: read block prologue: %zu blocks of "
+		"%zu B, %zu B remainder", path, s->blksz, 
+		s->len, s->rem);
 
 	/* Short-circuit: we have no blocks to read. */
 
@@ -395,13 +395,14 @@ blkset_recv(const struct opts *opts,
 		b->len = (j == (s->blksz - 1) && s->rem) ? s->rem : s->len;
 		offs += b->len;
 
-		LOG2(opts, "read block %zu, length %zu, checksum=0x%08x", 
-			b->idx, b->len, b->chksum_short);
+		LOG2(opts, "%s: read block %zu, length %zu B, "
+			"checksum=0x%08x", path, b->idx, b->len, 
+			b->chksum_short);
 	}
 
 	s->size = offs;
-	LOG2(opts, "read blocks: %zu blocks, %llu "
-		"total filesize", s->blksz, s->size);
+	LOG2(opts, "%s: read blocks: %zu blocks, %llu "
+		"B total filesize", path, s->blksz, s->size);
 	return s;
 out:
 	free(s);
@@ -440,18 +441,25 @@ blkset_send_ack(const struct opts *opts,
 	return 0;
 }
 
+/*
+ * FIXME: map is NULL?
+ */
 static int
 blkset_merge(const struct opts *opts, int fd, int ffd,
-	const struct blkset *block, int outfd, const void *map, 
-	size_t mapsz)
+	const struct blkset *block, int outfd, const char *path, 
+	const void *map, size_t mapsz)
 {
 	int32_t		 sz, tok;
 	char		*buf = NULL;
 	void		*pp;
 	ssize_t		 ssz;
 	int		 rc = 0;
-	unsigned char	 md[MD5_DIGEST_LENGTH];
+	unsigned char	 md[MD5_DIGEST_LENGTH],
+			 ourmd[MD5_DIGEST_LENGTH];
 	off_t		 total = 0;
+	MD5_CTX		 ctx;
+
+	MD5Init(&ctx);
 
 	for (;;) {
 		if ( ! io_read_int(opts, fd, &sz)) {
@@ -471,9 +479,6 @@ blkset_merge(const struct opts *opts, int fd, int ffd,
 			goto out;
 		}
 
-		total += sz;
-		LOG2(opts, "received %llu data bytes", total);
-
 		if ((ssz = write(outfd, buf, sz)) < 0) {
 			ERR(opts, "write: temporary file");
 			goto out;
@@ -481,6 +486,12 @@ blkset_merge(const struct opts *opts, int fd, int ffd,
 			ERRX(opts, "write: short write");
 			goto out;
 		}
+
+		total += sz;
+		LOG2(opts, "%s: received %zd bytes, "
+			"now %llu total", path, ssz, total);
+
+		MD5Update(&ctx, buf, sz);
 
 		if ( ! io_read_int(opts, fd, &tok)) {
 			ERRX1(opts, "io_read_int: token");
@@ -496,10 +507,6 @@ blkset_merge(const struct opts *opts, int fd, int ffd,
 			goto out;
 		}
 
-		LOG2(opts, "merged %zu data block", 
-			block->blks[tok].len);
-		total += block->blks[tok].len;
-
 		ssz = write(outfd, 
 			map + block->blks[tok].offs, 
 			block->blks[tok].len);
@@ -511,6 +518,14 @@ blkset_merge(const struct opts *opts, int fd, int ffd,
 			ERRX(opts, "write: short write");
 			goto out;
 		}
+
+		total += block->blks[tok].len;
+		LOG2(opts, "%s: copied %zu bytes, now %llu total", 
+			path, block->blks[tok].len, total);
+
+		MD5Update(&ctx, 
+			map + block->blks[tok].offs, 
+			block->blks[tok].len);
 	}
 
 	if ( ! io_read_buf(opts, fd, md, MD5_DIGEST_LENGTH)) {
@@ -518,7 +533,14 @@ blkset_merge(const struct opts *opts, int fd, int ffd,
 		goto out;
 	}
 
-	LOG2(opts, "merged %llu total bytes", total);
+	MD5Final(ourmd, &ctx);
+
+	if (memcmp(md, ourmd, MD5_DIGEST_LENGTH)) {
+		ERRX(opts, "file hash does not match");
+		goto out;
+	}
+
+	LOG2(opts, "%s: merged %llu total bytes", path, total);
 	rc = 1;
 out:
 	free(buf);
@@ -540,7 +562,7 @@ blkset_send(const struct opts *opts, int fdin, int fdout, int root,
 	int		 ffd = -1, rc = 0, tfd = -1;
 	off_t		 offs = 0;
 	struct stat	 st;
-	size_t		 i, mapsz;
+	size_t		 i, mapsz = 0;
 	void		*map = MAP_FAILED;
 	char		*tmpfile = NULL;
 	uint32_t	 hash;
@@ -555,6 +577,7 @@ blkset_send(const struct opts *opts, int fdin, int fdout, int root,
 	 * Generate the block hash list from the existing file.
 	 * Not having a file is fine: it just means that we'll need to
 	 * download the full file.
+	 * If this is the case, map will be MAP_FAILED.
 	 */
 
 	if (-1 != (ffd = openat(root, path, O_RDONLY, 0))) {
@@ -603,10 +626,10 @@ blkset_send(const struct opts *opts, int fdin, int fdout, int root,
 				p->blks[i].chksum_long, sess);
 			offs += p->len;
 		}
-		LOG2(opts, "mapped %llu bytes with %zu "
-			"blocks: %s", p->size, p->blksz, path);
+		LOG2(opts, "%s: mapped %llu B with %zu "
+			"blocks", path, p->size, p->blksz);
 	} else
-		LOG2(opts, "unmapped %llu bytes: %s", p->size, path);
+		LOG2(opts, "%s: not mapped", path);
 
 	/* 
 	 * Regardless the situation of our origin file (which may not
@@ -622,7 +645,7 @@ blkset_send(const struct opts *opts, int fdin, int fdout, int root,
 		goto out;
 	} 
 
-	LOG2(opts, "prepared temporary: %s -> %s", path, tmpfile);
+	LOG2(opts, "%s: temporary created: %s", path, tmpfile);
 
 	tfd = openat(root, tmpfile, O_RDWR | O_CREAT | O_TRUNC, 0644);
 	if (-1 == tfd) {
@@ -643,9 +666,9 @@ blkset_send(const struct opts *opts, int fdin, int fdout, int root,
 		goto out;
 	} 
 
-	LOG2(opts, "sent block prologue: %zu blocks of "
-		"%zu bytes, %zu remainder", 
-		p->blksz, p->len, p->rem);
+	LOG2(opts, "%s: sent block prologue: %zu blocks of "
+		"%zu B, %zu B remainder", path, p->blksz, 
+		p->len, p->rem);
 
 	for (i = 0; i < p->blksz; i++) {
 		b = &p->blks[i];
@@ -672,7 +695,8 @@ blkset_send(const struct opts *opts, int fdin, int fdout, int root,
 	 * rename as the original file.
 	 */
 
-	if ( ! blkset_merge(opts, fdin, ffd, p, tfd, map, mapsz)) {
+	if ( ! blkset_merge(opts, fdin, 
+	    ffd, p, tfd, path, map, mapsz)) {
 		ERRX1(opts, "blkset_mege");
 		goto out;
 	} else if (-1 == renameat(root, tmpfile, root, path)) {
