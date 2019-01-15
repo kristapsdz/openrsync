@@ -1,0 +1,226 @@
+.\"	$OpenBSD$
+.\"
+.\" Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd $Mdocdate$
+.Dt RSYNC 5
+.Os
+.Sh NAME
+.Nm rsync
+.Nd rsync wire protocol
+.Sh DESCRIPTION
+The
+.Nm
+protocol described in this relates to the BSD-licensed
+.Xr rsync 1 ,
+a re-implementation of the GNU-licensed reference utility.
+It is compatible with version 20 of the reference utility, although it
+requires the use of MD5 checksums instead of MD4.
+.Ss Data types
+The binary protocol encodes all data in little-endian format.
+Longs are signed 64-bit, integers are signed 32-bit, shorts are signed
+16-bit, bytes are unsigned 8-bit.
+A long is variable-length.
+For values less than the maximum integer, the value is transmitted and
+read as an integer.
+For values greater, the value is transmitted first as a maximum integer,
+then a 64-bit signed integer.
+.Pp
+There are two types of checksums: long and short (slow and fast).
+The fast checksum is a derivative of Adler-32.
+The long checksum is MD5.
+For non-whole-file long checksums, the sum is made over the checksum
+seed first (serialised in little-endian format), then the data.
+.Ss Client process
+The client can operate in sender or receiver mode depending upon the
+command-line source and destination files.
+.Pp
+If the destination file (sink) is remote, the client is in sender mode:
+the client will push its data to the server.
+If the source file is remote, it is in receiver mode: the server pushes
+to the client.
+If neither are remote, the client operates in sender mode.
+These are all mutually exclusive.
+.Pp
+When the client starts, regardless its mode, it first handshakes the server:
+.Pp
+.Bl -enum -compact
+.It
+send local version (integer)
+.It
+receive remote version (integer)
+.It
+receive random seed (integer)
+.El
+.Pp
+If the client is in sender mode, it then sends data on each file to be
+synchronised as follows.
+.Pp
+.Bl -enum -compact
+.It
+status byte (integer)
+.It
+filename length (integer)
+.It
+file (byte array)
+.It
+file length (long)
+.It
+file modification time (time_t, integer)
+.It
+file mode (mode_t, integer)
+.El
+.Pp
+Following that, it then receives data from the server regarding the
+server's copy of the same files at the destination.
+Each of these requests starts as follows:
+.Pp
+.Bl -enum -compact
+.It
+file index or -1 to signal a change of phase (integer)
+.El
+.Pp
+The phase defines the long checksum size as described in the following
+setion.
+The phase starts in phase 1, then proceeds to phase 2, and phase 3
+signals an end of transmission.
+.Pp
+If this is a dry-run scenario, the sender may then write back the index
+(integer) to skip the following block exchange.
+This is as follows:
+.Pp
+.Bl -enum -compact
+.It
+number of blocks (integer)
+.It
+block length in the file (integer)
+.It
+terminal (remainder) block length (integer)
+.El
+.Pp
+And for each block:
+.Pp
+.Bl -enum -compact
+.It
+short checksum (integer)
+.It
+long checksum (2 byte in phase 1, 16 byte in phase 2)
+.El
+.Pp
+After the last block, the client must respond with a block
+acknowledgement:
+.Pp
+.Bl -enum -compact
+.It
+file index (integer)
+.It
+number of blocks (integer)
+.It
+block length (integer)
+.It
+remainder block length (integer)
+.El
+.Pp
+The client then compares the two files, block by block, and updates the
+server with mismatches.
+This sequence is as follows.
+.Pp
+.Bl -enum -compact
+.It
+data chunk size (integer)
+.It
+data chunk (bytes)
+.It
+block index subsequent to chunk or zero for finished (integer)
+.El
+.Pp
+Following this sequence, the sender sends a prologue for each host it
+services.
+.Pp
+.Bl -enum -compact
+.It
+whole-file long checksum (16 bytes)
+.El
+.Pp
+After all hosts have been serviced, the sender transmits a termination
+signal.
+.Pp
+.Bl -enum -compact
+.It
+end of transmission constant of -1 (integer)
+.El
+.Pp
+If in receiver mode, the reverse is performed.
+The only difference is that the list of files (starting with the status
+byte) is preceded by another value whose purpose is unknown:
+.Pp
+.Bl -enum -compact
+.It
+zero value (integer)
+.It
+status byte (integer)
+.It
+filename length (integer)...
+.El
+.Ss Server process
+The server can operate in sender, receiver, or local mode depending upon
+how the client starts the server.
+This may be directly from the parent process (when invoked for local
+files) or indirectly via a remote shell.
+.Pp
+When in sender mode, the server pushes data to the client.
+(This is equivalent to receiver mode for the client.)
+In receiver, the opposite is true.
+.Pp
+When the server starts, regardless the mode, it first handshakes the
+client:
+.Pp
+.Bl -enum -compact
+.It
+send local version (integer)
+.It
+receive remote version (integer)
+.It
+send random seed (integer)
+.El
+.Pp
+Following that, it either sends the file list (in sender mode) or
+receives it in receiver mode.
+This is described in the
+.Sx Client process
+section.
+.\" The following requests should be uncommented and used where appropriate.
+.\" .Sh CONTEXT
+.\" For section 9 functions only.
+.\" .Sh RETURN VALUES
+.\" For sections 2, 3, and 9 function return values only.
+.\" .Sh ENVIRONMENT
+.\" For sections 1, 6, 7, and 8 only.
+.\" .Sh FILES
+.\" .Sh EXIT STATUS
+.\" For sections 1, 6, and 8 only.
+.\" .Sh EXAMPLES
+.\" .Sh DIAGNOSTICS
+.\" For sections 1, 4, 6, 7, 8, and 9 printf/stderr messages only.
+.\" .Sh ERRORS
+.\" For sections 2, 3, 4, and 9 errno settings only.
+.\" .Sh SEE ALSO
+.\" .Xr foobar 1
+.\" .Sh STANDARDS
+.\" .Sh HISTORY
+.\" .Sh AUTHORS
+.\" .Sh CAVEATS
+.Sh BUGS
+Time values are sent as 32-bit integers.
