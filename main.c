@@ -70,7 +70,7 @@ main(int argc, char *argv[])
 
 	/* FIXME: GNU rsync accepts this. */
 
-	if (1 == argc)
+	if (argc < 2)
 		goto usage;
 
 	/*
@@ -134,6 +134,6 @@ main(int argc, char *argv[])
 
 	return c ? EXIT_SUCCESS : EXIT_FAILURE;
 usage:
-	fprintf(stderr, "usage: %s [file ...]\n", getprogname());
+	fprintf(stderr, "usage: %s [-nv] src ... dst\n", getprogname());
 	return EXIT_FAILURE;
 }
