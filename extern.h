@@ -139,6 +139,8 @@ struct	sess {
 	rsync_log((_opts), __FILE__, __LINE__, 1, (_fmt), ##__VA_ARGS__)
 #define LOG3(_opts, _fmt, ...) \
 	rsync_log((_opts), __FILE__, __LINE__, 2, (_fmt), ##__VA_ARGS__)
+#define LOG4(_opts, _fmt, ...) \
+	rsync_log((_opts), __FILE__, __LINE__, 3, (_fmt), ##__VA_ARGS__)
 #define ERRX1(_opts, _fmt, ...) \
 	rsync_errx1((_opts), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
 #define WARNX(_opts, _fmt, ...) \
