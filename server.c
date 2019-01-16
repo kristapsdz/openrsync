@@ -45,7 +45,7 @@ fcntl_nonblock(const struct opts *opts, int fd)
  * This parses the arguments given it by the remote shell then moves
  * into receiver or sender mode depending upon those arguments.
  *
- * Pledges: rpath, cpath, wpath, stdio.
+ * Pledges: unveil rpath, cpath, wpath, stdio.
  */
 int
 rsync_server(const struct opts *opts, size_t argc, char *argv[])

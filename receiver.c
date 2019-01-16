@@ -62,7 +62,7 @@ stats(const struct opts *opts, int fdin)
  * It writes into a temporary file, then renames the temporary file.
  * Return zero on failure, non-zero on success.
  *
- * Pledges: rpath, cpath, wpath, stdio.
+ * Pledges: unveil, rpath, cpath, wpath, stdio.
  */
 int
 rsync_receiver(const struct opts *opts, const struct sess *sess, 
@@ -74,7 +74,7 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 	int		 rc = 0, dfd = -1, phase = 0;
 	int32_t	 	 ioerror, idx;
 
-	if (-1 == pledge("rpath cpath wpath stdio", NULL)) {
+	if (-1 == pledge("unveil rpath cpath wpath stdio", NULL)) {
 		ERR(opts, "pledge");
 		goto out;
 	}
@@ -116,9 +116,24 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 	}
 	free(tofree);
 
+	/*
+	 * Make our entire view of the file-system be limited to what's
+	 * in the root directory.
+	 * This prevents us from accidentally (or "under the influence")
+	 * writing into other parts of the file-system.
+	 */
+
+	if (-1 == unveil(root, "rwc")) {
+		ERR(opts, "unveil: %s", root);
+		goto out;
+	} else if (-1 == unveil(NULL, NULL)) {
+		ERR(opts, "unveil: %s", root);
+		goto out;
+	}
+
 	/* 
 	 * Open the destination directory.
-	 * Note that we always open O_RDONLY.
+	 * This will be the basis of all future files.
 	 */
 
 	if (-1 == (dfd = open(root, O_RDONLY | O_DIRECTORY, 0))) {

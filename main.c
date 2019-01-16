@@ -43,7 +43,7 @@ main(int argc, char *argv[])
 	 * This takes into account all possible pledge paths.
 	 */
 
-	if (-1 == pledge("exec stdio rpath wpath cpath proc", NULL))
+	if (-1 == pledge("unveil exec stdio rpath wpath cpath proc", NULL))
 		err(EXIT_FAILURE, "pledge");
 
 	memset(&opts, 0, sizeof(struct opts));
@@ -80,7 +80,7 @@ main(int argc, char *argv[])
 	 */
 
 	if (opts.server) {
-		if (-1 == pledge("rpath cpath wpath stdio", NULL))
+		if (-1 == pledge("unveil rpath cpath wpath stdio", NULL))
 			err(EXIT_FAILURE, "pledge");
 		c = rsync_server(&opts, (size_t)argc, argv);
 		return c ? EXIT_SUCCESS : EXIT_FAILURE;
@@ -109,7 +109,7 @@ main(int argc, char *argv[])
 
 	/* Drop the fork possibility. */
 
-	if (-1 == pledge("exec stdio rpath wpath cpath", NULL)) {
+	if (-1 == pledge("unveil exec stdio rpath wpath cpath", NULL)) {
 		ERR(&opts, "pledge");
 		exit(EXIT_FAILURE);
 	}
@@ -125,7 +125,7 @@ main(int argc, char *argv[])
 
 	close(fds[1]);
 	fds[1] = -1;
-	if (-1 == pledge("rpath cpath wpath stdio", NULL))
+	if (-1 == pledge("unveil rpath cpath wpath stdio", NULL))
 		err(EXIT_FAILURE, "pledge");
 	c = rsync_client(&opts, fds[0], (size_t)argc, argv);
 	close(fds[0]);
