@@ -147,6 +147,8 @@ struct	sess {
 	rsync_warn((_opts), 0, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
 #define WARN1(_opts, _fmt, ...) \
 	rsync_warn((_opts), 1, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+#define WARN2(_opts, _fmt, ...) \
+	rsync_warn((_opts), 2, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
 #define ERR(_opts, _fmt, ...) \
 	rsync_err((_opts), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
 #define ERRX(_opts, _fmt, ...) \
