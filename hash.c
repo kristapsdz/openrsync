@@ -25,33 +25,36 @@
 /*
  * A fast 32-bit hash.
  * Described in Tridgell's "Efficient Algorithms for Sorting and
- * Synchronization" thesis.
+ * Synchronization" thesis and the "Rolling checksum" document.
  */
 uint32_t
 hash_fast(const void *buf, size_t len)
 {
 	size_t 	 	 i = 0;
-	uint32_t 	 s1 = 0, s2 = 0;
+	uint32_t 	 a = 0, /* part of a(k, l) */
+			 b = 0; /* b(k, l) */
 	const signed char *dat = buf;
 
 	if (len > 4)
 		for ( ; i < len - 4; i += 4) {
-			s2 += 4 * (s1 + dat[i]) + 
+			b += 4 * (a + dat[i]) + 
 			      3 * dat[i + 1] + 
 			      2 * dat[i + 2] + 
 			          dat[i + 3];
-			s1 += dat[i + 0] + 
+			a += dat[i + 0] + 
 			      dat[i + 1] + 
 			      dat[i + 2] + 
 			      dat[i + 3];
 		}
 
 	for ( ; i < len; i++) {
-		s1 += dat[i]; 
-		s2 += s1;
+		a += dat[i]; 
+		b += a;
 	}
 
-	return (s1 & 0xffff) + (s2 << 16);
+	/* s(k, l) = (eps % M) + 2^16 b(k, l) % M */
+
+	return (a & 0xffff) + (b << 16);
 }
 
 /*
