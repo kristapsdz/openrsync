@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 
 #include <assert.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <md5.h>
@@ -614,6 +615,8 @@ blk_send(const struct opts *opts, int fdin, int fdout, int root,
 			ffd = -1;
 		} else 
 			p->size = st.st_size;
+	} else if (ENOENT == errno) {
+		WARN2(opts, "openat: %s", path);
 	} else
 		WARN1(opts, "openat: %s", path);
 
