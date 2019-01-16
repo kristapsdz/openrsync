@@ -245,12 +245,12 @@ blk_match(const struct opts *opts, const struct sess *sess,
 	if (st.st_size && blks->blksz) {
 		blk_match_part(opts, path, fd, map, 
 			st.st_size, blks, sess, csum_length);
-		LOG2(opts, "%s: sent chunked %zu blocks of "
+		LOG3(opts, "%s: sent chunked %zu blocks of "
 			"%zu B (%zu B remainder)", path, blks->blksz, 
 			blks->len, blks->rem);
 	} else {
 		blk_match_full(opts, fd, map, st.st_size);
-		LOG2(opts, "%s: sent un-chunked %llu B", path, st.st_size);
+		LOG3(opts, "%s: sent un-chunked %llu B", path, st.st_size);
 	}
 
 	/* Now write the full file hash. */
@@ -339,7 +339,7 @@ blk_recv(const struct opts *opts, int fd,
 		goto out;
 	}
 
-	LOG2(opts, "%s: read block prologue: %zu blocks of "
+	LOG3(opts, "%s: read block prologue: %zu blocks of "
 		"%zu B, %zu B remainder", path, s->blksz, 
 		s->len, s->rem);
 
@@ -378,13 +378,13 @@ blk_recv(const struct opts *opts, int fd,
 		b->len = (j == (s->blksz - 1) && s->rem) ? s->rem : s->len;
 		offs += b->len;
 
-		LOG2(opts, "%s: read block %zu, length %zu B, "
+		LOG3(opts, "%s: read block %zu, length %zu B, "
 			"checksum=0x%08x", path, b->idx, b->len, 
 			b->chksum_short);
 	}
 
 	s->size = offs;
-	LOG2(opts, "%s: read blocks: %zu blocks, %llu "
+	LOG3(opts, "%s: read blocks: %zu blocks, %llu "
 		"B total blocked data", path, s->blksz, s->size);
 	return s;
 out:
@@ -475,7 +475,7 @@ blk_merge(const struct opts *opts, int fd, int ffd,
 			}
 
 			total += sz;
-			LOG2(opts, "%s: received %zd bytes, "
+			LOG3(opts, "%s: received %zd bytes, "
 				"now %llu total", path, ssz, total);
 
 			MD5Update(&ctx, buf, sz);
@@ -509,7 +509,7 @@ blk_merge(const struct opts *opts, int fd, int ffd,
 			}
 
 			total += block->blks[tok].len;
-			LOG2(opts, "%s: copied %zu bytes, now %llu total", 
+			LOG3(opts, "%s: copied %zu bytes, now %llu total", 
 				path, block->blks[tok].len, total);
 
 			MD5Update(&ctx, 
@@ -532,7 +532,7 @@ blk_merge(const struct opts *opts, int fd, int ffd,
 		goto out;
 	}
 
-	LOG2(opts, "%s: merged %llu total bytes", path, total);
+	LOG3(opts, "%s: merged %llu total bytes", path, total);
 	rc = 1;
 out:
 	free(buf);
@@ -645,10 +645,10 @@ blk_send(const struct opts *opts, int fdin, int fdout, int root,
 			blk_set_blockparams
 				(&p->blks[i], p, offs, i, map, sess);
 
-		LOG2(opts, "%s: mapped %llu B with %zu "
+		LOG3(opts, "%s: mapped %llu B with %zu "
 			"blocks", path, p->size, p->blksz);
 	} else
-		LOG2(opts, "%s: not mapped", path);
+		LOG3(opts, "%s: not mapped", path);
 
 	/* 
 	 * Open our writable temporary file (failure is an error). 
@@ -669,7 +669,7 @@ blk_send(const struct opts *opts, int fdin, int fdout, int root,
 		goto out;
 	}
 
-	LOG2(opts, "%s: temporary: %s", path, tmpfile);
+	LOG3(opts, "%s: temporary: %s", path, tmpfile);
 
 	/* Now transmit the metadata for set and blocks. */
 
@@ -696,7 +696,7 @@ blk_send(const struct opts *opts, int fdin, int fdout, int root,
 		}
 	}
 
-	LOG2(opts, "%s: sent block metadata: %zu blocks of %zu B, "
+	LOG3(opts, "%s: sent block metadata: %zu blocks of %zu B, "
 		"%zu B remainder", path, p->blksz, p->len, p->rem);
 	
 	/* Read back acknowledgement. */
