@@ -24,10 +24,19 @@
 The
 .Nm
 protocol described in this relates to the BSD-licensed
-.Xr rsync 1 ,
-a re-implementation of the GNU-licensed reference utility.
-It is compatible with version 20 of the reference utility, although it
-requires the use of MD5 checksums instead of MD4.
+.Xr openrsync 1 ,
+a re-implementation of the GNU-licensed reference utility
+.Xr rsync 1 .
+It is compatible with version 20 of the reference, although it requires
+the use of MD5 checksums instead of MD4.
+.Pp
+In this document, the
+.Qq client process
+refers to the utility as run on the operator's local computer.
+The
+.Qq server process
+is run either on the local or remote computer, depending upon the
+command-line given file locations.
 .Ss Data types
 The binary protocol encodes all data in little-endian format.
 Integers are signed 32-bit, shorts are signed 16-bit, bytes are unsigned
@@ -96,10 +105,13 @@ The phase defines the long checksum size as described in the following
 setion.
 The phase starts in phase 1, then proceeds to phase 2, and phase 3
 signals an end of transmission.
+If a phase change occurs, the sender must write back the -1 constant
+integer value then re-start the request.
 .Pp
 If this is a dry-run scenario, the sender may then write back the index
-(integer) to skip the following block exchange.
-This is as follows:
+(integer) to skip the block exchange.
+.Pp
+Otherwise, a block exchange occurs:
 .Pp
 .Bl -enum -compact
 .It
@@ -146,7 +158,7 @@ data chunk (bytes)
 block index subsequent to chunk or zero for finished (integer)
 .El
 .Pp
-Following this sequence, the sender sends a prologue for each host it
+Following this sequence, the sender sends an epilogue for each host it
 services.
 .Pp
 .Bl -enum -compact
@@ -154,15 +166,8 @@ services.
 whole-file long checksum (16 bytes)
 .El
 .Pp
-After all hosts have been serviced, the sender transmits a termination
-signal.
-.Pp
-.Bl -enum -compact
-.It
-end of transmission constant of -1 (integer)
-.El
-.Pp
-If in receiver mode, the reverse is performed.
+If in receiver mode, the inverse (write instead of read, read instead of
+write) is performed.
 The only difference is that the list of files (starting with the status
 byte) is preceded by another value whose purpose is unknown:
 .Pp
@@ -173,6 +178,18 @@ zero value (integer)
 status byte (integer)
 .It
 filename length (integer)...
+.El
+.Pp
+Also, after the terminal phase change, the receiver reads the following
+statistics:
+.Pp
+.Bl -enum -compact
+.It
+total bytes read (integer)
+.It
+total bytes written (integer)
+.It
+total size of files (integer)
 .El
 .Ss Server process
 The server can operate in sender or receiver mode depending upon how the
@@ -201,6 +218,29 @@ receives it in receiver mode.
 This is described in the
 .Sx Client process
 section.
+.Pp
+There are several notable differences to the sender or receiver process
+when running in server mode.
+.Pp
+.Bl -enum -compact
+.It
+prior to the sender reading the file index (or phase change), the sender
+in server mode must read an integer that must be zero
+.It
+prior to receiving the file list, the receiver in server mode does not
+send the constant zero integer
+.It
+the sender sends post-transfer statistics when in server mode
+.It
+the receiver does not receive statistics when in server mode
+.It
+when in server mode
+.Em and
+when communicating to a client with a newer protocol (\(gt20), the phase
+change integer (-1) must be sent twice
+.El
+.Pp
+The last note is probably a bug in the reference implementation.
 .\" The following requests should be uncommented and used where appropriate.
 .\" .Sh CONTEXT
 .\" For section 9 functions only.
@@ -216,8 +256,9 @@ section.
 .\" For sections 1, 4, 6, 7, 8, and 9 printf/stderr messages only.
 .\" .Sh ERRORS
 .\" For sections 2, 3, 4, and 9 errno settings only.
-.\" .Sh SEE ALSO
-.\" .Xr foobar 1
+.Sh SEE ALSO
+.Xr openrsync 1 ,
+.Xr rsync 1
 .\" .Sh STANDARDS
 .\" .Sh HISTORY
 .\" .Sh AUTHORS
