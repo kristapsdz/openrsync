@@ -184,7 +184,7 @@ flist_recv_filename(const struct opts *opts, int fd,
 		return 0;
 	}
 
-	strlcpy(last, f->path + partial, MAXPATHLEN);
+	strlcpy(last, f->path, MAXPATHLEN);
 
 	f->filename = strrchr(f->path, '/');
 	if (NULL == f->filename)
