@@ -25,6 +25,28 @@
 
 #include "extern.h"
 
+static int
+stats(const struct opts *opts, int fdout)
+{
+
+	if ( ! opts->server)
+		return 1;
+
+	if ( ! io_write_int(opts, fdout, 10)) {
+		ERRX1(opts, "io_write_int: total read");
+		return 0;
+	} else if ( ! io_write_int(opts, fdout, 20)) {
+		ERRX1(opts, "io_write_int: total write");
+		return 0;
+	} else if ( ! io_write_int(opts, fdout, 30)) {
+		ERRX1(opts, "io_write_int: total size");
+		return 0;
+	} 
+
+	LOG1(opts, "stats written");
+	return 1;
+}
+
 /*
  * A client sender manages the read-only source files and sends data to
  * the receiver as requested.
@@ -96,6 +118,7 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 			ERRX1(opts, "io_read_int: index");
 			goto out;
 		} 
+		LOG1(opts, "sender processing: %" PRId32, idx);
 
 		/* 
 		 * If we receive an invalid index (-1), then we're
@@ -104,13 +127,23 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 		 */
 
 		if (-1 == idx) {
-			if (phase++)
-				break;
-			csum_length = CSUM_LENGTH_PHASE2;
-			if ( ! io_write_int(opts, fdout, -1)) {
+			if ( ! io_write_int(opts, fdout, idx)) {
 				ERRX1(opts, "io_write_int: phase ack");
 				goto out;
 			}
+
+			/* FIXME: I don't understand this ack. */
+
+			if (opts->server && sess->rver > 20)
+				if ( ! io_write_int(opts, fdout, idx)) {
+					ERRX1(opts, "io_write_int: "
+						"superfluous ack");
+					goto out;
+				}
+
+			if (phase++)
+				break;
+			csum_length = CSUM_LENGTH_PHASE2;
 			LOG2(opts, "sender transmitting "
 				"%zu-checksum data", csum_length);
 			continue;
@@ -166,12 +199,7 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 		}
 	}
 
-	/* Write our final acknowledgement. */
-
-	if ( ! io_write_int(opts, fdout, -1)) {
-		ERRX1(opts, "io_write_int: send complete");
-		goto out;
-	}
+	stats(opts, fdout);
 
 	LOG2(opts, "sender finished updating");
 	rc = 1;
