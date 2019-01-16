@@ -25,6 +25,36 @@
 #include "extern.h"
 
 /*
+ * At the end of the transmission, we have some statistics to read.
+ * Return zero on failure, non-zero on success.
+ */
+static int
+stats(const struct opts *opts, int fdin)
+{
+	size_t	 tread, twrite, tsize;
+
+	/* No statistics in server mode. */
+
+	if (opts->server)
+		return 1;
+
+	if ( ! io_read_size(opts, fdin, &tread)) {
+		ERRX1(opts, "io_read_size: total read");
+		return 0;
+	} else if ( ! io_read_size(opts, fdin, &twrite)) {
+		ERRX1(opts, "io_read_size: total write");
+		return 0;
+	} else if ( ! io_read_size(opts, fdin, &tsize)) {
+		ERRX1(opts, "io_read_size: total size");
+		return 0;
+	} 
+
+	LOG1(opts, "stats: %zu B read, %zu B written, %zu B size",
+		tread, twrite, tsize);
+	return 1;
+}
+
+/*
  * The receiver code is run on the machine that will actually write data
  * to its discs.
  * It processes all files requests and sends block hashes to the sender,
@@ -165,6 +195,11 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 			goto out;
 		}
 		phase++;
+	}
+
+	if ( ! stats(opts, fdin)) {
+		ERRX1(opts, "stats");
+		goto out;
 	}
 
 	rc = 1;
