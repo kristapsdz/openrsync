@@ -555,13 +555,21 @@ static void
 blk_set_blocksize(struct blkset *p, off_t sz)
 {
 
-	if (0 == (p->blksz = sz / MAX_CHUNK)) {
-		p->blksz = 1;
-		p->rem = sz;
-	} else 
-		p->rem = sz % MAX_CHUNK;
+	/* For now, hard-code the block size. */
 
 	p->len = MAX_CHUNK;
+
+	/* Set our initial block size and remainder. */
+
+	if (0 == (p->blksz = sz / p->len))
+		p->rem = sz;
+	else 
+		p->rem = sz % p->len;
+
+	/* If we have a remainder, then we need an extra block. */
+
+	if (p->rem)
+		p->blksz++;
 }
 
 /*
@@ -572,6 +580,8 @@ blk_set_blockparams(struct blk *p, const struct blkset *set,
 	off_t offs, size_t idx, const void *map, 
 	const struct sess *sess)
 {
+
+	/* Block length inherits for all but the last. */
 
 	p->idx = idx;
 	p->len = idx < set->blksz - 1 ? set->len : set->rem;
