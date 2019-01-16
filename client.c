@@ -79,14 +79,6 @@ rsync_client(const struct opts *opts, int fd, size_t argc, char *argv[])
 			goto out;
 		}
 	} else {
-		/*
-		 * FIXME: what is this value?
-		 * I can only see it in ktrace.
-		 */
-		if ( ! io_write_int(opts, fd, 0)) {
-			ERRX1(opts, "io_write_int: zero premable");
-			goto out;
-		} 
 		LOG2(opts, "client starting receiver: %s", 
 			NULL == f->host ? "(local?)" : f->host);
 		if ( ! rsync_receiver(opts, &sess, fd, fd, f->sink)) {

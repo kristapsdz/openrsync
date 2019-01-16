@@ -53,7 +53,6 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 	struct sess	 sess;
 	int	 	 fdin = STDIN_FILENO, 
 			 fdout = STDOUT_FILENO, c = 0;
-	int32_t		 preamble;
 
 	/* Begin by making descriptors non-blocking. */
 
@@ -110,13 +109,6 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 			goto out;
 		}
 
-		if ( ! io_read_int(opts, fdin, &preamble)) {
-			ERRX1(opts, "io_read_int: zero premable");
-			goto out;
-		} else if (0 != preamble) {
-			ERRX1(opts, "preamble value must be zero");
-			goto out;
-		}
 		c = rsync_sender(opts, &sess, 
 			fdin, fdout, argc, argv);
 		if ( ! c)

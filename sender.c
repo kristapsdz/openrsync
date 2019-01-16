@@ -42,7 +42,7 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 	size_t		 flsz = 0, phase = 0,
 			 csum_length = CSUM_LENGTH_PHASE1;
 	int		 rc = 0, c;
-	int32_t		 idx;
+	int32_t		 idx, preamble;
 	struct blkset	*blks = NULL;
 
 	if (-1 == pledge("stdio rpath", NULL)) {
@@ -69,6 +69,18 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 	} else if ( ! io_write_int(opts, fdout, 0)) {
 		ERRX1(opts, "io_write_int: io_error");
 		goto out;
+	}
+
+	/* XXX: what is this? */
+
+	if (opts->server) {
+		if ( ! io_read_int(opts, fdin, &preamble)) {
+			ERRX1(opts, "io_read_int: zero premable");
+			goto out;
+		} else if (0 != preamble) {
+			ERRX1(opts, "preamble value must be zero");
+			goto out;
+		}
 	}
 
 	/*
