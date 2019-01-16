@@ -69,7 +69,7 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 	int fdin, int fdout, const char *root)
 {
 	struct flist	*fl = NULL;
-	size_t		 i, flsz = 0;
+	size_t		 i, flsz = 0, csum_length = CSUM_LENGTH_PHASE1;
 	char		*tofree;
 	int		 rc = 0, dfd = -1, phase = 0;
 	int32_t	 	 ioerror, idx;
@@ -127,13 +127,14 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 	}
 
 	/*
-	 * FIXME: we never use the full checksum amount.
-	 * I think this should happen if we fail in our reconstitution,
-	 * but at the moment I'm not sure.
+	 * FIXME: I never use the full checksum amount; but if I were,
+	 * here is where the "again" label would go.
+	 * This has been demonstrated to work, but I just don't use it
+	 * til I understand the need.
 	 */
 
-	LOG2(opts, "receiver ready for "
-		"2-checksum data: %s", root);
+	LOG2(opts, "receiver ready for %zu-checksum "
+		"data: %s", csum_length, root);
 
 	for (i = 0; i < flsz; i++) {
 		if ( ! io_write_int(opts, fdout, i)) {
@@ -161,8 +162,8 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 		 * This performs most of the work.
 		 */
 
-		if ( ! blk_send(opts, fdin, 
-		    fdout, dfd, fl[i].path, i, sess, 2)) {
+		if ( ! blk_send(opts, fdin, fdout, 
+		    dfd, fl[i].path, i, sess, csum_length)) {
 			ERRX1(opts, "blk_send");
 			goto out;
 		}
@@ -182,7 +183,15 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 			goto out;
 		}
 		phase++;
+		csum_length = CSUM_LENGTH_PHASE2;
+
+		/* 
+		 * FIXME: under what conditions should we resend files?
+		 * What kind of failure?  This is never specified.
+		 * goto again;
+		 */
 	}
+
 	if (1 == phase) {
 		if ( ! io_write_int(opts, fdout, -1)) {
 			ERRX1(opts, "io_write_int: send complete");
@@ -202,6 +211,7 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 		goto out;
 	}
 
+	LOG2(opts, "receiver finished updating");
 	rc = 1;
 out:
 	if (-1 != dfd)

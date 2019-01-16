@@ -43,7 +43,7 @@ stats(const struct opts *opts, int fdout)
 		return 0;
 	} 
 
-	LOG1(opts, "stats written");
+	LOG2(opts, "stats written");
 	return 1;
 }
 
@@ -118,7 +118,6 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 			ERRX1(opts, "io_read_int: index");
 			goto out;
 		} 
-		LOG1(opts, "sender processing: %" PRId32, idx);
 
 		/* 
 		 * If we receive an invalid index (-1), then we're
@@ -200,7 +199,6 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 	}
 
 	stats(opts, fdout);
-
 	LOG2(opts, "sender finished updating");
 	rc = 1;
 out:

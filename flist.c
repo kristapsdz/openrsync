@@ -86,7 +86,7 @@ flist_send(const struct opts *opts,
 		if (S_ISDIR(f->st.mode))
 			flag |= FLIST_DIR;
 
-		LOG2(opts, "sending file metadata: %s "
+		LOG3(opts, "sending file metadata: %s "
 			"(size %llu, mtime %lld, mode %o)",
 			f->path, f->st.size, f->st.mtime, f->st.mode);
 
@@ -279,7 +279,7 @@ flist_recv(const struct opts *opts, int fd, size_t *sz)
 		} else
 			ff->st.mode = fflast->st.mode;
 
-		LOG2(opts, "received file metadata: %s "
+		LOG3(opts, "received file metadata: %s "
 			"(size %llu, mtime %lld, mode %o)",
 			ff->path, ff->st.size, ff->st.mtime, ff->st.mode);
 		fflast = ff;
