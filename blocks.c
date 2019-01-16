@@ -95,7 +95,7 @@ blk_find(const struct opts *opts, const void *buf,
 		if ((size_t)osz != blks->blks[i].len)
 			continue;
 
-		LOG3(opts, "%s: found matching fast match: "
+		LOG4(opts, "%s: found matching fast match: "
 			"position %llu, block %zu "
 			"(position %llu, size %zu): 0x%08x", path,
 			offs, blks->blks[i].idx, blks->blks[i].offs,
@@ -111,7 +111,7 @@ blk_find(const struct opts *opts, const void *buf,
 		if (memcmp(md, blks->blks[i].chksum_long, csum_length))
 			continue;
 
-		LOG3(opts, "%s: sender verifies slow match", path);
+		LOG4(opts, "%s: sender verifies slow match", path);
 		return &blks->blks[i];
 	}
 
@@ -133,7 +133,7 @@ blk_match_part(const struct opts *opts, const char *path,
 	const struct blkset *blks, const struct sess *sess, 
 	size_t csum_length)
 {
-	off_t	 	 offs, last, end;
+	off_t	 	 offs, last, end, fromcopy = 0, fromdown = 0;
 	struct blk	*blk;
 
 	/* 
@@ -152,7 +152,8 @@ blk_match_part(const struct opts *opts, const char *path,
 		if (NULL == blk)
 			continue;
 
-		LOG3(opts, "%s: flushed %llu B before %zu B block (%zu)", 
+		fromdown += offs - last;
+		LOG4(opts, "%s: flushed %llu B before %zu B block (%zu)", 
 			path, offs - last, blk->len, blk->idx);
 
 		/* Flush what we have and follow with our tag. */
@@ -165,11 +166,14 @@ blk_match_part(const struct opts *opts, const char *path,
 			return 0;
 		}
 
+		fromcopy += blk->len;
 		offs += blk->len - 1;
 		last = offs + 1;
 	}
 
-	LOG3(opts, "%s: flushed remaining %llu B", path, size - last);
+	LOG4(opts, "%s: flushed remaining %llu B", path, size - last);
+	LOG3(opts, "%s: %.2f%% upload", path, 
+		100.0 * fromdown / (fromcopy + fromdown));
 
 	/* Emit remaining data and send terminator. */
 
@@ -379,7 +383,7 @@ blk_recv(const struct opts *opts, int fd,
 		b->len = (j == (s->blksz - 1) && s->rem) ? s->rem : s->len;
 		offs += b->len;
 
-		LOG3(opts, "%s: read block %zu, length %zu B, "
+		LOG4(opts, "%s: read block %zu, length %zu B, "
 			"checksum=0x%08x", path, b->idx, b->len, 
 			b->chksum_short);
 	}
@@ -443,7 +447,7 @@ blk_merge(const struct opts *opts, int fd, int ffd,
 	int		 rc = 0;
 	unsigned char	 md[MD5_DIGEST_LENGTH],
 			 ourmd[MD5_DIGEST_LENGTH];
-	off_t		 total = 0;
+	off_t		 total = 0, fromcopy = 0, fromdown = 0;
 	MD5_CTX		 ctx;
 
 	MD5Init(&ctx);
@@ -475,8 +479,9 @@ blk_merge(const struct opts *opts, int fd, int ffd,
 				goto out;
 			}
 
+			fromdown += sz;
 			total += sz;
-			LOG3(opts, "%s: received %zd bytes, "
+			LOG4(opts, "%s: received %zd bytes, "
 				"now %llu total", path, ssz, total);
 
 			MD5Update(&ctx, buf, sz);
@@ -509,8 +514,9 @@ blk_merge(const struct opts *opts, int fd, int ffd,
 				goto out;
 			}
 
+			fromcopy += block->blks[tok].len;
 			total += block->blks[tok].len;
-			LOG3(opts, "%s: copied %zu bytes, now %llu total", 
+			LOG4(opts, "%s: copied %zu bytes, now %llu total", 
 				path, block->blks[tok].len, total);
 
 			MD5Update(&ctx, 
@@ -534,6 +540,7 @@ blk_merge(const struct opts *opts, int fd, int ffd,
 	}
 
 	LOG3(opts, "%s: merged %llu total bytes", path, total);
+	LOG3(opts, "%s: %.2f%% upload", path, 100.0 * fromdown / total);
 	rc = 1;
 out:
 	free(buf);
@@ -567,7 +574,7 @@ blk_set_blockparams(struct blk *p, const struct blkset *set,
 {
 
 	p->idx = idx;
-	p->len = idx < set->blksz - 1 ? set->blksz : set->rem;
+	p->len = idx < set->blksz - 1 ? set->len : set->rem;
 	p->offs = offs;
 	p->chksum_short = hash_fast(map + offs, p->len);
 	hash_slow(map + offs, p->len, p->chksum_long, sess);
