@@ -49,6 +49,15 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 		goto out;
 	}
 
+	/* XXX: what does this do? */
+
+	if ( ! opts->server) {
+		if ( ! io_write_int(opts, fdout, 0)) {
+			ERRX1(opts, "io_write_int: zero premable");
+			goto out;
+		} 
+	}
+
 	/*
 	 * Start by receiving the list of filenames.
 	 * These we're going to be touching on our local system.
