@@ -7,16 +7,24 @@ OBJS	 = blocks.o \
 	   hash.o \
 	   io.o \
 	   log.o \
-	   main.o \
 	   mkpath.o \
 	   receiver.o \
 	   sender.o \
 	   server.o
-
+ALLOBJS	 = $(OBJS) \
+	   main.o
+AFLS	 = afl/test-flist_recv
 CFLAGS	+= -W -Wall -Wextra -Wno-unused-parameter
 
-openrsync: $(OBJS)
-	$(CC) -o $@ $(OBJS)
+all: openrsync
+
+openrsync: $(ALLOBJS)
+	$(CC) -o $@ $(ALLOBJS)
+
+afl: $(AFLS)
+
+$(AFLS): $(OBJS)
+	$(CC) -o $@ $*.c $(OBJS)
 
 install: openrsync
 	mkdir -p $(PREFIX)/bin
@@ -34,6 +42,6 @@ uninstall:
 	rm -f $(PREFIX)/share/man/man5/rsync.5
 
 clean:
-	rm -f $(OBJS) openrsync
+	rm -f $(ALLOBJS) openrsync $(AFLS)
 
-$(OBJS): extern.h
+$(ALLOBJS) $(AFLS): extern.h
