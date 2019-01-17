@@ -342,6 +342,10 @@ blk_recv(const struct opts *opts, int fd,
 	} else if ( ! io_read_size(opts, fd, &s->rem)) {
 		ERRX1(opts, "io_read_int: block remainder");
 		goto out;
+	} else if (s->rem >= s->len) {
+		ERRX(opts, "block remainder is "
+			"greater than block sie");
+		goto out;
 	}
 
 	LOG3(opts, "%s: read block prologue: %zu blocks of "
@@ -393,7 +397,7 @@ blk_recv(const struct opts *opts, int fd,
 		"B total blocked data", path, s->blksz, s->size);
 	return s;
 out:
-	free(s);
+	blkset_free(s);
 	return NULL;
 }
 
