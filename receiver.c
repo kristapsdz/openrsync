@@ -79,6 +79,8 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 		goto out;
 	}
 
+	umask(0);
+
 	/* XXX: what does this do? */
 
 	if ( ! opts->server) {
@@ -178,7 +180,7 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 		 */
 
 		if ( ! blk_send(opts, fdin, fdout, 
-		    dfd, fl[i].path, i, sess, csum_length)) {
+		    dfd, &fl[i], i, sess, csum_length)) {
 			ERRX1(opts, "blk_send");
 			goto out;
 		}
