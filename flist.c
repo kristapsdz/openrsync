@@ -50,15 +50,12 @@
  * setuid or setgid, no special bits.
  */
 static	const mode_t whitelist_modes[] = {
-	S_IRWXU, /* RWX mask for owner */
 	S_IRUSR, /* R for owner */
 	S_IWUSR, /* W for owner */
 	S_IXUSR, /* X for owner */
-	S_IRWXG, /* RWX mask for group */
 	S_IRGRP, /* R for group */
 	S_IWGRP, /* W for group */
 	S_IXGRP, /* X for group */
-	S_IRWXO, /* RWX mask for other */
 	S_IROTH, /* R for other */
 	S_IWOTH, /* W for other */
 	S_IXOTH, /* X for other */
@@ -359,7 +356,9 @@ flist_recv(const struct opts *opts, int fd, size_t *sz)
 			flmax += FLIST_CHUNK_SIZE;
 		}
 		flsz++;
+
 		ff = &fl[flsz - 1];
+		fflast = flsz > 1 ? &fl[flsz - 2] : NULL;
 
 		if ( ! flist_recv_filename
 		    (opts, fd, ff, flag, lastname)) {
@@ -402,7 +401,6 @@ flist_recv(const struct opts *opts, int fd, size_t *sz)
 		LOG3(opts, "received file metadata: %s "
 			"(size %llu, mtime %lld, mode %o)",
 			ff->path, ff->st.size, ff->st.mtime, ff->st.mode);
-		fflast = ff;
 	}
 
 	if (0 == flsz) {

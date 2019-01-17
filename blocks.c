@@ -603,7 +603,7 @@ blk_set_blockparams(struct blk *p, const struct blkset *set,
  */
 int
 blk_send(const struct opts *opts, int fdin, int fdout, int root, 
-	const char *path, size_t idx, const struct sess *sess,
+	const struct flist *f, size_t idx, const struct sess *sess,
 	size_t csumlen)
 {
 	struct blkset	*p;
@@ -631,21 +631,21 @@ blk_send(const struct opts *opts, int fdin, int fdout, int root,
 	 * have a regular file (for now).
 	 */
 
-	if (-1 != (ffd = openat(root, path, O_RDONLY, 0))) {
+	if (-1 != (ffd = openat(root, f->path, O_RDONLY, 0))) {
 		if (-1 == fstat(ffd, &st)) {
-			WARN(opts, "warn: %s", path);
+			WARN(opts, "warn: %s", f->path);
 			close(ffd);
 			ffd = -1;
 		} else if ( ! S_ISREG(st.st_mode)) {
-			WARNX(opts, "not a regular file: %s", path);
+			WARNX(opts, "not a regular file: %s", f->path);
 			close(ffd);
 			ffd = -1;
 		} else
 			p->size = st.st_size;
 	} else if (ENOENT == errno) {
-		WARN2(opts, "openat: %s", path);
+		WARN2(opts, "openat: %s", f->path);
 	} else
-		WARN1(opts, "openat: %s", path);
+		WARN1(opts, "openat: %s", f->path);
 
 	/* 
 	 * If open, try to map the file into memory.
@@ -658,7 +658,7 @@ blk_send(const struct opts *opts, int fdin, int fdout, int root,
 		map = mmap(NULL, mapsz, PROT_READ, MAP_SHARED, ffd, 0);
 
 		if (MAP_FAILED == map) {
-			WARN(opts, "mmap: %s", path);
+			WARN(opts, "mmap: %s", f->path);
 			goto out;
 		}
 
@@ -676,9 +676,9 @@ blk_send(const struct opts *opts, int fdin, int fdout, int root,
 				(&p->blks[i], p, offs, i, map, sess);
 
 		LOG3(opts, "%s: mapped %llu B with %zu "
-			"blocks", path, p->size, p->blksz);
+			"blocks", f->path, p->size, p->blksz);
 	} else
-		LOG3(opts, "%s: not mapped", path);
+		LOG3(opts, "%s: not mapped", f->path);
 
 	/* 
 	 * Open our writable temporary file (failure is an error). 
@@ -687,19 +687,19 @@ blk_send(const struct opts *opts, int fdin, int fdout, int root,
 	 */
 
 	hash = arc4random();
-	if (asprintf(&tmpfile, ".%s.%" PRIu32, path, hash) < 0) {
+	if (asprintf(&tmpfile, ".%s.%" PRIu32, f->path, hash) < 0) {
 		ERR(opts, "asprintf");
 		tmpfile = NULL;
 		goto out;
 	} 
 
-	tfd = openat(root, tmpfile, O_RDWR | O_CREAT | O_TRUNC, 0644);
+	tfd = openat(root, tmpfile, O_RDWR|O_CREAT|O_EXCL, f->st.mode);
 	if (-1 == tfd) {
 		ERR(opts, "openat: %s", tmpfile);
 		goto out;
 	}
 
-	LOG3(opts, "%s: temporary: %s", path, tmpfile);
+	LOG3(opts, "%s: temporary: %s", f->path, tmpfile);
 
 	/* Now transmit the metadata for set and blocks. */
 
@@ -727,7 +727,7 @@ blk_send(const struct opts *opts, int fdin, int fdout, int root,
 	}
 
 	LOG3(opts, "%s: sent block metadata: %zu blocks of %zu B, "
-		"%zu B remainder", path, p->blksz, p->len, p->rem);
+		"%zu B remainder", f->path, p->blksz, p->len, p->rem);
 	
 	/* Read back acknowledgement. */
 
@@ -742,11 +742,11 @@ blk_send(const struct opts *opts, int fdin, int fdout, int root,
 	 * rename as the original file.
 	 */
 
-	if ( ! blk_merge(opts, fdin, ffd, p, tfd, path, map, mapsz)) {
+	if ( ! blk_merge(opts, fdin, ffd, p, tfd, f->path, map, mapsz)) {
 		ERRX1(opts, "blk_merge");
 		goto out;
-	} else if (-1 == renameat(root, tmpfile, root, path)) {
-		ERR(opts, "renameat: %s, %s", tmpfile, path);
+	} else if (-1 == renameat(root, tmpfile, root, f->path)) {
+		ERR(opts, "renameat: %s, %s", tmpfile, f->path);
 		goto out;
 	}
 

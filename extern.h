@@ -216,7 +216,7 @@ int		  blk_recv_ack(const struct opts *,
 int		  blk_match(const struct opts *, const struct sess *,
 			int, const struct blkset *, const char *, size_t);
 int		  blk_send(const struct opts *, int, int, int, 
-			const char *, size_t, const struct sess *, size_t);
+			const struct flist *, size_t, const struct sess *, size_t);
 void		  blkset_free(struct blkset *);
 
 uint32_t	  hash_fast(const void *, size_t);
