@@ -44,6 +44,28 @@
 #define FLIST_NAME_LONG	 0x0040 /* name >255 bytes */
 #define FLIST_TIME_SAME  0x0080 /* time is repeat */
 
+/*
+ * This is a list of all of the mode bits that we accept.
+ * Specifically, we only allow for permissions: no sticky bits, no
+ * setuid or setgid, no special bits.
+ */
+static	const mode_t whitelist_modes[] = {
+	S_IRWXU, /* RWX mask for owner */
+	S_IRUSR, /* R for owner */
+	S_IWUSR, /* W for owner */
+	S_IXUSR, /* X for owner */
+	S_IRWXG, /* RWX mask for group */
+	S_IRGRP, /* R for group */
+	S_IWGRP, /* W for group */
+	S_IXGRP, /* X for group */
+	S_IRWXO, /* RWX mask for other */
+	S_IROTH, /* R for other */
+	S_IWOTH, /* W for other */
+	S_IXOTH, /* X for other */
+	S_IFREG, /* regular */
+	0
+};
+
 static int
 flist_cmp(const void *p1, const void *p2)
 {
@@ -248,6 +270,53 @@ flist_recv_filename(const struct opts *opts, int fd,
 	return 1;
 }
 
+static int
+flist_recv_mode(const struct opts *opts, int fd, 
+	struct flist *f, uint8_t flag, const struct flist *flast)
+{
+	int32_t	 ival;
+	size_t	 i;
+	mode_t	 m;
+
+	/* Read the file mode. */
+
+	if ( ! (FLIST_MODE_SAME & flag)) {
+		if ( ! io_read_int(opts, fd, &ival)) {
+			ERRX1(opts, "io_read_int: file mode");
+			return 0;
+		}
+		m = ival;
+	} else if (NULL == flast) {
+		ERRX(opts, "same mode without last entry");
+		return 0;
+	} else
+		m = flast->st.mode;
+
+	/*
+	 * We can have all sorts of weird modes: instead of trying to
+	 * strip them all out here, we instead white-list the modes that
+	 * we accept and only work with those.
+	 */
+
+	if ( ! S_ISREG(m)) {
+		ERRX(opts, "non-regular file: %s", f->path);
+		return 0;
+	} 
+
+	f->st.mode = 0;
+	for (i = 0; 0 != whitelist_modes[i]; i++) {
+		if ( ! (whitelist_modes[i] & m))
+			continue;
+		m &= ~whitelist_modes[i];
+		f->st.mode |= whitelist_modes[i];
+	}
+	if (m)
+		WARNX(opts, "some file modes not "
+			"whitelisted: %8o: %s", m, f->path);
+
+	return 1;
+}
+
 /*
  * Receive a file list of length "sz" from the wire.
  * Return the file list or NULL on failure ("sz" will be zero).
@@ -298,10 +367,13 @@ flist_recv(const struct opts *opts, int fd, size_t *sz)
 			goto out;
 		}
 
-		/* Read the timestamp. */
+		/* Read the file size. */
 
 		if ( ! io_read_long(opts, fd, &lval)) {
 			ERRX1(opts, "io_read_long: file size");
+			goto out;
+		} else if (lval < 0) {
+			ERRX(opts, "negative file size");
 			goto out;
 		}
 		ff->st.size = lval;
@@ -322,17 +394,10 @@ flist_recv(const struct opts *opts, int fd, size_t *sz)
 
 		/* Read the file mode. */
 
-		if ( ! (FLIST_MODE_SAME & flag)) {
-			if ( ! io_read_int(opts, fd, &ival)) {
-				ERRX1(opts, "io_read_int: file mode");
-				goto out;
-			}
-			ff->st.mode = ival;
-		} else if (NULL == fflast) {
-			ERRX(opts, "same mode without last entry");
+		if ( ! flist_recv_mode(opts, fd, ff, flag, fflast)) {
+			ERRX(opts, "flist_recv_mode");
 			goto out;
-		} else
-			ff->st.mode = fflast->st.mode;
+		} 
 
 		LOG3(opts, "received file metadata: %s "
 			"(size %llu, mtime %lld, mode %o)",
