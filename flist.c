@@ -168,6 +168,8 @@ flist_recv_filename(const struct opts *opts, int fd,
 	 * Read our filename.
 	 * If we have FLIST_NAME_SAME, we inherit some of the last
 	 * transmitted name.
+	 * If we have FLIST_NAME_LONG, then the string length is greater
+	 * than byte-size.
 	 */
 
 	if (FLIST_NAME_SAME & flags) {
@@ -204,8 +206,7 @@ flist_recv_filename(const struct opts *opts, int fd,
 		return 0;
 	}
 
-	f->path = malloc(f->pathlen + 1);
-	if (NULL == f->path) {
+	if (NULL == (f->path = malloc(f->pathlen + 1))) {
 		ERR(opts, "malloc");
 		return 0;
 	}
@@ -219,18 +220,20 @@ flist_recv_filename(const struct opts *opts, int fd,
 		return 0;
 	}
 
-#if 0
-	/* Security: don't allow escaping along the path. */
+	/* 
+	 * Security: don't allow backtracking along the path.
+	 * Our sender should canonicalise the path, so we shouldn't get
+	 * anything like this.
+	 */
 
 	if (NULL != strstr(f->path, "/../") ||
 	    (f->pathlen >= 3 && 
 	     0 == strncmp(f->path, "../", 3)) ||
 	    (f->pathlen >= 3 && 
 	     0 == strcmp(f->path + f->pathlen - 3, "/.."))) {
-		ERRX1(opts, "backtracking path: %s", f->path);
+		ERRX(opts, "backtracking path: %s", f->path);
 		return 0;
 	}
-#endif
 
 	/* Record our last path and construct our filename. */
 
