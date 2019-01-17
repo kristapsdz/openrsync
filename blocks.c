@@ -342,9 +342,9 @@ blk_recv(const struct opts *opts, int fd,
 	} else if ( ! io_read_size(opts, fd, &s->rem)) {
 		ERRX1(opts, "io_read_int: block remainder");
 		goto out;
-	} else if (s->rem >= s->len) {
+	} else if (s->rem && s->rem >= s->len) {
 		ERRX(opts, "block remainder is "
-			"greater than block sie");
+			"greater than block size");
 		goto out;
 	}
 
