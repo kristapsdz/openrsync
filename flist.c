@@ -205,6 +205,10 @@ flist_recv_filename(const struct opts *opts, int fd,
 	}
 
 	f->path = malloc(f->pathlen + 1);
+	if (NULL == f->path) {
+		ERR(opts, "malloc");
+		return 0;
+	}
 	f->path[f->pathlen] = '\0';
 
 	if (FLIST_NAME_SAME & flags)
@@ -219,8 +223,10 @@ flist_recv_filename(const struct opts *opts, int fd,
 	/* Security: don't allow escaping along the path. */
 
 	if (NULL != strstr(f->path, "/../") ||
-	    (f->pathlen >= 3 && 0 == strncmp(f->path, "../", 3)) ||
-	    (f->pathlen >= 3 && 0 == strcmp(f->path + f->pathlen - 3, "/.."))) {
+	    (f->pathlen >= 3 && 
+	     0 == strncmp(f->path, "../", 3)) ||
+	    (f->pathlen >= 3 && 
+	     0 == strcmp(f->path + f->pathlen - 3, "/.."))) {
 		ERRX1(opts, "backtracking path: %s", f->path);
 		return 0;
 	}
