@@ -627,6 +627,8 @@ blk_send(const struct opts *opts, int fdin, int fdout, int root,
 	 * Not having a file is fine: it just means that we'll need to
 	 * download the full file (i.e., have zero blocks).
 	 * If this is the case, map will stay at MAP_FAILED.
+	 * If we *do* have a file, then we need to make sure that we
+	 * have a regular file (for now).
 	 */
 
 	if (-1 != (ffd = openat(root, path, O_RDONLY, 0))) {
@@ -634,7 +636,11 @@ blk_send(const struct opts *opts, int fdin, int fdout, int root,
 			WARN(opts, "warn: %s", path);
 			close(ffd);
 			ffd = -1;
-		} else 
+		} else if ( ! S_ISREG(st.st_mode)) {
+			WARNX(opts, "not a regular file: %s", path);
+			close(ffd);
+			ffd = -1;
+		} else
 			p->size = st.st_size;
 	} else if (ENOENT == errno) {
 		WARN2(opts, "openat: %s", path);
