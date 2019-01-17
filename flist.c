@@ -27,6 +27,13 @@
 #include "extern.h"
 
 /*
+ * We allocate our file list in chunk sizes so as not to do it one by
+ * one.
+ * Preferrably we get one or two allocation.
+ */
+#define	FLIST_CHUNK_SIZE (1024)
+
+/*
  * These flags are part of the rsync protocol.
  * They are sent as the first byte for a file transmission and encode
  * information that affects subsequent transmissions.
@@ -43,6 +50,24 @@ flist_cmp(const void *p1, const void *p2)
 	const struct flist *f1 = p1, *f2 = p2;
 
 	return strcmp(f1->path, f2->path);
+}
+
+/*
+ * Sort and deduplicate our file list.
+ */
+static void
+flist_fixup(const struct opts *opts, struct flist *fl, size_t *sz)
+{
+	size_t	 i;
+
+	qsort(fl, *sz, sizeof(struct flist), flist_cmp);
+
+	for (i = 0; i < *sz - 1; i++) {
+		if (strcmp(fl[i].path, fl[i + 1].path))
+			continue;
+		WARN2(opts, "duplicate path: %s", fl[i + 1].path);
+		/* TODO. */
+	}
 }
 
 void
@@ -72,6 +97,12 @@ flist_send(const struct opts *opts,
 
 	for (i = 0; i < flsz; i++) {
 		f = &fl[i];
+
+		/*
+		 * If we're recursive, send the full path.
+		 * Otherwise, send just the filename portion.
+		 */
+
 		fn = opts->recursive ? f->path : f->filename;
 		fnlen = opts->recursive ? f->pathlen : f->filenamelen;
 
@@ -129,7 +160,6 @@ static int
 flist_recv_filename(const struct opts *opts, int fd, 
 	struct flist *f, uint8_t flags, char last[MAXPATHLEN])
 {
-	int32_t		 ival;
 	uint8_t		 bval;
 	size_t		 partial = 0;
 	size_t		 pathlen = 0;
@@ -152,15 +182,11 @@ flist_recv_filename(const struct opts *opts, int fd,
 	/* Get the (possibly-remaining) filename length. */
 
 	if (FLIST_NAME_LONG & flags) {
-		if ( ! io_read_int(opts, fd, &ival)) {
-			ERRX1(opts, "io_read_int: "
+		if ( ! io_read_size(opts, fd, &pathlen)) {
+			ERRX1(opts, "io_read_size: "
 				"filename length");
 			return 0;
-		} else if (ival < 0) {
-			ERRX(opts, "negative filename length");
-			return 0;
 		}
-		pathlen = ival;
 	} else {
 		if ( ! io_read_byte(opts, fd, &bval)) {
 			ERRX1(opts, "io_read_byte: "
@@ -173,6 +199,11 @@ flist_recv_filename(const struct opts *opts, int fd,
 	/* Allocate our full filename length. */
 
 	f->pathlen = pathlen + partial;
+	if (0 == f->pathlen) {
+		ERRX(opts, "zero-length pathname");
+		return 0;
+	}
+
 	f->path = malloc(f->pathlen + 1);
 	f->path[f->pathlen] = '\0';
 
@@ -183,6 +214,19 @@ flist_recv_filename(const struct opts *opts, int fd,
 		ERRX1(opts, "io_read_buf: filename");
 		return 0;
 	}
+
+#if 0
+	/* Security: don't allow escaping along the path. */
+
+	if (NULL != strstr(f->path, "/../") ||
+	    (f->pathlen >= 3 && 0 == strncmp(f->path, "../", 3)) ||
+	    (f->pathlen >= 3 && 0 == strcmp(f->path + f->pathlen - 3, "/.."))) {
+		ERRX1(opts, "backtracking path: %s", f->path);
+		return 0;
+	}
+#endif
+
+	/* Record our last path and construct our filename. */
 
 	strlcpy(last, f->path, MAXPATHLEN);
 
@@ -223,16 +267,18 @@ flist_recv(const struct opts *opts, int fd, size_t *sz)
 		} else if (0 == flag)
 			break;
 
+		/* Allocate in chunks instead of one by one. */
+
 		if (flsz + 1 > flmax) {
-			pp = recallocarray
-				(fl, flmax, flmax + 1024, 
+			pp = recallocarray(fl, flmax, 
+				flmax + FLIST_CHUNK_SIZE, 
 				 sizeof(struct flist));
 			if (NULL == pp) {
 				ERR(opts, "recallocarray");
 				goto out;
 			}
 			fl = pp;
-			flmax += 1024;
+			flmax += FLIST_CHUNK_SIZE;
 		}
 		flsz++;
 		ff = &fl[flsz - 1];
@@ -285,9 +331,14 @@ flist_recv(const struct opts *opts, int fd, size_t *sz)
 		fflast = ff;
 	}
 
-	LOG2(opts, "received file metadata list: %zu", flsz);
+	if (0 == flsz) {
+		ERRX(opts, "zero-length file list");
+		goto out;
+	}
+
 	*sz = flsz;
-	qsort(fl, *sz, sizeof(struct flist), flist_cmp);
+	LOG2(opts, "received file metadata list: %zu", *sz);
+	flist_fixup(opts, fl, sz);
 	return fl;
 out:
 	flist_free(fl, flsz);
@@ -316,6 +367,7 @@ static struct flist *
 flist_gen_recursive(const struct opts *opts, 
 	size_t argc, char **argv, size_t *sz)
 {
+#if 0
 	char		**cargv;
 	int		  rc = 0;
 	FTS		 *fts;
@@ -403,6 +455,9 @@ out:
 
 	free(cargv);
 	return fl;
+#else
+	return NULL;
+#endif
 }
 
 struct flist *
@@ -434,6 +489,8 @@ flist_gen(const struct opts *opts, size_t argc, char **argv, size_t *sz)
 	 */
 
 	for (i = 0; i < argc; i++) {
+		if ('\0' == argv[i][0]) 
+			continue;
 		if (-1 == lstat(argv[i], &st)) {
 			ERR(opts, "fstat: %s", argv[i]);
 			goto out;
@@ -457,13 +514,19 @@ flist_gen(const struct opts *opts, size_t argc, char **argv, size_t *sz)
 		else
 			fl[*sz].filename++;
 		fl[*sz].filenamelen = strlen(fl[*sz].filename);
+		assert(fl[*sz].filenamelen);
 		flist_copy_stat(&fl[*sz], &st);
 		(*sz)++;
 	}
 
-	rc = 1;
+	if (0 == *sz) {
+		ERRX1(opts, "zero-length file list");
+		goto out;
+	}
+
 	LOG2(opts, "non-recursively generated %zu filenames", *sz);
-	qsort(fl, *sz, sizeof(struct flist), flist_cmp);
+	flist_fixup(opts, fl, sz);
+	rc = 1;
 out:
 	if (0 == rc) {
 		/* Use original size to catch last entry. */
