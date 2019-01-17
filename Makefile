@@ -13,7 +13,8 @@ OBJS	 = blocks.o \
 	   server.o
 ALLOBJS	 = $(OBJS) \
 	   main.o
-AFLS	 = afl/test-flist_recv
+AFLS	 = afl/test-blk_recv \
+	   afl/test-flist_recv
 CFLAGS	+= -W -Wall -Wextra -Wno-unused-parameter
 
 all: openrsync
