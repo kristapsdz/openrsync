@@ -43,21 +43,24 @@ main(int argc, char *argv[])
 	 * This takes into account all possible pledge paths.
 	 */
 
-	if (-1 == pledge("unveil exec stdio rpath wpath cpath proc", NULL))
+	if (-1 == pledge("unveil exec stdio rpath wpath cpath proc fattr", NULL))
 		err(EXIT_FAILURE, "pledge");
 
 	memset(&opts, 0, sizeof(struct opts));
 
-	while (-1 != (c = getopt_long(argc, argv, "e:nv", lopts, NULL)))
+	while (-1 != (c = getopt_long(argc, argv, "e:ntv", lopts, NULL)))
 		switch (c) {
 		case 'e':
 			/* Ignore. */
 			break;
-		case 'v':
-			opts.verbose++;
-			break;
 		case 'n':
 			opts.dry_run = 1;
+			break;
+		case 't':
+			opts.preserve_times = 1;
+			break;
+		case 'v':
+			opts.verbose++;
 			break;
 		case 0:
 			break;
@@ -80,7 +83,7 @@ main(int argc, char *argv[])
 	 */
 
 	if (opts.server) {
-		if (-1 == pledge("unveil rpath cpath wpath stdio", NULL))
+		if (-1 == pledge("unveil rpath cpath wpath stdio fattr", NULL))
 			err(EXIT_FAILURE, "pledge");
 		c = rsync_server(&opts, (size_t)argc, argv);
 		return c ? EXIT_SUCCESS : EXIT_FAILURE;
@@ -109,7 +112,7 @@ main(int argc, char *argv[])
 
 	/* Drop the fork possibility. */
 
-	if (-1 == pledge("unveil exec stdio rpath wpath cpath", NULL)) {
+	if (-1 == pledge("unveil exec stdio rpath wpath cpath fattr", NULL)) {
 		ERR(&opts, "pledge");
 		exit(EXIT_FAILURE);
 	}
@@ -125,7 +128,7 @@ main(int argc, char *argv[])
 
 	close(fds[1]);
 	fds[1] = -1;
-	if (-1 == pledge("unveil rpath cpath wpath stdio", NULL))
+	if (-1 == pledge("unveil rpath cpath wpath stdio fattr", NULL))
 		err(EXIT_FAILURE, "pledge");
 	c = rsync_client(&opts, fds[0], (size_t)argc, argv);
 	close(fds[0]);
@@ -134,6 +137,6 @@ main(int argc, char *argv[])
 
 	return c ? EXIT_SUCCESS : EXIT_FAILURE;
 usage:
-	fprintf(stderr, "usage: %s [-nv] src ... dst\n", getprogname());
+	fprintf(stderr, "usage: %s [-ntv] src ... dst\n", getprogname());
 	return EXIT_FAILURE;
 }
