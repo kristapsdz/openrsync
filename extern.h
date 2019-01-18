@@ -215,8 +215,13 @@ int		  blk_recv_ack(const struct opts *,
 			int , const struct blkset *, int32_t);
 int		  blk_match(const struct opts *, const struct sess *,
 			int, const struct blkset *, const char *, size_t);
-int		  blk_send(const struct opts *, int, int, int, 
-			const struct flist *, size_t, const struct sess *, size_t);
+int		  blk_send(const struct opts *, int, size_t,
+			const struct blkset *, const char *);
+int		  blk_send_ack(const struct opts *, int, 
+			const struct blkset *, size_t);
+int		  blk_merge(const struct opts *, int, int, 
+			const struct blkset *, int, const char *, 
+			const void *, size_t);
 void		  blkset_free(struct blkset *);
 
 uint32_t	  hash_fast(const void *, size_t);

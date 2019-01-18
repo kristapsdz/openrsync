@@ -438,7 +438,7 @@ blk_send_ack(const struct opts *opts,
  * and merges them into the temporary file.
  * Returns zero on failure, non-zero on success.
  */
-static int
+int
 blk_merge(const struct opts *opts, int fd, int ffd,
 	const struct blkset *block, int outfd, const char *path, 
 	const void *map, size_t mapsz)
@@ -552,223 +552,40 @@ out:
 }
 
 /*
- * Prepare the overall block set's metadata.
- * We always have at least one block.
- */
-static void
-blk_set_blocksize(struct blkset *p, off_t sz)
-{
-
-	/* For now, hard-code the block size. */
-
-	p->len = MAX_CHUNK;
-
-	/* Set our initial block size and remainder. */
-
-	if (0 == (p->blksz = sz / p->len))
-		p->rem = sz;
-	else 
-		p->rem = sz % p->len;
-
-	/* If we have a remainder, then we need an extra block. */
-
-	if (p->rem)
-		p->blksz++;
-}
-
-/*
- * For each block, prepare the block's metadata.
- */
-static void
-blk_set_blockparams(struct blk *p, const struct blkset *set,
-	off_t offs, size_t idx, const void *map, 
-	const struct sess *sess)
-{
-
-	/* Block length inherits for all but the last. */
-
-	p->idx = idx;
-	p->len = idx < set->blksz - 1 ? set->len : set->rem;
-	p->offs = offs;
-	p->chksum_short = hash_fast(map + offs, p->len);
-	hash_slow(map + offs, p->len, p->chksum_long, sess);
-}
-
-/*
- * This is the main function for the receiver.
- * Open the existing file (if found), the temporary file, read new data
- * (and good blocks) from the sender, reconstruct the file, and rename
- * it.
+ * Transmit the metadata for set and blocks.
  * Return zero on failure, non-zero on success.
  */
 int
-blk_send(const struct opts *opts, int fdin, int fdout, int root, 
-	const struct flist *f, size_t idx, const struct sess *sess,
-	size_t csumlen)
+blk_send(const struct opts *opts, int fd, 
+	size_t len, const struct blkset *p, const char *path)
 {
-	struct blkset	*p;
-	int		 ffd = -1, rc = 0, tfd = -1;
-	off_t		 offs = 0;
-	struct stat	 st;
-	size_t		 i, mapsz = 0;
-	void		*map = MAP_FAILED;
-	char		*tmpfile = NULL;
-	uint32_t	 hash;
-	struct blk	*b;
+	size_t	 i;
+	const struct blk *b;
 
-	if (NULL == (p = calloc(1, sizeof(struct blkset)))) {
-		ERR(opts, "calloc");
-		return 0;
-	}
-
-	p->len = MAX_CHUNK;
-
-	/* 
-	 * Not having a file is fine: it just means that we'll need to
-	 * download the full file (i.e., have zero blocks).
-	 * If this is the case, map will stay at MAP_FAILED.
-	 * If we *do* have a file, then we need to make sure that we
-	 * have a regular file (for now).
-	 */
-
-	if (-1 != (ffd = openat(root, f->path, O_RDONLY, 0))) {
-		if (-1 == fstat(ffd, &st)) {
-			WARN(opts, "warn: %s", f->path);
-			close(ffd);
-			ffd = -1;
-		} else if ( ! S_ISREG(st.st_mode)) {
-			WARNX(opts, "not a regular file: %s", f->path);
-			close(ffd);
-			ffd = -1;
-		} else
-			p->size = st.st_size;
-	} else if (ENOENT == errno) {
-		WARN2(opts, "openat: %s", f->path);
-	} else
-		WARN1(opts, "openat: %s", f->path);
-
-	/* 
-	 * If open, try to map the file into memory.
-	 * If we fail doing this, then we have a problem: we don't need
-	 * the file, but we need to be able to mmap() it.
-	 */
-
-	if (-1 != ffd) {
-		mapsz = st.st_size;
-		map = mmap(NULL, mapsz, PROT_READ, MAP_SHARED, ffd, 0);
-
-		if (MAP_FAILED == map) {
-			WARN(opts, "mmap: %s", f->path);
-			goto out;
-		}
-
-		blk_set_blocksize(p, st.st_size);
-		assert(p->blksz);
-
-		p->blks = calloc(p->blksz, sizeof(struct blk));
-		if (NULL == p->blks) {
-			ERR(opts, "calloc");
-			goto out;
-		}
-
-		for (i = 0; i < p->blksz; i++, offs += p->len)
-			blk_set_blockparams
-				(&p->blks[i], p, offs, i, map, sess);
-
-		LOG3(opts, "%s: mapped %llu B with %zu "
-			"blocks", f->path, p->size, p->blksz);
-	} else
-		LOG3(opts, "%s: not mapped", f->path);
-
-	/* 
-	 * Open our writable temporary file (failure is an error). 
-	 * To make this reasonably unique, make the file into a dot-file
-	 * and give it a random suffix.
-	 * Use the mode on our remote system.
-	 * (Note: umask(0) must be set or we'll mask bits.)
-	 */
-
-	hash = arc4random();
-	if (asprintf(&tmpfile, ".%s.%" PRIu32, f->path, hash) < 0) {
-		ERR(opts, "asprintf");
-		tmpfile = NULL;
-		goto out;
-	} 
-
-	tfd = openat(root, tmpfile, O_RDWR|O_CREAT|O_EXCL, f->st.mode);
-	if (-1 == tfd) {
-		ERR(opts, "openat: %s", tmpfile);
-		goto out;
-	}
-
-	LOG3(opts, "%s: temporary: %s", f->path, tmpfile);
-
-	/* Now transmit the metadata for set and blocks. */
-
-	if ( ! io_write_int(opts, fdout, p->blksz)) {
+	if ( ! io_write_int(opts, fd, p->blksz)) {
 		ERRX1(opts, "io_write_int: block count");
-		goto out;
-	} else if ( ! io_write_int(opts, fdout, p->len)) {
+		return 0;
+	} else if ( ! io_write_int(opts, fd, p->len)) {
 		ERRX1(opts, "io_write_int: block length");
-		goto out;
-	} else if ( ! io_write_int(opts, fdout, p->rem)) {
+		return 0;
+	} else if ( ! io_write_int(opts, fd, p->rem)) {
 		ERRX1(opts, "io_write_int: block remainder");
-		goto out;
+		return 0;
 	} 
 
 	for (i = 0; i < p->blksz; i++) {
 		b = &p->blks[i];
-		if ( ! io_write_int(opts, fdout, b->chksum_short)) {
+		if ( ! io_write_int(opts, fd, b->chksum_short)) {
 			ERRX1(opts, "io_write_int: short checksum");
-			goto out;
+			return 0;
 		}
-		if ( ! io_write_buf(opts, fdout, b->chksum_long, csumlen)) {
+		if ( ! io_write_buf(opts, fd, b->chksum_long, len)) {
 			ERRX1(opts, "io_write_int: long checksum");
-			goto out;
+			return 0;
 		}
 	}
 
 	LOG3(opts, "%s: sent block metadata: %zu blocks of %zu B, "
-		"%zu B remainder", f->path, p->blksz, p->len, p->rem);
-	
-	/* Read back acknowledgement. */
-
-	if ( ! blk_send_ack(opts, fdin, p, idx)) {
-		ERRX1(opts, "blk_send_ack");
-		goto out;
-	}
-
-	/* 
-	 * Now we respond to matches.
-	 * We write all of the data into "tfd", which we're going to
-	 * rename as the original file.
-	 */
-
-	if ( ! blk_merge(opts, fdin, ffd, p, tfd, f->path, map, mapsz)) {
-		ERRX1(opts, "blk_merge");
-		goto out;
-	} else if (-1 == renameat(root, tmpfile, root, f->path)) {
-		ERR(opts, "renameat: %s, %s", tmpfile, f->path);
-		goto out;
-	}
-
-	close(tfd);
-	tfd = -1;
-	rc = 1;
-out:
-	if (MAP_FAILED != map)
-		munmap(map, mapsz);
-	if (-1 != ffd)
-		close(ffd);
-
-	/* On failure, clean up our temporary file. */
-
-	if (-1 != tfd) {
-		close(tfd);
-		remove(tmpfile);
-	}
-
-	free(tmpfile);
-	blkset_free(p);
-	return rc;
+		"%zu B remainder", path, p->blksz, p->len, p->rem);
+	return 1;
 }

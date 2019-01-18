@@ -574,6 +574,12 @@ flist_gen(const struct opts *opts, size_t argc, char **argv, size_t *sz)
 			goto out;
 		}
 
+		/* 
+		 * On the receiving end, we'll strip out all bits on the
+		 * mode except for the file permissions.
+		 * No need to warn about it here.
+		 */
+
 		fl[*sz].path = strdup(argv[i]);
 		if (NULL == fl[*sz].path) {
 			ERR(opts, "strdup");
