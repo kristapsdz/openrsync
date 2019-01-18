@@ -63,6 +63,11 @@ static	const mode_t whitelist_modes[] = {
 	0
 };
 
+/*
+ * Straightforward way to sort a filename list.
+ * This allows us to easily deduplicate.
+ * FIXME: we need to canonicalise paths before doing this.
+ */
 static int
 flist_cmp(const void *p1, const void *p2)
 {
@@ -432,6 +437,25 @@ flist_copy_stat(struct flist *f, const struct stat *st)
 }
 
 /*
+ * Construct pathname-related fields of flist.
+ */
+static void
+flist_copy_path(struct flist *f)
+{
+
+	assert(NULL != f->path);
+	assert(f->pathlen);
+
+	if (NULL == (f->filename = strrchr(f->path, '/')))
+		f->filename = f->path;
+	else
+		f->filename++;
+
+	f->filenamelen = strlen(f->filename);
+	assert(f->filenamelen);
+}
+
+/*
  * Generate a flist recursively given the array of directories (or
  * files, doesn't matter) specified in argv.
  */
@@ -439,7 +463,6 @@ static struct flist *
 flist_gen_recursive(const struct opts *opts, 
 	size_t argc, char **argv, size_t *sz)
 {
-#if 0
 	char		**cargv;
 	int		  rc = 0;
 	FTS		 *fts;
@@ -447,10 +470,6 @@ flist_gen_recursive(const struct opts *opts,
 	struct flist	 *fl = NULL, *f;
 	size_t		  i, flsz = 0, flmax = 0;
 	void		 *pp;
-
-	*sz = 0;
-
-	assert(opts->recursive);
 
 	if (NULL == (cargv = calloc(argc + 1, sizeof(char *)))) {
 		ERR(opts, "calloc");
@@ -478,21 +497,60 @@ flist_gen_recursive(const struct opts *opts,
 
 	errno = 0;
 	while (NULL != (ent = fts_read(fts))) {
+		/*
+		 * Filter through the read file information.
+		 * We want directories (pre-order) and regular files.
+		 * Everything else is skipped.
+		 */
+
 		if (FTS_DC == ent->fts_info) {
 			WARNX(opts, "skipping directory "
 				"cycle: %s", ent->fts_path);
 			continue;
-		}
+		} else if (FTS_DNR == ent->fts_info) {
+			errno = ent->fts_errno;
+			WARN(opts, "unreadable directory: "
+				"%s", ent->fts_path);
+			continue;
+		} else if (FTS_DOT == ent->fts_info) {
+			WARNX(opts, "skipping dot-file: "
+				"%s", ent->fts_path);
+			continue;
+		} else if (FTS_ERR == ent->fts_info) {
+			errno = ent->fts_errno;
+			WARN(opts, "unreadable file: %s",
+				ent->fts_path);
+			continue;
+		} else if (FTS_DEFAULT == ent->fts_info) {
+			WARNX(opts, "skipping non-regular "
+				"file: %s", ent->fts_path);
+			continue;
+		} else if (FTS_NS == ent->fts_info) {
+			errno = ent->fts_errno;
+			WARN(opts, "could not stat: %s",
+				ent->fts_path);
+			continue;
+		} else if (FTS_SL == ent->fts_info) {
+			WARNX(opts, "skipping symbolic link: "
+				"%s", ent->fts_path);
+			continue;
+		} else if (FTS_SLNONE == ent->fts_info) {
+			WARNX(opts, "skipping bad symbolic link: "
+				"%s", ent->fts_path);
+			continue;
+		} else if (FTS_DP == ent->fts_info)
+			continue;
+
 		if (flsz + 1 > flmax) {
-			pp = recallocarray
-				(fl, flmax, flmax + 1024, 
+			pp = recallocarray(fl, flmax, 
+				flmax + FLIST_CHUNK_SIZE, 
 				 sizeof(struct flist));
 			if (NULL == pp) {
 				ERR(opts, "recallocarray");
 				goto out;
 			}
 			fl = pp;
-			flmax += 1024;
+			flmax += FLIST_CHUNK_SIZE;
 		}
 		flsz++;
 		f = &fl[flsz - 1];
@@ -502,21 +560,20 @@ flist_gen_recursive(const struct opts *opts,
 			goto out;
 		}
 		f->pathlen = ent->fts_pathlen;
-		f->filename = strrchr(f->path, '/');
-		if (NULL == f->filename)
-			f->filename = f->path;
-		else
-			f->filename++;
+		flist_copy_path(f);
 		flist_copy_stat(f, ent->fts_statp);
 		errno = 0;
 	}
 	if (errno) {
 		ERR(opts, "fts_read");
 		goto out;
+	} else if (0 == flsz) {
+		ERRX1(opts, "zero-length file list");
+		goto out;
 	}
 
-	rc = 1;
 	LOG2(opts, "recursively generated %zu filenames", flsz);
+	rc = 1;
 out:
 	fts_close(fts);
 	if ( ! rc) {
@@ -527,30 +584,23 @@ out:
 
 	free(cargv);
 	return fl;
-#else
-	return NULL;
-#endif
 }
 
-struct flist *
-flist_gen(const struct opts *opts, size_t argc, char **argv, size_t *sz)
+/*
+ * The non-recursive version is simply going to 
+ */
+static struct flist *
+flist_gen_nonrecursive(const struct opts *opts, 
+	size_t argc, char **argv, size_t *sz)
 {
 	struct flist	*fl = NULL;
 	size_t		 i;
 	struct stat	 st;
 	int		 rc = 0;
 
-	/* Recursive is managed elsewhere. */
-
-	if (opts->recursive) 
-		return flist_gen_recursive(opts, argc, argv, sz);
-
-	*sz = 0;
-
 	/* We'll have at most argc. */
 
-	fl = calloc(argc, sizeof(struct flist));
-	if (NULL == fl) {
+	if (NULL == (fl = calloc(argc, sizeof(struct flist)))) {
 		ERR(opts, "calloc");
 		return NULL;
 	}
@@ -586,13 +636,7 @@ flist_gen(const struct opts *opts, size_t argc, char **argv, size_t *sz)
 			goto out;
 		}
 		fl[*sz].pathlen = strlen(argv[i]);
-		fl[*sz].filename = strrchr(fl[*sz].path, '/');
-		if (NULL == fl[*sz].filename)
-			fl[*sz].filename = fl[*sz].path;
-		else
-			fl[*sz].filename++;
-		fl[*sz].filenamelen = strlen(fl[*sz].filename);
-		assert(fl[*sz].filenamelen);
+		flist_copy_path(&fl[*sz]);
 		flist_copy_stat(&fl[*sz], &st);
 		(*sz)++;
 	}
@@ -603,7 +647,6 @@ flist_gen(const struct opts *opts, size_t argc, char **argv, size_t *sz)
 	}
 
 	LOG2(opts, "non-recursively generated %zu filenames", *sz);
-	flist_fixup(opts, fl, sz);
 	rc = 1;
 out:
 	if (0 == rc) {
@@ -613,4 +656,20 @@ out:
 		fl = NULL;
 	}
 	return fl;
+}
+
+struct flist *
+flist_gen(const struct opts *opts, size_t argc, char **argv, size_t *sz)
+{
+	struct flist	*f;
+
+	*sz = 0;
+	f = opts->recursive ?
+		flist_gen_recursive(opts, argc, argv, sz) :
+		flist_gen_nonrecursive(opts, argc, argv, sz);
+
+	if (NULL != f)
+		flist_fixup(opts, f, sz);
+
+	return f;
 }
