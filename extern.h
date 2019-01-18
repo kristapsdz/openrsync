@@ -85,6 +85,7 @@ struct	flist {
 	size_t		 pathlen; /* length of path */
 	const char	*filename; /* just filename of path */
 	size_t		 filenamelen; /* length of filename */
+	size_t		 dirlen; /* length of directory w/o slash */
 	struct flstat	 st; /* file information */
 };
 
