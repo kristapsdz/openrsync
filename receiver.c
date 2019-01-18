@@ -94,6 +94,7 @@ process(const struct opts *opts, int fdin, int fdout, int root,
 	void		*map = MAP_FAILED;
 	char		*tmpfile = NULL;
 	uint32_t	 hash;
+	struct timeval	 tv[2];
 
 	/* 
 	 * Not having a file is fine: it just means that we'll need to
@@ -155,12 +156,8 @@ process(const struct opts *opts, int fdin, int fdout, int root,
 
 	if (NULL == (p = calloc(1, sizeof(struct blkset)))) {
 		ERR(opts, "calloc");
-		return 0;
+		goto out;
 	}
-
-	p->len = MAX_CHUNK;
-	if (-1 != ffd)
-		p->size = st.st_size;
 
 	/* 
 	 * If open, try to map the file into memory.
@@ -191,15 +188,17 @@ process(const struct opts *opts, int fdin, int fdout, int root,
 
 		LOG3(opts, "%s: mapped %llu B with %zu "
 			"blocks", f->path, p->size, p->blksz);
-	} else
+	} else {
+		p->len = MAX_CHUNK;
 		LOG3(opts, "%s: not mapped", f->path);
+	}
 
 	/* 
-	 * Open our writable temporary file (failure is an error). 
+	 * Open our writable temporary file.
 	 * To make this reasonably unique, make the file into a dot-file
 	 * and give it a random suffix.
 	 * Use the mode on our remote system.
-	 * (Note: umask(0) must be set or we'll mask bits.)
+	 * Note: umask(0) must be set or we'll mask bits.
 	 */
 
 	hash = arc4random();
@@ -236,7 +235,25 @@ process(const struct opts *opts, int fdin, int fdout, int root,
 	if ( ! blk_merge(opts, fdin, ffd, p, tfd, f->path, map, mapsz)) {
 		ERRX1(opts, "blk_merge");
 		goto out;
-	} else if (-1 == renameat(root, tmpfile, root, f->path)) {
+	}
+
+	/* Optionally preserve times for the output file. */
+
+	if (opts->preserve_times) {
+		tv[0].tv_sec = time(NULL);
+		tv[0].tv_usec = 0;
+		tv[1].tv_sec = f->st.mtime;
+		tv[1].tv_usec = 0;
+		if (-1 == futimes(tfd, tv)) {
+			ERR(opts, "futimes: %s", f->path);
+			goto out;
+		}
+		LOG3(opts, "matching futimes: %s", f->path);
+	}
+
+	/* Finally, rename the temporary to the real file. */
+
+	if (-1 == renameat(root, tmpfile, root, f->path)) {
 		ERR(opts, "renameat: %s, %s", tmpfile, f->path);
 		goto out;
 	}
@@ -300,7 +317,10 @@ stats(const struct opts *opts, int fdin)
  * It writes into a temporary file, then renames the temporary file.
  * Return zero on failure, non-zero on success.
  *
- * Pledges: unveil, rpath, cpath, wpath, stdio.
+ * Pledges: unveil, rpath, cpath, wpath, stdio, fattr.
+ *
+ * Pledges (dry-run): -cpath, -wpath, -fattr.
+ * Pledges (!preserve_times): -fattr.
  */
 int
 rsync_receiver(const struct opts *opts, const struct sess *sess, 
@@ -312,7 +332,7 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 	int		 rc = 0, dfd = -1, phase = 0;
 	int32_t	 	 ioerror;
 
-	if (-1 == pledge("unveil rpath cpath wpath stdio", NULL)) {
+	if (-1 == pledge("unveil rpath cpath wpath stdio fattr", NULL)) {
 		ERR(opts, "pledge");
 		goto out;
 	}
@@ -327,11 +347,10 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 
 	/* XXX: what does this do? */
 
-	if ( ! opts->server) {
-		if ( ! io_write_int(opts, fdout, 0)) {
-			ERRX1(opts, "io_write_int: zero premable");
-			goto out;
-		} 
+	if ( ! opts->server &&
+	     ! io_write_int(opts, fdout, 0)) {
+		ERRX1(opts, "io_write_int: zero premable");
+		goto out;
 	}
 
 	/*
