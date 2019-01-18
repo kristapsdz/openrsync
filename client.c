@@ -31,7 +31,10 @@
  * In the former, it synchronises local files from a remote sink.
  * In the latter, the remote sink synchronses to the local files.
  *
- * Pledges: stdio, rpath, wpath, cpath.
+ * Pledges: stdio, rpath, wpath, cpath, unveil, fattr.
+ *
+ * Pledges (dry-run): -cpath, -wpath, -fattr.
+ * Pledges (!preserve_times): -fattr.
  */
 int
 rsync_client(const struct opts *opts, int fd, size_t argc, char *argv[])
