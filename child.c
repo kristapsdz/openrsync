@@ -45,7 +45,7 @@ fargs_cmdline(const struct opts *opts, const struct fargs *f)
 	argsz += 1; 	/* dot separator */
 	argsz += 1; 	/* sink file */
 	argsz += 5; 	/* per-mode maximum */
-	argsz += 9;	/* shared args */
+	argsz += 10;	/* shared args */
 	argsz += 1;	/* NULL pointer */
 	argsz += f->sourcesz;
 
@@ -68,16 +68,7 @@ fargs_cmdline(const struct opts *opts, const struct fargs *f)
 		args[i++] = "--server";
 	}
 
-	/*
-	 * This is for reference implementation rsync servers.
-	 * We want to use an old protocol, but the old implementation of
-	 * MD4 was also broken in a way we don't want to support.
-	 * Force it to use MD5, even though we'll stipulate that we use
-	 * the old protocol.
-	 */
-
-	args[i++] = "--checksum-choice";
-	args[i++] = "md5";
+	/* Shared arguments. */
 
 	if (opts->verbose > 3)
 		args[i++] = "-v";
@@ -93,6 +84,21 @@ fargs_cmdline(const struct opts *opts, const struct fargs *f)
 		args[i++] = "-t";
 	if (opts->preserve_perms)
 		args[i++] = "-p";
+	if (opts->recursive)
+		args[i++] = "-r";
+
+	/*
+	 * This is for reference implementation rsync servers.
+	 * We want to use an old protocol, but the old implementation of
+	 * MD4 was also broken in a way we don't want to support.
+	 * Force it to use MD5, even though we'll stipulate that we use
+	 * the old protocol.
+	 */
+
+	args[i++] = "--checksum-choice";
+	args[i++] = "md5";
+
+	/* Terminate with a full-stop for reasons unknown. */
 
 	args[i++] = ".";
 
