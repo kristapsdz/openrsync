@@ -98,6 +98,7 @@ struct	opts {
 	int	 recursive; /* -r */
 	int	 verbose; /* -v */
 	int	 dry_run; /* -n */
+	int	 preserve_times; /* -t */
 };
 
 /*
