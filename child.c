@@ -69,7 +69,7 @@ fargs_cmdline(const struct opts *opts, const struct fargs *f)
 	}
 
 	/*
-	 * This is for GNU rsync servers.
+	 * This is for reference implementation rsync servers.
 	 * We want to use an old protocol, but the old implementation of
 	 * MD4 was also broken in a way we don't want to support.
 	 * Force it to use MD5, even though we'll stipulate that we use

@@ -74,7 +74,7 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	/* FIXME: GNU rsync accepts this. */
+	/* FIXME: reference implementation rsync accepts this. */
 
 	if (argc < 2)
 		goto usage;
