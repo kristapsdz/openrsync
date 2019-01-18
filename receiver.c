@@ -69,6 +69,7 @@ init_blk(struct blk *p, const struct blkset *set, off_t offs,
 	p->idx = idx;
 	p->len = idx < set->blksz - 1 ? set->len : set->rem;
 	p->offs = offs;
+
 	p->chksum_short = hash_fast(map + offs, p->len);
 	hash_slow(map + offs, p->len, p->chksum_long, sess);
 }
@@ -95,6 +96,7 @@ process(const struct opts *opts, int fdin, int fdout, int root,
 	char		*tmpfile = NULL;
 	uint32_t	 hash;
 	struct timeval	 tv[2];
+	mode_t		 perm;
 
 	/* 
 	 * Not having a file is fine: it just means that we'll need to
@@ -198,7 +200,6 @@ process(const struct opts *opts, int fdin, int fdout, int root,
 	 * To make this reasonably unique, make the file into a dot-file
 	 * and give it a random suffix.
 	 * Use the mode on our remote system.
-	 * Note: umask(0) must be set or we'll mask bits.
 	 */
 
 	hash = arc4random();
@@ -208,7 +209,19 @@ process(const struct opts *opts, int fdin, int fdout, int root,
 		goto out;
 	} 
 
-	tfd = openat(root, tmpfile, O_RDWR|O_CREAT|O_EXCL, f->st.mode);
+	/* 
+	 * If we have -p, then copy over the file's mode only if we're
+	 * updating an existing file, not making one anew.
+	 */
+
+	if (-1 == ffd) 
+		perm = f->st.mode;
+	else if (opts->preserve_perms)
+		perm = f->st.mode;
+	else
+		perm = st.st_mode;
+
+	tfd = openat(root, tmpfile, O_RDWR|O_CREAT|O_EXCL, perm);
 	if (-1 == tfd) {
 		ERR(opts, "openat: %s", tmpfile);
 		goto out;
@@ -337,14 +350,6 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 		goto out;
 	}
 
-	/* 
-	 * Make sure that we're able to set exactly the mode specific in
-	 * the source file here locally.
-	 * If we don't do this, then open()'s modes will be influenced.
-	 */
-
-	umask(0);
-
 	/* XXX: what does this do? */
 
 	if ( ! opts->server &&
@@ -369,7 +374,10 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 		goto out;
 	}
 
-	/* Create the path for our destination directory. */
+	/* 
+	 * Create the path for our destination directory.
+	 * This uses our current umask.
+	 */
 
 	if (NULL == (tofree = strdup(root))) {
 		ERR(opts, "strdup");
@@ -380,6 +388,10 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 		goto out;
 	}
 	free(tofree);
+
+	/* Disable umask() so we can set permissions fully. */
+
+	umask(0);
 
 	/*
 	 * Make our entire view of the file-system be limited to what's
