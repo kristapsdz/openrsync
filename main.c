@@ -48,7 +48,7 @@ main(int argc, char *argv[])
 
 	memset(&opts, 0, sizeof(struct opts));
 
-	while (-1 != (c = getopt_long(argc, argv, "e:nptv", lopts, NULL)))
+	while (-1 != (c = getopt_long(argc, argv, "e:nprtv", lopts, NULL)))
 		switch (c) {
 		case 'e':
 			/* Ignore. */
@@ -58,6 +58,9 @@ main(int argc, char *argv[])
 			break;
 		case 'p':
 			opts.preserve_perms = 1;
+			break;
+		case 'r':
+			opts.recursive = 1;
 			break;
 		case 't':
 			opts.preserve_times = 1;
@@ -140,6 +143,7 @@ main(int argc, char *argv[])
 
 	return c ? EXIT_SUCCESS : EXIT_FAILURE;
 usage:
-	fprintf(stderr, "usage: %s [-nptv] src ... dst\n", getprogname());
+	fprintf(stderr, "usage: %s [-nprtv] src ... dst\n", 
+		getprogname());
 	return EXIT_FAILURE;
 }
