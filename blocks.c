@@ -684,6 +684,8 @@ blk_send(const struct opts *opts, int fdin, int fdout, int root,
 	 * Open our writable temporary file (failure is an error). 
 	 * To make this reasonably unique, make the file into a dot-file
 	 * and give it a random suffix.
+	 * Use the mode on our remote system.
+	 * (Note: umask(0) must be set or we'll mask bits.)
 	 */
 
 	hash = arc4random();
