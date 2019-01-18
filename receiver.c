@@ -79,6 +79,12 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 		goto out;
 	}
 
+	/* 
+	 * Make sure that we're able to set exactly the mode specific in
+	 * the source file here locally.
+	 * If we don't do this, then open()'s modes will be influenced.
+	 */
+
 	umask(0);
 
 	/* XXX: what does this do? */
