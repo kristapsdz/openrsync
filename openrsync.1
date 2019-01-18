@@ -62,10 +62,11 @@ must be a regular file.
 The destination must be a directory and is created if not found.
 .Pp
 .Nm
-is compatible with GNU
+is compatible with the GPL-licensed
 .Xr rsync 1
-protocol version 20, although the GNU utility must be forced to use MD5
-hashing as illustrated in the
+protocol version 20, although
+.Xr rsync 1
+must be forced to use MD5 hashing as illustrated in the
 .Sx EXAMPLES .
 .\" The following requests should be uncommented and used where appropriate.
 .\" .Sh CONTEXT
@@ -115,7 +116,7 @@ To update the out-of-date remote files in
 .Pa host:dest
 on a remote host running
 .Nm
-with the local host running GNU
+with the local host running
 .Xr rsync 1 :
 .Pp
 .Dl % rsync -t --checksum-choice=md5 ../dest/* host:dest
