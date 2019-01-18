@@ -60,6 +60,7 @@ static	const mode_t whitelist_modes[] = {
 	S_IWOTH, /* W for other */
 	S_IXOTH, /* X for other */
 	S_IFREG, /* regular */
+	S_IFDIR, /* directory */
 	0
 };
 
@@ -92,6 +93,46 @@ flist_fixup(const struct opts *opts, struct flist *fl, size_t *sz)
 		WARN2(opts, "duplicate path: %s", fl[i + 1].path);
 		/* TODO. */
 	}
+}
+
+/*
+ * Copy necessary elements in "st" into the fields of "f".
+ */
+static void
+flist_copy_stat(struct flist *f, const struct stat *st)
+{
+
+	f->st.mode = st->st_mode;
+	f->st.uid = st->st_uid;
+	f->st.gid = st->st_gid;
+	f->st.size = st->st_size;
+	f->st.mtime = st->st_mtime;
+}
+
+/*
+ * Construct pathname-related fields of flist.
+ * Note that the filename component can be empty in the event of
+ * directories, so that's not checked for zero length.
+ */
+static void
+flist_copy_path(struct flist *f)
+{
+
+	assert(NULL != f->path);
+	assert(f->pathlen);
+
+	if (NULL == (f->filename = strrchr(f->path, '/')))
+		f->filename = f->path;
+	else
+		f->filename++;
+
+	f->filenamelen = strlen(f->filename);
+#if 0
+	if (f->filename == f->path)
+		f->dirlen = 0;
+	else
+		f->dirlen = f->filename - f->path - 1;
+#endif
 }
 
 void
@@ -262,13 +303,7 @@ flist_recv_filename(const struct opts *opts, int fd,
 	/* Record our last path and construct our filename. */
 
 	strlcpy(last, f->path, MAXPATHLEN);
-
-	f->filename = strrchr(f->path, '/');
-	if (NULL == f->filename)
-		f->filename = f->path;
-	else
-		f->filename++;
-	f->filenamelen = strlen(f->filename);
+	flist_copy_path(f);
 	return 1;
 }
 
@@ -300,10 +335,19 @@ flist_recv_mode(const struct opts *opts, int fd,
 	 * we accept and only work with those.
 	 */
 
-	if ( ! S_ISREG(m)) {
-		ERRX(opts, "non-regular file: %s", f->path);
-		return 0;
-	} 
+	if (opts->recursive) {
+		if ( ! S_ISREG(m) && ! S_ISDIR(m)) {
+			ERRX(opts, "non-regular non-directory file "
+				"in recursive mode: %s", f->path);
+			return 0;
+		}
+	} else {
+		if ( ! S_ISREG(m)) {
+			ERRX(opts, "non-regular file in "
+				"non-recursive mode: %s", f->path);
+			return 0;
+		} 
+	}
 
 	f->st.mode = 0;
 	for (i = 0; 0 != whitelist_modes[i]; i++) {
@@ -420,39 +464,6 @@ flist_recv(const struct opts *opts, int fd, size_t *sz)
 out:
 	flist_free(fl, flsz);
 	return NULL;
-}
-
-/*
- * Copy necessary elements in "st" into the fields of "f".
- */
-static void
-flist_copy_stat(struct flist *f, const struct stat *st)
-{
-
-	f->st.mode = st->st_mode;
-	f->st.uid = st->st_uid;
-	f->st.gid = st->st_gid;
-	f->st.size = st->st_size;
-	f->st.mtime = st->st_mtime;
-}
-
-/*
- * Construct pathname-related fields of flist.
- */
-static void
-flist_copy_path(struct flist *f)
-{
-
-	assert(NULL != f->path);
-	assert(f->pathlen);
-
-	if (NULL == (f->filename = strrchr(f->path, '/')))
-		f->filename = f->path;
-	else
-		f->filename++;
-
-	f->filenamelen = strlen(f->filename);
-	assert(f->filenamelen);
 }
 
 /*
@@ -637,6 +648,10 @@ flist_gen_nonrecursive(const struct opts *opts,
 		}
 		fl[*sz].pathlen = strlen(argv[i]);
 		flist_copy_path(&fl[*sz]);
+
+		/* Any filename should have a filename part. */
+
+		assert(fl[*sz].filenamelen);
 		flist_copy_stat(&fl[*sz], &st);
 		(*sz)++;
 	}
