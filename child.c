@@ -45,7 +45,7 @@ fargs_cmdline(const struct opts *opts, const struct fargs *f)
 	argsz += 1; 	/* dot separator */
 	argsz += 1; 	/* sink file */
 	argsz += 5; 	/* per-mode maximum */
-	argsz += 8;	/* shared args */
+	argsz += 9;	/* shared args */
 	argsz += 1;	/* NULL pointer */
 	argsz += f->sourcesz;
 
@@ -91,6 +91,8 @@ fargs_cmdline(const struct opts *opts, const struct fargs *f)
 		args[i++] = "-n";
 	if (opts->preserve_times)
 		args[i++] = "-t";
+	if (opts->preserve_perms)
+		args[i++] = "-p";
 
 	args[i++] = ".";
 

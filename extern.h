@@ -99,6 +99,7 @@ struct	opts {
 	int	 verbose; /* -v */
 	int	 dry_run; /* -n */
 	int	 preserve_times; /* -t */
+	int	 preserve_perms; /* -p */
 };
 
 /*
