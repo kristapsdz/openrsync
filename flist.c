@@ -127,12 +127,10 @@ flist_copy_path(struct flist *f)
 		f->filename++;
 
 	f->filenamelen = strlen(f->filename);
-#if 0
 	if (f->filename == f->path)
 		f->dirlen = 0;
 	else
 		f->dirlen = f->filename - f->path - 1;
-#endif
 }
 
 void
