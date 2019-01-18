@@ -47,12 +47,22 @@ Maybe specified more than once, with four times being the maximum
 recognised.
 .El
 .Pp
+At this time,
+.Ar src
+must be a regular file.
+The destination must be a directory and is created if not found.
+.Pp
 .Nm
 is compatible with GNU
 .Xr rsync 1
 protocol version 20, although the GNU utility must be forced to use MD5
 hashing as illustrated in the
 .Sx EXAMPLES .
+.Pp
+When
+.Nm
+writes to the local file, it also synchronises the file mode.
+It only recognises read/write/execute permissions: others are ignored.
 .\" The following requests should be uncommented and used where appropriate.
 .\" .Sh CONTEXT
 .\" For section 9 functions only.
