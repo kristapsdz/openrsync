@@ -148,12 +148,16 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 			continue;
 		}
 
-		/* Valid index? */
+		/* Validate index and file type. */
 
 		if (idx < 0 || (uint32_t)idx >= flsz) {
 			ERRX(opts, "file index out of bounds: "
 				"invalid %" PRId32 " out of %zu",
 				idx, flsz);
+			goto out;
+		} else if (S_ISDIR(fl[idx].st.mode)) {
+			ERRX(opts, "blocks requested for "
+				"directory file: %s", fl[idx].path);
 			goto out;
 		}
 
