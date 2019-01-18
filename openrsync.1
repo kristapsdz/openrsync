@@ -22,7 +22,7 @@
 .Nd synchronise local and remote files
 .Sh SYNOPSIS
 .Nm openrsync
-.Op Fl nv
+.Op Fl ntv
 .Ar src ...
 .Ar dst
 .Sh DESCRIPTION
@@ -41,10 +41,13 @@ The arguments are as follows:
 .It Fl n
 Dry-run mode.
 Does not actually modify the destination.
+.It Fl t
+Set the destination files' modification time to match the source.
 .It Fl v
 Increase verbosity.
-Maybe specified more than once, with four times being the maximum
-recognised.
+Specify once for files being transferred, twice for specific status,
+thrice for per-file transfer information, and four times for per-file
+breakdowns.
 .El
 .Pp
 At this time,
@@ -52,17 +55,21 @@ At this time,
 must be a regular file.
 The destination must be a directory and is created if not found.
 .Pp
+When
+.Nm
+writes the destination file, it always synchronises the file mode.
+If
+.Fl t
+is specified, it also synchronises the modification time.
+If both the time and size of files are the same between invocations, the
+files are not transferred.
+.Pp
 .Nm
 is compatible with GNU
 .Xr rsync 1
 protocol version 20, although the GNU utility must be forced to use MD5
 hashing as illustrated in the
 .Sx EXAMPLES .
-.Pp
-When
-.Nm
-writes to the local file, it also synchronises the file mode.
-It only recognises read/write/execute permissions: others are ignored.
 .\" The following requests should be uncommented and used where appropriate.
 .\" .Sh CONTEXT
 .\" For section 9 functions only.
@@ -83,7 +90,7 @@ with the local
 and
 .Pa ../src/baz :
 .Pp
-.Dl % openrsync ../src/bar ../src/baz host:dest
+.Dl % openrsync -t ../src/bar ../src/baz host:dest
 .Pp
 To update the out-of-date local files
 .Pa bar
@@ -94,7 +101,7 @@ with the remote files
 and
 .Pa host:src/baz :
 .Pp
-.Dl % openrsync host:src/bar :src/baz \&.
+.Dl % openrsync -t host:src/bar :src/baz \&.
 .Pp
 To update the out-of-date local files
 .Pa ../dest/bar
@@ -105,7 +112,7 @@ with
 and
 .Pa baz :
 .Pp
-.Dl % openrsync bar baz ../dest
+.Dl % openrsync -t bar baz ../dest
 .Pp
 To update the out-of-date remote files in
 .Pa host:dest
@@ -114,7 +121,7 @@ on a remote host running
 with the local host running GNU
 .Xr rsync 1 :
 .Pp
-.Dl % rsync --checksum-choice=md5 ../dest/* host:dest
+.Dl % rsync -t --checksum-choice=md5 ../dest/* host:dest
 .\" .Sh DIAGNOSTICS
 .\" For sections 1, 4, 6, 7, 8, and 9 printf/stderr messages only.
 .\" .Sh ERRORS
