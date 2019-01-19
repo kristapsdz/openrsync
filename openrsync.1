@@ -22,7 +22,7 @@
 .Nd synchronise local and remote files
 .Sh SYNOPSIS
 .Nm openrsync
-.Op Fl ntv
+.Op Fl nprtv
 .Ar src ...
 .Ar dst
 .Sh DESCRIPTION
@@ -34,7 +34,7 @@ with one or more source files
 .Ar src .
 Either the source or the destination (but not both) may be on a remote
 host.
-If so, the remote host is connected to using
+Remote hosts are reached using
 .Xr ssh 1 .
 The arguments are as follows:
 .Bl -tag -width Ds
@@ -43,6 +43,15 @@ Dry-run mode.
 Does not actually modify the destination.
 .It Fl p
 Set destination file permissions to match the source when it is updated.
+.It Fl r
+If
+.Ar src
+designates a directory, synchronise the directory and the entire subtree
+connected at that point.
+If
+.Ar src
+ends with a slash, only the subtree is synchronised, not the root
+directory.
 .It Fl t
 Set destination file modification time to match the source when it is
 updated or created.
