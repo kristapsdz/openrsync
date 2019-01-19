@@ -81,11 +81,8 @@ struct	flstat {
  * A list of files with their statistics.
  */
 struct	flist {
-	char		*path; /* full path relative to root */
-	size_t		 pathlen; /* length of path */
-	const char	*filename; /* just filename of path */
-	size_t		 filenamelen; /* length of filename */
-	size_t		 dirlen; /* length of directory w/o slash */
+	char		*path; /* path relative to root */
+	const char	*wpath; /* "working" path for receiver */
 	struct flstat	 st; /* file information */
 };
 

@@ -78,21 +78,17 @@ static int
 process_dir(const struct opts *opts, int fdin, int fdout, int root, 
 	const struct flist *f, size_t idx, const struct sess *sess)
 {
-	const char	*path;
-
-	path = f->path; /* TODO */
-	assert('\0' != path[0]);
 
 	if (opts->dry_run)
 		return 1;
 
-	if (-1 == mkdirat(root, path, 0755))
+	if (-1 == mkdirat(root, f->path, 0755))
 		if (EEXIST != errno) {
-			WARN1(opts, "openat: %s", path);
+			WARN1(opts, "openat: %s", f->path);
 			return 0;
 		}
 
-	LOG3(opts, "created: %s", path);
+	LOG3(opts, "created: %s", f->path);
 	return 1;
 }
 
@@ -113,13 +109,13 @@ process_file(const struct opts *opts, int fdin, int fdout, int root,
 	int		 ffd = -1, rc = 0, tfd = -1;
 	off_t		 offs = 0;
 	struct stat	 st;
-	size_t		 i, mapsz = 0;
+	size_t		 i, mapsz = 0, dirlen;
 	void		*map = MAP_FAILED;
 	char		*tmpfile = NULL;
+	const char	*cp;
 	uint32_t	 hash;
 	struct timeval	 tv[2];
 	mode_t		 perm;
-	const char	*path;
 
 	/* 
 	 * Not having a file is fine: it just means that we'll need to
@@ -128,18 +124,11 @@ process_file(const struct opts *opts, int fdin, int fdout, int root,
 	 * If we're recursive, then ignore the absolute indicator.
 	 */
 
-	if (opts->recursive)
-		path = f->path; /* TODO */
-	else
-		path = f->filename;
-
-	assert('\0' != path[0]);
-
-	if (-1 == (ffd = openat(root, path, O_RDONLY, 0))) {
+	if (-1 == (ffd = openat(root, f->path, O_RDONLY, 0))) {
 		if (ENOENT == errno)
-			WARN2(opts, "openat: %s", path);
+			WARN2(opts, "openat: %s", f->path);
 		else
-			WARN1(opts, "openat: %s", path);
+			WARN1(opts, "openat: %s", f->path);
 	}
 
 	/*
@@ -151,10 +140,10 @@ process_file(const struct opts *opts, int fdin, int fdout, int root,
 
 	if (-1 != ffd) {
 		if (-1 == fstat(ffd, &st)) {
-			WARN(opts, "fstat: %s", path);
+			WARN(opts, "fstat: %s", f->path);
 			goto out;
 		} else if ( ! S_ISREG(st.st_mode)) {
-			WARNX(opts, "not a regular file: %s", path);
+			WARNX(opts, "not a regular file: %s", f->path);
 			goto out;
 		} 
 
@@ -162,7 +151,7 @@ process_file(const struct opts *opts, int fdin, int fdout, int root,
 
 		if (st.st_size == f->st.size &&
 		    st.st_mtime == f->st.mtime) {
-			LOG3(opts, "%s: skipping file", path);
+			LOG3(opts, "%s: skipping: up to date", f->path);
 			return 1;
 		} 
 	}
@@ -203,7 +192,7 @@ process_file(const struct opts *opts, int fdin, int fdout, int root,
 		map = mmap(NULL, mapsz, PROT_READ, MAP_SHARED, ffd, 0);
 
 		if (MAP_FAILED == map) {
-			WARN(opts, "mmap: %s", path);
+			WARN(opts, "mmap: %s", f->path);
 			goto out;
 		}
 
@@ -220,10 +209,10 @@ process_file(const struct opts *opts, int fdin, int fdout, int root,
 			init_blk(&p->blks[i], p, offs, i, map, sess);
 
 		LOG3(opts, "%s: mapped %llu B with %zu "
-			"blocks", path, p->size, p->blksz);
+			"blocks", f->path, p->size, p->blksz);
 	} else {
 		p->len = MAX_CHUNK;
-		LOG3(opts, "%s: not mapped", path);
+		LOG3(opts, "%s: not mapped", f->path);
 	}
 
 	/* 
@@ -235,16 +224,17 @@ process_file(const struct opts *opts, int fdin, int fdout, int root,
 
 	hash = arc4random();
 
-	if (opts->recursive) {
+	if (opts->recursive && NULL != (cp = strrchr(f->path, '/'))) {
+		dirlen = cp - f->path;
 		if (asprintf(&tmpfile, "%.*s/.%s.%" PRIu32, 
-		    (int)f->dirlen, path, 
-		    path + f->dirlen + 1, hash) < 0) {
+		    (int)dirlen, f->path, 
+		    f->path + dirlen + 1, hash) < 0) {
 			ERR(opts, "asprintf");
 			tmpfile = NULL;
 			goto out;
 		} 
 	} else {
-		if (asprintf(&tmpfile, ".%s.%" PRIu32, path, hash) < 0) {
+		if (asprintf(&tmpfile, ".%s.%" PRIu32, f->path, hash) < 0) {
 			ERR(opts, "asprintf");
 			tmpfile = NULL;
 			goto out;
@@ -268,11 +258,11 @@ process_file(const struct opts *opts, int fdin, int fdout, int root,
 		goto out;
 	}
 
-	LOG3(opts, "%s: temporary: %s", path, tmpfile);
+	LOG3(opts, "%s: temporary: %s", f->path, tmpfile);
 
 	/* Now transmit the metadata for set and blocks. */
 
-	if ( ! blk_send(opts, fdout, csumlen, p, path)) {
+	if ( ! blk_send(opts, fdout, csumlen, p, f->path)) {
 		ERRX1(opts, "blk_send");
 		goto out;
 	} else if ( ! blk_send_ack(opts, fdin, p, idx)) {
@@ -286,7 +276,7 @@ process_file(const struct opts *opts, int fdin, int fdout, int root,
 	 * rename as the original file.
 	 */
 
-	if ( ! blk_merge(opts, fdin, ffd, p, tfd, path, map, mapsz)) {
+	if ( ! blk_merge(opts, fdin, ffd, p, tfd, f->path, map, mapsz)) {
 		ERRX1(opts, "blk_merge");
 		goto out;
 	}
@@ -299,16 +289,16 @@ process_file(const struct opts *opts, int fdin, int fdout, int root,
 		tv[1].tv_sec = f->st.mtime;
 		tv[1].tv_usec = 0;
 		if (-1 == futimes(tfd, tv)) {
-			ERR(opts, "futimes: %s", path);
+			ERR(opts, "futimes: %s", f->path);
 			goto out;
 		}
-		LOG3(opts, "matching futimes: %s", path);
+		LOG3(opts, "matching futimes: %s", f->path);
 	}
 
 	/* Finally, rename the temporary to the real file. */
 
-	if (-1 == renameat(root, tmpfile, root, path)) {
-		ERR(opts, "renameat: %s, %s", tmpfile, path);
+	if (-1 == renameat(root, tmpfile, root, f->path)) {
+		ERR(opts, "renameat: %s, %s", tmpfile, f->path);
 		goto out;
 	}
 

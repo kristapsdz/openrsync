@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <fts.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -38,7 +39,6 @@
  * They are sent as the first byte for a file transmission and encode
  * information that affects subsequent transmissions.
  */
-#define FLIST_DIR	 0x0001 /* directory? */
 #define FLIST_MODE_SAME  0x0002 /* mode is repeat */
 #define	FLIST_NAME_SAME  0x0020 /* name is repeat */
 #define FLIST_NAME_LONG	 0x0040 /* name >255 bytes */
@@ -74,7 +74,7 @@ flist_cmp(const void *p1, const void *p2)
 {
 	const struct flist *f1 = p1, *f2 = p2;
 
-	return strcmp(f1->path, f2->path);
+	return strcmp(f1->wpath, f2->wpath);
 }
 
 /*
@@ -90,7 +90,7 @@ flist_fixup(const struct opts *opts, struct flist *fl, size_t *sz)
 	for (i = 0; i < *sz - 1; i++) {
 		if (strcmp(fl[i].path, fl[i + 1].path))
 			continue;
-		WARN2(opts, "duplicate path: %s", fl[i + 1].path);
+		WARNX(opts, "duplicate path: %s", fl[i + 1].path);
 		/* TODO. */
 	}
 }
@@ -109,35 +109,13 @@ flist_copy_stat(struct flist *f, const struct stat *st)
 	f->st.mtime = st->st_mtime;
 }
 
-/*
- * Construct pathname-related fields of flist.
- * Note that the filename component can be empty in the event of
- * directories, so that's not checked for zero length.
- */
-static void
-flist_copy_path(struct flist *f)
-{
-
-	assert(NULL != f->path);
-	assert(f->pathlen);
-
-	if (NULL == (f->filename = strrchr(f->path, '/')))
-		f->filename = f->path;
-	else
-		f->filename++;
-
-	f->filenamelen = strlen(f->filename);
-	if (f->filename == f->path)
-		f->dirlen = 0;
-	else
-		f->dirlen = f->filename - f->path - 1;
-}
-
 void
 flist_free(struct flist *f, size_t sz)
 {
 	size_t	 i;
 
+	if (NULL == f)
+		return;
 	for (i = 0; i < sz; i++)
 		free(f[i].path);
 	free(f);
@@ -160,14 +138,9 @@ flist_send(const struct opts *opts,
 
 	for (i = 0; i < flsz; i++) {
 		f = &fl[i];
-
-		/*
-		 * If we're recursive, send the full path.
-		 * Otherwise, send just the filename portion.
-		 */
-
-		fn = opts->recursive ? f->path : f->filename;
-		fnlen = opts->recursive ? f->pathlen : f->filenamelen;
+		fn = f->wpath;
+		fnlen = strlen(f->wpath);
+		assert(fnlen > 0);
 
 		/*
 		 * For ease, make all of our filenames be "long"
@@ -177,12 +150,10 @@ flist_send(const struct opts *opts,
 		 */
 
 		flag = FLIST_NAME_LONG;
-		if (S_ISDIR(f->st.mode))
-			flag |= FLIST_DIR;
 
 		LOG3(opts, "sending file metadata: %s "
 			"(size %llu, mtime %lld, mode %o)",
-			f->path, f->st.size, f->st.mtime, f->st.mode);
+			fn, f->st.size, f->st.mtime, f->st.mode);
 
 		/* Now write to the wire. */
 
@@ -225,7 +196,7 @@ flist_recv_filename(const struct opts *opts, int fd,
 {
 	uint8_t		 bval;
 	size_t		 partial = 0;
-	size_t		 pathlen = 0;
+	size_t		 pathlen = 0, fpathlen;
 
 	/*
 	 * Read our filename.
@@ -263,17 +234,17 @@ flist_recv_filename(const struct opts *opts, int fd,
 
 	/* Allocate our full filename length. */
 
-	f->pathlen = pathlen + partial;
-	if (0 == f->pathlen) {
+	fpathlen = pathlen + partial;
+	if (0 == fpathlen) {
 		ERRX(opts, "zero-length pathname");
 		return 0;
 	}
 
-	if (NULL == (f->path = malloc(f->pathlen + 1))) {
+	if (NULL == (f->path = malloc(fpathlen + 1))) {
 		ERR(opts, "malloc");
 		return 0;
 	}
-	f->path[f->pathlen] = '\0';
+	f->path[fpathlen] = '\0';
 
 	if (FLIST_NAME_SAME & flags)
 		memcpy(f->path, last, partial);
@@ -284,24 +255,15 @@ flist_recv_filename(const struct opts *opts, int fd,
 	}
 
 	/* 
-	 * Security: don't allow backtracking along the path.
-	 * Our sender should canonicalise the path, so we shouldn't get
-	 * anything like this.
+	 * FIXME: security checks.
+	 * No absolute paths.
+	 * No path backtracking.
 	 */
-
-	if (NULL != strstr(f->path, "/../") ||
-	    (f->pathlen >= 3 && 
-	     0 == strncmp(f->path, "../", 3)) ||
-	    (f->pathlen >= 3 && 
-	     0 == strcmp(f->path + f->pathlen - 3, "/.."))) {
-		ERRX(opts, "backtracking path: %s", f->path);
-		return 0;
-	}
 
 	/* Record our last path and construct our filename. */
 
 	strlcpy(last, f->path, MAXPATHLEN);
-	flist_copy_path(f);
+	f->wpath = f->path;
 	return 1;
 }
 
@@ -464,32 +426,81 @@ out:
 	return NULL;
 }
 
-/*
- * Generate a flist recursively given the array of directories (or
- * files, doesn't matter) specified in argv.
- */
-static struct flist *
-flist_gen_recursive(const struct opts *opts, 
-	size_t argc, char **argv, size_t *sz)
+static int
+flist_gen_recursive_entry(const struct opts *opts, 
+	char *root, struct flist **fl, size_t *sz, size_t *max)
 {
-	char		**cargv;
-	int		  rc = 0;
-	FTS		 *fts;
-	FTSENT		 *ent;
-	struct flist	 *fl = NULL, *f;
-	size_t		  i, flsz = 0, flmax = 0;
-	void		 *pp;
+	char		*cargv[2], *cp;
+	int		 rc = 0;
+	FTS		*fts;
+	FTSENT		*ent;
+	struct flist	*f;
+	size_t		 flsz = 0, stripdir;
+	void		*pp;
+	struct stat	 st;
 
-	if (NULL == (cargv = calloc(argc + 1, sizeof(char *)))) {
-		ERR(opts, "calloc");
-		return NULL;
+	cargv[0] = root;
+	cargv[1] = NULL;
+
+	/* 
+	 * If we're a file, then revert to the same actions we use for
+	 * the non-recursive scan.
+	 * FIXME: abstract this part.
+	 */
+
+	if (-1 == lstat(root, &st)) {
+		ERR(opts, "lstat: %s", root);
+		return 0;
+	} else if (S_ISREG(st.st_mode)) {
+		if (*sz + 1 > *max) {
+			pp = recallocarray(*fl, *max, 
+				*max + FLIST_CHUNK_SIZE, 
+				sizeof(struct flist));
+			if (NULL == pp) {
+				ERR(opts, "recallocarray");
+				return 0;
+			}
+			*fl = pp;
+			*max += FLIST_CHUNK_SIZE;
+		}
+		f = &(*fl)[(*sz)++];
+		assert(NULL != f);
+		if (NULL == (f->path = strdup(root))) {
+			ERR(opts, "strdup");
+			return 0;
+		}
+		if (NULL == (f->wpath = strrchr(f->path, '/')))
+			f->wpath = f->path;
+		else
+			f->wpath++;
+
+		flist_copy_stat(f, &st);
+		return 1;
+	} else if ( ! S_ISDIR(st.st_mode)) {
+		WARNX(opts, "neither directory nor file: %s", root);
+		return 0;
 	}
 
-	/* The arguments to fts_open must be NULL-terminated. */
+	/*
+	 * If we end with a slash, it means that we're not supposed to
+	 * copy the directory part itself---only the contents.
+	 * So set "stripdir" to be what we take out.
+	 */
 
-	for (i = 0; i < argc; i++)
-		cargv[i] = argv[i];
-	cargv[i] = NULL;
+	stripdir = strlen(root);
+	assert(stripdir > 0);
+	if ('/' != root[stripdir - 1])
+		stripdir = 0;
+
+	/*
+	 * If we're not stripping anything, then see if we need to strip
+	 * out the leading material in the path up to and including the
+	 * last directory component.
+	 */
+
+	if (0 == stripdir) 
+		if (NULL != (cp = strrchr(root, '/')))
+			stripdir = cp - root + 1;
 
 	/*
 	 * If we're recursive, then we need to take down all of the
@@ -500,8 +511,7 @@ flist_gen_recursive(const struct opts *opts,
 
 	if (NULL == (fts = fts_open(cargv, FTS_LOGICAL, NULL))) {
 		ERR(opts, "fts_open");
-		free(cargv);
-		return NULL;
+		return 0;
 	}
 
 	errno = 0;
@@ -550,48 +560,80 @@ flist_gen_recursive(const struct opts *opts,
 		} else if (FTS_DP == ent->fts_info)
 			continue;
 
-		if (flsz + 1 > flmax) {
-			pp = recallocarray(fl, flmax, 
-				flmax + FLIST_CHUNK_SIZE, 
-				 sizeof(struct flist));
+		if (*sz + 1 > *max) {
+			pp = recallocarray(*fl, *max, 
+				*max + FLIST_CHUNK_SIZE, 
+				sizeof(struct flist));
 			if (NULL == pp) {
 				ERR(opts, "recallocarray");
 				goto out;
 			}
-			fl = pp;
-			flmax += FLIST_CHUNK_SIZE;
+			*fl = pp;
+			*max += FLIST_CHUNK_SIZE;
 		}
+		(*sz)++;
 		flsz++;
-		f = &fl[flsz - 1];
+		f = &(*fl)[*sz - 1];
 
-		if (NULL == (f->path = strdup(ent->fts_path))) {
-			ERR(opts, "strdup");
-			goto out;
+		if ('\0' == ent->fts_path[stripdir]) {
+			if (asprintf(&f->path, "%s.", ent->fts_path) < 0) {
+				ERR(opts, "asprintf");
+				goto out;
+			}
+		} else {
+			if (NULL == (f->path = strdup(ent->fts_path))) {
+				ERR(opts, "strdup");
+				goto out;
+			}
 		}
-		f->pathlen = ent->fts_pathlen;
-		flist_copy_path(f);
+		f->wpath = f->path + stripdir;
 		flist_copy_stat(f, ent->fts_statp);
 		errno = 0;
 	}
 	if (errno) {
 		ERR(opts, "fts_read");
 		goto out;
-	} else if (0 == flsz) {
-		ERRX1(opts, "zero-length file list");
-		goto out;
 	}
 
-	LOG2(opts, "recursively generated %zu filenames", flsz);
+	LOG3(opts, "generated %zu filenames: %s", flsz, root);
 	rc = 1;
 out:
 	fts_close(fts);
-	if ( ! rc) {
-		flist_free(fl, flsz);
+	return rc;
+}
+
+/*
+ * Generate a flist recursively given the array of directories (or
+ * files, doesn't matter) specified in argv.
+ */
+static struct flist *
+flist_gen_recursive(const struct opts *opts, 
+	size_t argc, char **argv, size_t *sz)
+{
+	int		 rc;
+	struct flist	*fl = NULL;
+	size_t		 max = 0;
+	size_t		 i;
+
+	for (i = 0; i < argc; i++) {
+		rc = flist_gen_recursive_entry
+			(opts, argv[i], &fl, sz, &max);
+		if (0 == rc)
+			break;
+	}
+
+	if (i < argc) {
+		ERRX1(opts, "flist_gen_recursive_entry");
+		flist_free(fl, *sz);
+		fl = NULL;
+		*sz = 0;
+	} else if (0 == *sz) {
+		ERRX(opts, "zero-length file list");
+		flist_free(fl, *sz);
 		fl = NULL;
 	} else
-		*sz = flsz;
+		LOG2(opts, "recursively generated %zu filenames", *sz);
 
-	free(cargv);
 	return fl;
 }
 
@@ -602,7 +644,7 @@ static struct flist *
 flist_gen_nonrecursive(const struct opts *opts, 
 	size_t argc, char **argv, size_t *sz)
 {
-	struct flist	*fl = NULL;
+	struct flist	*fl = NULL, *f;
 	size_t		 i;
 	struct stat	 st;
 	int		 rc = 0;
@@ -633,25 +675,31 @@ flist_gen_nonrecursive(const struct opts *opts,
 			goto out;
 		}
 
+		f = &fl[(*sz)++];
+		assert(NULL != f);
+
+		/* 
+		 * Copy the full path for local addressing and transmit
+		 * only the filename part for the receiver.
+		 */
+
+		if (NULL == (f->path = strdup(argv[i]))) {
+			ERR(opts, "strdup");
+			goto out;
+		}
+
+		if (NULL == (f->wpath = strrchr(f->path, '/')))
+			f->wpath = f->path;
+		else
+			f->wpath++;
+
 		/* 
 		 * On the receiving end, we'll strip out all bits on the
 		 * mode except for the file permissions.
 		 * No need to warn about it here.
 		 */
 
-		fl[*sz].path = strdup(argv[i]);
-		if (NULL == fl[*sz].path) {
-			ERR(opts, "strdup");
-			goto out;
-		}
-		fl[*sz].pathlen = strlen(argv[i]);
-		flist_copy_path(&fl[*sz]);
-
-		/* Any filename should have a filename part. */
-
-		assert(fl[*sz].filenamelen);
-		flist_copy_stat(&fl[*sz], &st);
-		(*sz)++;
+		flist_copy_stat(f, &st);
 	}
 
 	if (0 == *sz) {
