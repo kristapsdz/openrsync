@@ -82,6 +82,12 @@ process_dir(const struct opts *opts, int fdin, int fdout, int root,
 	if (opts->dry_run)
 		return 1;
 
+	/*
+	 * FIXME: we want to make the directory with writable
+	 * permissions, then we want to adjust the permissions (assuming
+	 * preserve_perms) afterward in case it's u-w or something.
+	 */
+
 	if (-1 == mkdirat(root, f->path, 0755))
 		if (EEXIST != errno) {
 			WARN1(opts, "openat: %s", f->path);
