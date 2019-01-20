@@ -74,8 +74,42 @@ init_blk(struct blk *p, const struct blkset *set, off_t offs,
 	hash_slow(map + offs, p->len, p->chksum_long, sess);
 }
 
+/*
+ * We need to process our directories in post-order.
+ * This is because touching files within the directory will change the
+ * directory file; and also, if our mode is not writable, we wouldn't be
+ * able to write to that directory!
+ * Returns zero on failure, non-zero on success.
+ */
 static int
-process_dir(const struct opts *opts, int fdin, int fdout, int root, 
+post_process_dir(const struct opts *opts, 
+	int root, const struct flist *f)
+{
+	struct timespec	 tv[2];
+
+	if (opts->preserve_times) {
+		tv[0].tv_sec = time(NULL);
+		tv[0].tv_nsec = 0;
+		tv[1].tv_sec = f->st.mtime;
+		tv[1].tv_nsec = 0;
+		if (-1 == utimensat(root, f->path, tv, 0)) {
+			ERR(opts, "utimensat: %s", f->path);
+			return 0;
+		} else
+			LOG3(opts, "preserved time: %s", f->path);
+	}
+
+	return 1;
+}
+
+/*
+ * Create (or not) the given directory entry.
+ * If a previous directory was already given, fix up the permissions
+ * post-order on that directory.
+ * Returns zero on failure, non-zero on success.
+ */
+static int
+pre_process_dir(const struct opts *opts, int fdin, int fdout, int root, 
 	const struct flist *f, size_t idx, const struct sess *sess)
 {
 
@@ -83,18 +117,20 @@ process_dir(const struct opts *opts, int fdin, int fdout, int root,
 		return 1;
 
 	/*
-	 * FIXME: we want to make the directory with writable
-	 * permissions, then we want to adjust the permissions (assuming
-	 * preserve_perms) afterward in case it's u-w or something.
+	 * We want to make the directory with writable permissions, then
+	 * we want to adjust the permissions (assuming preserve_perms)
+	 * afterward in case it's u-w or something.
 	 */
 
-	if (-1 == mkdirat(root, f->path, 0755))
+	if (-1 == mkdirat(root, f->path, 0755)) {
 		if (EEXIST != errno) {
 			WARN1(opts, "openat: %s", f->path);
 			return 0;
 		}
+		LOG3(opts, "updated: %s", f->path);
+	} else
+		LOG3(opts, "created: %s", f->path);
 
-	LOG3(opts, "created: %s", f->path);
 	return 1;
 }
 
@@ -120,7 +156,7 @@ process_file(const struct opts *opts, int fdin, int fdout, int root,
 	char		*tmpfile = NULL;
 	const char	*cp;
 	uint32_t	 hash;
-	struct timeval	 tv[2];
+	struct timespec	 tv[2];
 	mode_t		 perm;
 
 	/* 
@@ -291,14 +327,14 @@ process_file(const struct opts *opts, int fdin, int fdout, int root,
 
 	if (opts->preserve_times) {
 		tv[0].tv_sec = time(NULL);
-		tv[0].tv_usec = 0;
+		tv[0].tv_nsec = 0;
 		tv[1].tv_sec = f->st.mtime;
-		tv[1].tv_usec = 0;
-		if (-1 == futimes(tfd, tv)) {
-			ERR(opts, "futimes: %s", f->path);
+		tv[1].tv_nsec = 0;
+		if (-1 == futimens(tfd, tv)) {
+			ERR(opts, "futimens: %s", tmpfile);
 			goto out;
-		}
-		LOG3(opts, "matching futimes: %s", f->path);
+		} else
+			LOG3(opts, "preserved time: %s", tmpfile);
 	}
 
 	/* Finally, rename the temporary to the real file. */
@@ -467,13 +503,19 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 
 	for (i = 0; i < flsz; i++) {
 		c = S_ISDIR(fl[i].st.mode) ?
-			process_dir(opts, fdin, fdout, 
+			pre_process_dir(opts, fdin, fdout, 
 				dfd, &fl[i], i, sess) :
 			process_file(opts, fdin, fdout, 
 				dfd, &fl[i], i, sess, csum_length);
 		if ( ! c) 
 			goto out;
 	}
+
+	if (opts->preserve_times ||
+	    opts->preserve_perms)
+		for (i = 0; i < flsz; i++) 
+			if ( ! post_process_dir(opts, dfd, &fl[i]))
+				goto out;
 
 	/* Properly close us out by progressing through the phases. */
 
