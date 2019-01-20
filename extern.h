@@ -21,8 +21,8 @@
  * This is the rsync protocol version that we support.
  * This is the oldest currently supported, but also the simplest.
  * One caveat is that we use an updated MD5 algorithm instead of the
- * stipulated MD4, but that can be overridden when talking with GNU
- * rsync clients and servers.
+ * stipulated MD4, but that can be overridden when talking with
+ * reference rsync clients and servers.
  * (This was changed in version 27, which is probably the next target
  * for protocol compatibility.)
  */
