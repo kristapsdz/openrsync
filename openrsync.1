@@ -42,7 +42,8 @@ The arguments are as follows:
 Dry-run mode.
 Does not actually modify the destination.
 .It Fl p
-Set destination file permissions to match the source when it is updated.
+Set destination file or directory permissions to match the source when
+it is updated.
 .It Fl r
 If
 .Ar src
@@ -53,8 +54,8 @@ If
 ends with a slash, only the subtree is synchronised, not the root
 directory.
 .It Fl t
-Set destination file modification time to match the source when it is
-updated or created.
+Set destination file and directory modification time to match the source
+when it is updated or created.
 .It Fl v
 Increase verbosity.
 Specify once for files being transferred, twice for specific status,
@@ -62,12 +63,12 @@ thrice for per-file transfer information, and four times for per-file
 breakdowns.
 .El
 .Pp
-By default, new destination files are given the current time and the
-source file permissions.
+By default, new destination files and directories are given the current
+time and the source file permissions.
 .Pp
 At this time,
 .Ar src
-must be a regular file.
+must be a regular file or directory.
 The destination must be a directory and is created if not found.
 .Pp
 .Nm
