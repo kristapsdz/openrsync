@@ -83,7 +83,7 @@ init_blk(struct blk *p, const struct blkset *set, off_t offs,
  */
 static int
 post_process_dir(const struct opts *opts, 
-	int root, const struct flist *f)
+	int root, const struct flist *f, int newdir)
 {
 	struct timespec	 tv[2];
 
@@ -95,8 +95,14 @@ post_process_dir(const struct opts *opts,
 		if (-1 == utimensat(root, f->path, tv, 0)) {
 			ERR(opts, "utimensat: %s", f->path);
 			return 0;
-		} else
-			LOG3(opts, "preserved time: %s", f->path);
+		} 
+	}
+
+	if (newdir || opts->preserve_perms) {
+		if (-1 == fchmodat(root, f->path, f->st.mode, 0)) {
+			ERR(opts, "fchmodat: %s", f->path);
+			return 0;
+		}
 	}
 
 	return 1;
@@ -104,32 +110,34 @@ post_process_dir(const struct opts *opts,
 
 /*
  * Create (or not) the given directory entry.
- * If a previous directory was already given, fix up the permissions
- * post-order on that directory.
  * Returns zero on failure, non-zero on success.
  */
 static int
-pre_process_dir(const struct opts *opts, int fdin, int fdout, int root, 
-	const struct flist *f, size_t idx, const struct sess *sess)
+pre_process_dir(const struct opts *opts, mode_t oumask, int fdin, 
+	int fdout, int root, const struct flist *f, size_t idx, 
+	const struct sess *sess, int *newdir)
 {
 
 	if (opts->dry_run)
 		return 1;
 
 	/*
-	 * We want to make the directory with writable permissions, then
-	 * we want to adjust the permissions (assuming preserve_perms)
-	 * afterward in case it's u-w or something.
+	 * We want to make the directory with default permissions (using
+	 * our old umask, which we've since unset), then adjust
+	 * permissions (assuming preserve_perms or new) afterward in
+	 * case it's u-w or something.
 	 */
 
-	if (-1 == mkdirat(root, f->path, 0755)) {
+	if (-1 == mkdirat(root, f->path, 0777 & ~oumask)) {
 		if (EEXIST != errno) {
 			WARN1(opts, "openat: %s", f->path);
 			return 0;
 		}
 		LOG3(opts, "updated: %s", f->path);
-	} else
+	} else {
+		*newdir = 1;
 		LOG3(opts, "created: %s", f->path);
+	}
 
 	return 1;
 }
@@ -333,8 +341,7 @@ process_file(const struct opts *opts, int fdin, int fdout, int root,
 		if (-1 == futimens(tfd, tv)) {
 			ERR(opts, "futimens: %s", tmpfile);
 			goto out;
-		} else
-			LOG3(opts, "preserved time: %s", tmpfile);
+		}
 	}
 
 	/* Finally, rename the temporary to the real file. */
@@ -417,6 +424,8 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 	char		*tofree;
 	int		 rc = 0, dfd = -1, phase = 0, c;
 	int32_t	 	 ioerror;
+	int		*newdir = NULL;
+	mode_t		 oumask;
 
 	if (-1 == pledge("unveil rpath cpath wpath stdio fattr", NULL)) {
 		ERR(opts, "pledge");
@@ -464,7 +473,7 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 
 	/* Disable umask() so we can set permissions fully. */
 
-	umask(0);
+	oumask = umask(0);
 
 	/*
 	 * Make our entire view of the file-system be limited to what's
@@ -501,21 +510,31 @@ rsync_receiver(const struct opts *opts, const struct sess *sess,
 	LOG2(opts, "receiver ready for %zu-checksum "
 		"data: %s", csum_length, root);
 
+	if (NULL == (newdir = calloc(flsz, sizeof(int)))) {
+		ERR(opts, "calloc");
+		goto out;
+	}
+
 	for (i = 0; i < flsz; i++) {
 		c = S_ISDIR(fl[i].st.mode) ?
-			pre_process_dir(opts, fdin, fdout, 
-				dfd, &fl[i], i, sess) :
+			pre_process_dir(opts, oumask, fdin, fdout, 
+				dfd, &fl[i], i, sess, &newdir[i]) :
 			process_file(opts, fdin, fdout, 
 				dfd, &fl[i], i, sess, csum_length);
 		if ( ! c) 
 			goto out;
 	}
 
+	/* Fix up the directory permissions and times post-order. */
+
 	if (opts->preserve_times ||
 	    opts->preserve_perms)
-		for (i = 0; i < flsz; i++) 
-			if ( ! post_process_dir(opts, dfd, &fl[i]))
+		for (i = 0; i < flsz; i++) {
+			c = post_process_dir(opts, 
+				dfd, &fl[i], newdir[i]);
+			if ( ! c)
 				goto out;
+		}
 
 	/* Properly close us out by progressing through the phases. */
 
@@ -565,5 +584,6 @@ out:
 	if (-1 != dfd)
 		close(dfd);
 	flist_free(fl, flsz);
+	free(newdir);
 	return rc;
 }
