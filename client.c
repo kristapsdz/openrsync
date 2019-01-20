@@ -37,16 +37,10 @@
  * Pledges (!preserve_times): -fattr.
  */
 int
-rsync_client(const struct opts *opts, int fd, size_t argc, char *argv[])
+rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 {
 	struct sess	 sess;
-	struct fargs	*f;
 	int		 rc = 0;
-
-	if (NULL == (f = fargs_parse(opts, argc, argv))) {
-		ERRX1(opts, "fargs_parse");
-		goto out;
-	}
 
 	/* Standard rsync preamble, sender side. */
 
@@ -92,6 +86,5 @@ rsync_client(const struct opts *opts, int fd, size_t argc, char *argv[])
 	
 	rc = 1;
 out:
-	fargs_free(f);
 	return rc;
 }

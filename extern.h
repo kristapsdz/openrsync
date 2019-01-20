@@ -181,9 +181,6 @@ void		  rsync_errx1(const struct opts *,
 			const char *, size_t, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
 
-void		  fargs_free(struct fargs *);
-struct fargs	 *fargs_parse(const struct opts *, size_t, char *[]);
-
 struct flist	 *flist_gen(const struct opts *, size_t, char **, size_t *);
 void		  flist_free(struct flist *, size_t);
 struct flist	 *flist_recv(const struct opts *, int, size_t *);
@@ -201,13 +198,13 @@ int		  io_write_byte(const struct opts *, int, uint8_t);
 int		  io_write_int(const struct opts *, int, int32_t);
 int		  io_write_long(const struct opts *, int, int64_t);
 
-void		  rsync_child(const struct opts *, int, size_t, char *[])
+void		  rsync_child(const struct opts *, int, const struct fargs *)
 			__attribute__((noreturn));
 int		  rsync_receiver(const struct opts *, 
 			const struct sess *, int, int, const char *);
 int		  rsync_sender(const struct opts *, const struct sess *, 
 			int, int, size_t, char **);
-int		  rsync_client(const struct opts *, int, size_t, char *[]);
+int		  rsync_client(const struct opts *, int, const struct fargs *);
 int		  rsync_server(const struct opts *, size_t, char *[]);
 
 struct blkset	 *blk_recv(const struct opts *, int, size_t, const char *);

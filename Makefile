@@ -2,7 +2,6 @@ PREFIX	 = /usr
 OBJS	 = blocks.o \
 	   child.o \
 	   client.o \
-	   fargs.o \
 	   flist.o \
 	   hash.o \
 	   io.o \
