@@ -31,7 +31,7 @@
  * Returns the NULL-terminated array unless an error occurs, which
  * should always be considered fatal.
  */
-char **
+static char **
 fargs_cmdline(const struct opts *opts, const struct fargs *f)
 {
 	char	**args;
@@ -120,23 +120,14 @@ fargs_cmdline(const struct opts *opts, const struct fargs *f)
  * Pledges: exec, stdio.
  */
 void
-rsync_child(const struct opts *opts, int fd, size_t argc, char *argv[])
+rsync_child(const struct opts *opts, int fd, const struct fargs *f)
 {
-	struct fargs	 *f;
-	char 		**args;
-	size_t		  i;
+	char 	**args;
+	size_t	  i;
 
-	assert(argc > 1);
+	/* Construct the remote shell command. */
 
-	/*
-	 * Parse the files we want from the command-line, then construct
-	 * the remote shell command from that information.
-	 */
-
-	if (NULL == (f = fargs_parse(opts, argc, argv))) {
-		ERRX1(opts, "fargs_parse");
-		exit(EXIT_FAILURE);
-	} else if (NULL == (args = fargs_cmdline(opts, f))) {
+	if (NULL == (args = fargs_cmdline(opts, f))) {
 		ERRX1(opts, "fargs_cmdline");
 		exit(EXIT_FAILURE);
 	}

@@ -17,6 +17,7 @@
 #include <sys/stat.h>
 #include <sys/socket.h>
 
+#include <assert.h>
 #include <err.h>
 #include <getopt.h>
 #include <stdio.h>
@@ -26,13 +27,181 @@
 
 #include "extern.h"
 
+static void
+fargs_free(struct fargs *p)
+{
+	size_t	 i;
+
+	if (NULL == p)
+		return;
+
+	if (NULL != p->sources)
+		for (i = 0; i < p->sourcesz; i++)
+			free(p->sources[i]);
+
+	free(p->sources);
+	free(p->sink);
+	free(p->host);
+	free(p);
+}
+
+/*
+ * A remote host is has a colon before the first path separator.
+ * Return zero if local, non-zero if remote.
+ */
+static int
+fargs_is_remote(const char *v)
+{
+	size_t	 pos;
+
+	pos = strcspn(v, ":/");
+	return ':' == v[pos];
+}
+
+/*
+ * Take the command-line filenames (e.g., rsync foo/ bar/ baz/) and
+ * determine our operating mode.
+ * For example, if the first argument is a remote file, this means that
+ * we're going to transfer from the remote to the local.
+ * We also make sure that the arguments are consistent, that is, if
+ * we're going to transfer from the local to the remote, that no
+ * filenames for the local transfer indicate remote hosts.
+ * Returns the parsed and sanitised options.
+ * Exits on failure.
+ */
+static struct fargs *
+fargs_parse(size_t argc, char *argv[])
+{
+	struct fargs	 *f = NULL;
+	char		 *cp;
+	size_t		  i, j, len = 0;
+
+	/* Sanity-check: no rsync:// or plain :: arguments. */
+
+	for (i = 0; i < argc; i++) {
+		if (0 == strncmp(argv[i], "rsync://", 8))
+			errx(EXIT_FAILURE, "rsync protocol "
+				"sources not supported: %s", argv[i]);
+		j = strcspn(argv[i], ":/");
+		if (':' == argv[i][j] && ':' == argv[i][j + 1])
+			errx(EXIT_FAILURE, "rsync protocol (implicit) "
+				"sources not supported: %s", argv[i]);
+	}
+
+	/* Allocations. */
+
+	if (NULL == (f = calloc(1, sizeof(struct fargs))))
+		err(EXIT_FAILURE, "calloc");
+
+	f->sourcesz = argc - 1;
+	if (NULL == (f->sources = calloc(f->sourcesz, sizeof(char *))))
+		err(EXIT_FAILURE, "calloc");
+
+	for (i = 0; i < argc - 1; i++)
+		if (NULL == (f->sources[i] = strdup(argv[i])))
+			err(EXIT_FAILURE, "strdup");
+
+	if (NULL == (f->sink = strdup(argv[i])))
+		err(EXIT_FAILURE, "strdup");
+
+	/* 
+	 * Test files for its locality.
+	 * If the last is a remote host, then we're sending from the
+	 * local to the remote host ("sender" mode).
+	 * If the first, remote to local ("receiver" mode).
+	 * If neither, a local transfer in sender style.
+	 */
+
+	f->mode = FARGS_LOCAL;
+
+	if (fargs_is_remote(f->sink))
+		f->mode = FARGS_SENDER;
+
+	if (fargs_is_remote(f->sources[0])) {
+		if (FARGS_SENDER == f->mode) 
+			errx(EXIT_FAILURE, "both source and "
+				"destination cannot be remote files");
+		f->mode = FARGS_RECEIVER;
+	}
+
+	/* 
+	 * Set our remote host depending upon the mode.
+	 * Save the host, which is the NUL-terminated host name, and the
+	 * buffer from which we got it that includes the colon.
+	 */
+
+	if (FARGS_RECEIVER == f->mode)
+		f->host = strdup(argv[0]);
+	else if (FARGS_SENDER == f->mode)
+		f->host = strdup(argv[argc - 1]);
+
+	if (FARGS_LOCAL != f->mode && NULL == f->host)
+		err(EXIT_FAILURE, "strdup");
+
+	if (NULL != f->host) {
+		cp = strchr(f->host, ':');
+		assert(NULL != cp);
+		*cp = '\0';
+		if (0 == (len = strlen(f->host)))
+			errx(EXIT_FAILURE, "empty remote host");
+	}
+
+	/* Sanity check: mix of remote and local files. */
+
+	if (FARGS_SENDER == f->mode || FARGS_LOCAL == f->mode)
+		for (i = 0; i < f->sourcesz; i++)
+			if (fargs_is_remote(f->sources[i]))
+				errx(EXIT_FAILURE, "remote file in "
+					"list of local sources: %s", 
+					f->sources[i]);
+
+	if (FARGS_RECEIVER == f->mode)
+		for (i = 0; i < f->sourcesz; i++)
+			if ( ! fargs_is_remote(f->sources[i]))
+				errx(EXIT_FAILURE, "local file in "
+					"list of remote sources: %s", 
+					f->sources[i]);
+
+	/* Now strip our hostname. */
+
+	if (FARGS_SENDER == f->mode) {
+		assert(NULL != f->host);
+		assert(len > 0);
+		j = strlen(f->sink);
+		memmove(f->sink, f->sink + len + 1, j - len);
+	} else if (FARGS_RECEIVER == f->mode) {
+		assert(NULL != f->host);
+		assert(len > 0);
+		for (i = 0; i < f->sourcesz; i++) {
+			j = strlen(f->sources[i]);
+			if (':' == f->sources[i][0]) {
+				memmove(f->sources[i],
+					f->sources[i] + 1,
+					j);
+				continue;
+			}
+			if (strncmp(f->sources[i], f->host, len) ||
+			    ':' != f->sources[i][len])
+				errx(EXIT_FAILURE, "remote host does "
+					"not match %s, %s", f->host, 
+					f->sources[i]);
+			memmove(f->sources[i], 
+				f->sources[i] + len + 1,
+				j - len);
+		}
+	}
+
+	return f;
+}
+
 int
 main(int argc, char *argv[])
 {
-	struct opts	opts;
-	pid_t	 	child;
-	int	 	fds[2], flags, c;
-	struct option	lopts[] = {
+	struct opts	 opts;
+	pid_t	 	 child;
+	int	 	 fds[2], flags, c;
+	struct fargs	*fargs;
+	struct option	 lopts[] = {
 		{ "server",	no_argument,	&opts.server,	1 },
 		{ "sender",	no_argument,	&opts.sender,	1 },
 		{ "checksum-choice", required_argument,	NULL,	0 },
@@ -105,6 +274,9 @@ main(int argc, char *argv[])
 	 * invoke rsync with the --server option.
 	 */
 
+	fargs = fargs_parse(argc, argv);
+	assert(NULL != fargs);
+
 	flags = SOCK_STREAM | SOCK_NONBLOCK;
 
 	if (-1 == socketpair(AF_UNIX, flags, 0, fds))
@@ -128,7 +300,7 @@ main(int argc, char *argv[])
 		fds[0] = -1;
 		if (-1 == pledge("exec stdio", NULL))
 			err(EXIT_FAILURE, "pledge");
-		rsync_child(&opts, fds[1], (size_t)argc, argv);
+		rsync_child(&opts, fds[1], fargs);
 		/* NOTREACHED */
 	}
 
@@ -136,7 +308,8 @@ main(int argc, char *argv[])
 	fds[1] = -1;
 	if (-1 == pledge("unveil rpath cpath wpath stdio fattr", NULL))
 		err(EXIT_FAILURE, "pledge");
-	c = rsync_client(&opts, fds[0], (size_t)argc, argv);
+	c = rsync_client(&opts, fds[0], fargs);
+	fargs_free(fargs);
 	close(fds[0]);
 
 	/* FIXME: waitpid. */
