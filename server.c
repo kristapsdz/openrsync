@@ -26,14 +26,14 @@
 #include "extern.h"
 
 static int
-fcntl_nonblock(const struct opts *opts, int fd)
+fcntl_nonblock(struct sess *sess, int fd)
 {
 	int	 fl;
 
 	if (-1 == (fl = fcntl(fd, F_GETFL, 0)))
-		ERR(opts, "fcntl: F_GETFL");
+		ERR(sess, "fcntl: F_GETFL");
 	else if (-1 == fcntl(fd, F_SETFL, fl|O_NONBLOCK))
-		ERR(opts, "fcntl: F_SETFL");
+		ERR(sess, "fcntl: F_SETFL");
 	else
 		return 1;
 
@@ -57,11 +57,14 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 	int	 	 fdin = STDIN_FILENO, 
 			 fdout = STDOUT_FILENO, c = 0;
 
+	memset(&sess, 0, sizeof(struct sess));
+	sess.opts = opts;
+
 	/* Begin by making descriptors non-blocking. */
 
-	if ( ! fcntl_nonblock(opts, fdin) || 
-	     ! fcntl_nonblock(opts, fdout)) {
-		ERRX1(opts, "fcntl_nonblock");
+	if ( ! fcntl_nonblock(&sess, fdin) || 
+	     ! fcntl_nonblock(&sess, fdout)) {
+		ERRX1(&sess, "fcntl_nonblock");
 		goto out;
 	}
 
@@ -74,23 +77,23 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 	sess.lver = RSYNC_PROTOCOL;
 	sess.seed = arc4random();
 
-	if ( ! io_read_int(opts, fdin, &sess.rver)) {
-		ERRX1(opts, "io_read_int: version");
+	if ( ! io_read_int(&sess, fdin, &sess.rver)) {
+		ERRX1(&sess, "io_read_int: version");
 		goto out;
-	} else if ( ! io_write_int(opts, fdout, sess.lver)) {
-		ERRX1(opts, "io_write_int: version");
+	} else if ( ! io_write_int(&sess, fdout, sess.lver)) {
+		ERRX1(&sess, "io_write_int: version");
 		goto out;
-	} else if ( ! io_write_int(opts, fdout, sess.seed)) {
-		ERRX1(opts, "io_write_int: seed");
+	} else if ( ! io_write_int(&sess, fdout, sess.seed)) {
+		ERRX1(&sess, "io_write_int: seed");
 		goto out;
 	}
 
-	LOG2(opts, "server detected client version %" PRId32 
+	LOG2(&sess, "server detected client version %" PRId32 
 		", server version %" PRId32 ", seed %" PRId32,
 		sess.rver, sess.lver, sess.seed);
 
-	if (opts->sender) {
-		LOG2(opts, "server starting sender");
+	if (sess.opts->sender) {
+		LOG2(&sess, "server starting sender");
 
 		/*
 		 * At this time, I always get a period as the first
@@ -101,23 +104,22 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 		 */
 
 		if (strcmp(argv[0], ".")) {
-			ERRX(opts, "first argument must "
+			ERRX(&sess, "first argument must "
 				"be a standalone period");
 			goto out;
 		}
 		argv++;
 		argc--;
 		if (0 == argc) {
-			ERRX(opts, "must have arguments");
+			ERRX(&sess, "must have arguments");
 			goto out;
 		}
 
-		c = rsync_sender(opts, &sess, 
-			fdin, fdout, argc, argv);
+		c = rsync_sender(&sess, fdin, fdout, argc, argv);
 		if ( ! c)
-			ERRX1(opts, "rsync_sender");
+			ERRX1(&sess, "rsync_sender");
 	} else {
-		LOG2(opts, "server starting receiver");
+		LOG2(&sess, "server starting receiver");
 
 		/*
 		 * I don't understand why this calling convention
@@ -126,19 +128,18 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 		 */
 
 		if (2 != argc) {
-			ERRX(opts, "server receiver mode "
+			ERRX(&sess, "server receiver mode "
 				"requires two argument");
 			goto out;
 		} else if (strcmp(argv[0], ".")) {
-			ERRX(opts, "first argument must "
+			ERRX(&sess, "first argument must "
 				"be a standalone period");
 			goto out;
 		}
 
-		c = rsync_receiver(opts, 
-			&sess, fdin, fdout, argv[1]);
+		c = rsync_receiver(&sess, fdin, fdout, argv[1]);
 		if ( ! c)
-			ERRX1(opts, "rsync_receiver");
+			ERRX1(&sess, "rsync_receiver");
 	}
 
 out:

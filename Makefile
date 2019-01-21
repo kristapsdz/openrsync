@@ -2,6 +2,7 @@ PREFIX	 = /usr
 OBJS	 = blocks.o \
 	   child.o \
 	   client.o \
+	   fargs.o \
 	   flist.o \
 	   hash.o \
 	   io.o \
@@ -14,7 +15,7 @@ ALLOBJS	 = $(OBJS) \
 	   main.o
 AFLS	 = afl/test-blk_recv \
 	   afl/test-flist_recv
-CFLAGS	+= -W -Wall -Wextra -Wno-unused-parameter
+CFLAGS	+= -g -W -Wall -Wextra -Wno-unused-parameter
 
 all: openrsync
 

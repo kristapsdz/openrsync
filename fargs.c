@@ -22,7 +22,7 @@
 #include "extern.h"
 
 char **
-fargs_cmdline(const struct opts *opts, const struct fargs *f)
+fargs_cmdline(struct sess *sess, const struct fargs *f)
 {
 	char	**args;
 	size_t	  i = 0, j, argsz = 0;
@@ -41,7 +41,7 @@ fargs_cmdline(const struct opts *opts, const struct fargs *f)
 
 	args = calloc(argsz, sizeof(char *));
 	if (NULL == args) {
-		ERR(opts, "calloc");
+		ERR(sess, "calloc");
 		return NULL;
 	}
 
@@ -60,21 +60,21 @@ fargs_cmdline(const struct opts *opts, const struct fargs *f)
 
 	/* Shared arguments. */
 
-	if (opts->verbose > 3)
+	if (sess->opts->verbose > 3)
 		args[i++] = "-v";
-	if (opts->verbose > 2)
+	if (sess->opts->verbose > 2)
 		args[i++] = "-v";
-	if (opts->verbose > 1)
+	if (sess->opts->verbose > 1)
 		args[i++] = "-v";
-	if (opts->verbose > 0)
+	if (sess->opts->verbose > 0)
 		args[i++] = "-v";
-	if (opts->dry_run)
+	if (sess->opts->dry_run)
 		args[i++] = "-n";
-	if (opts->preserve_times)
+	if (sess->opts->preserve_times)
 		args[i++] = "-t";
-	if (opts->preserve_perms)
+	if (sess->opts->preserve_perms)
 		args[i++] = "-p";
-	if (opts->recursive)
+	if (sess->opts->recursive)
 		args[i++] = "-r";
 
 	/*
