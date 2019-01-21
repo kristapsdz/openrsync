@@ -81,7 +81,7 @@ flist_cmp(const void *p1, const void *p2)
  * Sort and deduplicate our file list.
  */
 static void
-flist_fixup(const struct opts *opts, struct flist *fl, size_t *sz)
+flist_fixup(struct sess *sess, struct flist *fl, size_t *sz)
 {
 	size_t	 i;
 
@@ -90,7 +90,7 @@ flist_fixup(const struct opts *opts, struct flist *fl, size_t *sz)
 	for (i = 0; i < *sz - 1; i++) {
 		if (strcmp(fl[i].path, fl[i + 1].path))
 			continue;
-		WARNX(opts, "duplicate path: %s", fl[i + 1].path);
+		WARNX(sess, "duplicate path: %s", fl[i + 1].path);
 		/* TODO. */
 	}
 }
@@ -126,15 +126,15 @@ flist_free(struct flist *f, size_t sz)
  * Return zero on failure, non-zero on success.
  */
 int
-flist_send(const struct opts *opts, 
-	int fd, const struct flist *fl, size_t flsz)
+flist_send(struct sess *sess, int fd, 
+	const struct flist *fl, size_t flsz)
 {
 	size_t		 i, fnlen;
 	uint8_t		 flag;
 	const struct flist *f;
 	const char	*fn;
 
-	LOG2(opts, "sending file metadata list: %zu", flsz);
+	LOG2(sess, "sending file metadata list: %zu", flsz);
 
 	for (i = 0; i < flsz; i++) {
 		f = &fl[i];
@@ -151,32 +151,32 @@ flist_send(const struct opts *opts,
 
 		flag = FLIST_NAME_LONG;
 
-		LOG3(opts, "sending file metadata: %s "
+		LOG3(sess, "sending file metadata: %s "
 			"(size %llu, mtime %lld, mode %o)",
 			fn, f->st.size, f->st.mtime, f->st.mode);
 
 		/* Now write to the wire. */
 
-		if ( ! io_write_byte(opts, fd, flag))
-			ERRX1(opts, "io_write_byte: flags");
-		else if ( ! io_write_int(opts, fd, fnlen))
-			ERRX1(opts, "io_write_int: filename length");
-		else if ( ! io_write_buf(opts, fd, fn, fnlen))
-			ERRX1(opts, "io_write_buf: filename");
-		else if ( ! io_write_long(opts, fd, f->st.size))
-			ERRX1(opts, "io_write_long: file size");
-		else if ( ! io_write_int(opts, fd, f->st.mtime))
-			ERRX1(opts, "io_write_int: file mtime");
-		else if ( ! io_write_int(opts, fd, f->st.mode))
-			ERRX1(opts, "io_write_int: file mode");
+		if ( ! io_write_byte(sess, fd, flag))
+			ERRX1(sess, "io_write_byte: flags");
+		else if ( ! io_write_int(sess, fd, fnlen))
+			ERRX1(sess, "io_write_int: filename length");
+		else if ( ! io_write_buf(sess, fd, fn, fnlen))
+			ERRX1(sess, "io_write_buf: filename");
+		else if ( ! io_write_long(sess, fd, f->st.size))
+			ERRX1(sess, "io_write_long: file size");
+		else if ( ! io_write_int(sess, fd, f->st.mtime))
+			ERRX1(sess, "io_write_int: file mtime");
+		else if ( ! io_write_int(sess, fd, f->st.mode))
+			ERRX1(sess, "io_write_int: file mode");
 		else
 			continue;
 
 		return 0;
 	}
 
-	if ( ! io_write_byte(opts, fd, 0)) {
-		ERRX1(opts, "io_write_byte: zero flag");
+	if ( ! io_write_byte(sess, fd, 0)) {
+		ERRX1(sess, "io_write_byte: zero flag");
 		return 0;
 	}
 
@@ -191,7 +191,7 @@ flist_send(const struct opts *opts,
  * Returns zero on failure, non-zero on success.
  */
 static int
-flist_recv_filename(const struct opts *opts, int fd, 
+flist_recv_filename(struct sess *sess, int fd, 
 	struct flist *f, uint8_t flags, char last[MAXPATHLEN])
 {
 	uint8_t		 bval;
@@ -207,8 +207,8 @@ flist_recv_filename(const struct opts *opts, int fd,
 	 */
 
 	if (FLIST_NAME_SAME & flags) {
-		if ( ! io_read_byte(opts, fd, &bval)) {
-			ERRX1(opts, "io_read_byte: "
+		if ( ! io_read_byte(sess, fd, &bval)) {
+			ERRX1(sess, "io_read_byte: "
 				"filename partial length");
 			return 0;
 		}
@@ -218,14 +218,14 @@ flist_recv_filename(const struct opts *opts, int fd,
 	/* Get the (possibly-remaining) filename length. */
 
 	if (FLIST_NAME_LONG & flags) {
-		if ( ! io_read_size(opts, fd, &pathlen)) {
-			ERRX1(opts, "io_read_size: "
+		if ( ! io_read_size(sess, fd, &pathlen)) {
+			ERRX1(sess, "io_read_size: "
 				"filename length");
 			return 0;
 		}
 	} else {
-		if ( ! io_read_byte(opts, fd, &bval)) {
-			ERRX1(opts, "io_read_byte: "
+		if ( ! io_read_byte(sess, fd, &bval)) {
+			ERRX1(sess, "io_read_byte: "
 				"filename length");
 			return 0;
 		} 
@@ -236,12 +236,12 @@ flist_recv_filename(const struct opts *opts, int fd,
 
 	fpathlen = pathlen + partial;
 	if (0 == fpathlen) {
-		ERRX(opts, "zero-length pathname");
+		ERRX(sess, "zero-length pathname");
 		return 0;
 	}
 
 	if (NULL == (f->path = malloc(fpathlen + 1))) {
-		ERR(opts, "malloc");
+		ERR(sess, "malloc");
 		return 0;
 	}
 	f->path[fpathlen] = '\0';
@@ -249,8 +249,8 @@ flist_recv_filename(const struct opts *opts, int fd,
 	if (FLIST_NAME_SAME & flags)
 		memcpy(f->path, last, partial);
 
-	if ( ! io_read_buf(opts, fd, f->path + partial, pathlen)) {
-		ERRX1(opts, "io_read_buf: filename");
+	if ( ! io_read_buf(sess, fd, f->path + partial, pathlen)) {
+		ERRX1(sess, "io_read_buf: filename");
 		return 0;
 	}
 
@@ -268,7 +268,7 @@ flist_recv_filename(const struct opts *opts, int fd,
 }
 
 static int
-flist_recv_mode(const struct opts *opts, int fd, 
+flist_recv_mode(struct sess *sess, int fd, 
 	struct flist *f, uint8_t flag, const struct flist *flast)
 {
 	int32_t	 ival;
@@ -278,13 +278,13 @@ flist_recv_mode(const struct opts *opts, int fd,
 	/* Read the file mode. */
 
 	if ( ! (FLIST_MODE_SAME & flag)) {
-		if ( ! io_read_int(opts, fd, &ival)) {
-			ERRX1(opts, "io_read_int: file mode");
+		if ( ! io_read_int(sess, fd, &ival)) {
+			ERRX1(sess, "io_read_int: file mode");
 			return 0;
 		}
 		m = ival;
 	} else if (NULL == flast) {
-		ERRX(opts, "same mode without last entry");
+		ERRX(sess, "same mode without last entry");
 		return 0;
 	} else
 		m = flast->st.mode;
@@ -295,15 +295,15 @@ flist_recv_mode(const struct opts *opts, int fd,
 	 * we accept and only work with those.
 	 */
 
-	if (opts->recursive) {
+	if (sess->opts->recursive) {
 		if ( ! S_ISREG(m) && ! S_ISDIR(m)) {
-			ERRX(opts, "non-regular non-directory file "
+			ERRX(sess, "non-regular non-directory file "
 				"in recursive mode: %s", f->path);
 			return 0;
 		}
 	} else {
 		if ( ! S_ISREG(m)) {
-			ERRX(opts, "non-regular file in "
+			ERRX(sess, "non-regular file in "
 				"non-recursive mode: %s", f->path);
 			return 0;
 		} 
@@ -317,7 +317,7 @@ flist_recv_mode(const struct opts *opts, int fd,
 		f->st.mode |= whitelist_modes[i];
 	}
 	if (m)
-		WARNX(opts, "some file modes not "
+		WARNX(sess, "some file modes not "
 			"whitelisted: %8o: %s", m, f->path);
 
 	return 1;
@@ -328,7 +328,7 @@ flist_recv_mode(const struct opts *opts, int fd,
  * Return the file list or NULL on failure ("sz" will be zero).
  */
 struct flist *
-flist_recv(const struct opts *opts, int fd, size_t *sz)
+flist_recv(struct sess *sess, int fd, size_t *sz)
 {
 	struct flist	*fl = NULL;
 	struct flist	*ff;
@@ -345,8 +345,8 @@ flist_recv(const struct opts *opts, int fd, size_t *sz)
 	fflast = NULL;
 
 	for (;;) {
-		if ( ! io_read_byte(opts, fd, &flag)) {
-			ERRX1(opts, "io_read_byte: flags");
+		if ( ! io_read_byte(sess, fd, &flag)) {
+			ERRX1(sess, "io_read_byte: flags");
 			goto out;
 		} else if (0 == flag)
 			break;
@@ -358,7 +358,7 @@ flist_recv(const struct opts *opts, int fd, size_t *sz)
 				flmax + FLIST_CHUNK_SIZE, 
 				 sizeof(struct flist));
 			if (NULL == pp) {
-				ERR(opts, "recallocarray");
+				ERR(sess, "recallocarray");
 				goto out;
 			}
 			fl = pp;
@@ -370,18 +370,18 @@ flist_recv(const struct opts *opts, int fd, size_t *sz)
 		fflast = flsz > 1 ? &fl[flsz - 2] : NULL;
 
 		if ( ! flist_recv_filename
-		    (opts, fd, ff, flag, lastname)) {
-			ERRX1(opts, "flist_recv_filename");
+		    (sess, fd, ff, flag, lastname)) {
+			ERRX1(sess, "flist_recv_filename");
 			goto out;
 		}
 
 		/* Read the file size. */
 
-		if ( ! io_read_long(opts, fd, &lval)) {
-			ERRX1(opts, "io_read_long: file size");
+		if ( ! io_read_long(sess, fd, &lval)) {
+			ERRX1(sess, "io_read_long: file size");
 			goto out;
 		} else if (lval < 0) {
-			ERRX(opts, "negative file size");
+			ERRX(sess, "negative file size");
 			goto out;
 		}
 		ff->st.size = lval;
@@ -389,37 +389,37 @@ flist_recv(const struct opts *opts, int fd, size_t *sz)
 		/* Read the modification time. */
 
 		if ( ! (FLIST_TIME_SAME & flag)) {
-			if ( ! io_read_int(opts, fd, &ival)) {
-				ERRX1(opts, "io_read_int: file mtime");
+			if ( ! io_read_int(sess, fd, &ival)) {
+				ERRX1(sess, "io_read_int: file mtime");
 				goto out;
 			}
 			ff->st.mtime = ival;
 		} else if (NULL == fflast) {
-			ERRX(opts, "same time without last entry");
+			ERRX(sess, "same time without last entry");
 			goto out;
 		}  else
 			ff->st.mtime = fflast->st.mtime;
 
 		/* Read the file mode. */
 
-		if ( ! flist_recv_mode(opts, fd, ff, flag, fflast)) {
-			ERRX(opts, "flist_recv_mode");
+		if ( ! flist_recv_mode(sess, fd, ff, flag, fflast)) {
+			ERRX(sess, "flist_recv_mode");
 			goto out;
 		} 
 
-		LOG3(opts, "received file metadata: %s "
+		LOG3(sess, "received file metadata: %s "
 			"(size %llu, mtime %lld, mode %o)",
 			ff->path, ff->st.size, ff->st.mtime, ff->st.mode);
 	}
 
 	if (0 == flsz) {
-		ERRX(opts, "zero-length file list");
+		ERRX(sess, "zero-length file list");
 		goto out;
 	}
 
 	*sz = flsz;
-	LOG2(opts, "received file metadata list: %zu", *sz);
-	flist_fixup(opts, fl, sz);
+	LOG2(sess, "received file metadata list: %zu", *sz);
+	flist_fixup(sess, fl, sz);
 	return fl;
 out:
 	flist_free(fl, flsz);
@@ -427,8 +427,8 @@ out:
 }
 
 static int
-flist_gen_recursive_entry(const struct opts *opts, 
-	char *root, struct flist **fl, size_t *sz, size_t *max)
+flist_gen_recursive_entry(struct sess *sess, char *root, 
+	struct flist **fl, size_t *sz, size_t *max)
 {
 	char		*cargv[2], *cp;
 	int		 rc = 0;
@@ -449,7 +449,7 @@ flist_gen_recursive_entry(const struct opts *opts,
 	 */
 
 	if (-1 == lstat(root, &st)) {
-		ERR(opts, "lstat: %s", root);
+		ERR(sess, "lstat: %s", root);
 		return 0;
 	} else if (S_ISREG(st.st_mode)) {
 		if (*sz + 1 > *max) {
@@ -457,7 +457,7 @@ flist_gen_recursive_entry(const struct opts *opts,
 				*max + FLIST_CHUNK_SIZE, 
 				sizeof(struct flist));
 			if (NULL == pp) {
-				ERR(opts, "recallocarray");
+				ERR(sess, "recallocarray");
 				return 0;
 			}
 			*fl = pp;
@@ -466,7 +466,7 @@ flist_gen_recursive_entry(const struct opts *opts,
 		f = &(*fl)[(*sz)++];
 		assert(NULL != f);
 		if (NULL == (f->path = strdup(root))) {
-			ERR(opts, "strdup");
+			ERR(sess, "strdup");
 			return 0;
 		}
 		if (NULL == (f->wpath = strrchr(f->path, '/')))
@@ -477,7 +477,7 @@ flist_gen_recursive_entry(const struct opts *opts,
 		flist_copy_stat(f, &st);
 		return 1;
 	} else if ( ! S_ISDIR(st.st_mode)) {
-		WARNX(opts, "neither directory nor file: %s", root);
+		WARNX(sess, "neither directory nor file: %s", root);
 		return 0;
 	}
 
@@ -510,7 +510,7 @@ flist_gen_recursive_entry(const struct opts *opts,
 	 */
 
 	if (NULL == (fts = fts_open(cargv, FTS_LOGICAL, NULL))) {
-		ERR(opts, "fts_open");
+		ERR(sess, "fts_open");
 		return 0;
 	}
 
@@ -523,38 +523,38 @@ flist_gen_recursive_entry(const struct opts *opts,
 		 */
 
 		if (FTS_DC == ent->fts_info) {
-			WARNX(opts, "skipping directory "
+			WARNX(sess, "skipping directory "
 				"cycle: %s", ent->fts_path);
 			continue;
 		} else if (FTS_DNR == ent->fts_info) {
 			errno = ent->fts_errno;
-			WARN(opts, "unreadable directory: "
+			WARN(sess, "unreadable directory: "
 				"%s", ent->fts_path);
 			continue;
 		} else if (FTS_DOT == ent->fts_info) {
-			WARNX(opts, "skipping dot-file: "
+			WARNX(sess, "skipping dot-file: "
 				"%s", ent->fts_path);
 			continue;
 		} else if (FTS_ERR == ent->fts_info) {
 			errno = ent->fts_errno;
-			WARN(opts, "unreadable file: %s",
+			WARN(sess, "unreadable file: %s",
 				ent->fts_path);
 			continue;
 		} else if (FTS_DEFAULT == ent->fts_info) {
-			WARNX(opts, "skipping non-regular "
+			WARNX(sess, "skipping non-regular "
 				"file: %s", ent->fts_path);
 			continue;
 		} else if (FTS_NS == ent->fts_info) {
 			errno = ent->fts_errno;
-			WARN(opts, "could not stat: %s",
+			WARN(sess, "could not stat: %s",
 				ent->fts_path);
 			continue;
 		} else if (FTS_SL == ent->fts_info) {
-			WARNX(opts, "skipping symbolic link: "
+			WARNX(sess, "skipping symbolic link: "
 				"%s", ent->fts_path);
 			continue;
 		} else if (FTS_SLNONE == ent->fts_info) {
-			WARNX(opts, "skipping bad symbolic link: "
+			WARNX(sess, "skipping bad symbolic link: "
 				"%s", ent->fts_path);
 			continue;
 		} else if (FTS_DP == ent->fts_info)
@@ -565,7 +565,7 @@ flist_gen_recursive_entry(const struct opts *opts,
 				*max + FLIST_CHUNK_SIZE, 
 				sizeof(struct flist));
 			if (NULL == pp) {
-				ERR(opts, "recallocarray");
+				ERR(sess, "recallocarray");
 				goto out;
 			}
 			*fl = pp;
@@ -577,12 +577,12 @@ flist_gen_recursive_entry(const struct opts *opts,
 
 		if ('\0' == ent->fts_path[stripdir]) {
 			if (asprintf(&f->path, "%s.", ent->fts_path) < 0) {
-				ERR(opts, "asprintf");
+				ERR(sess, "asprintf");
 				goto out;
 			}
 		} else {
 			if (NULL == (f->path = strdup(ent->fts_path))) {
-				ERR(opts, "strdup");
+				ERR(sess, "strdup");
 				goto out;
 			}
 		}
@@ -591,11 +591,11 @@ flist_gen_recursive_entry(const struct opts *opts,
 		errno = 0;
 	}
 	if (errno) {
-		ERR(opts, "fts_read");
+		ERR(sess, "fts_read");
 		goto out;
 	}
 
-	LOG3(opts, "generated %zu filenames: %s", flsz, root);
+	LOG3(sess, "generated %zu filenames: %s", flsz, root);
 	rc = 1;
 out:
 	fts_close(fts);
@@ -607,7 +607,7 @@ out:
  * files, doesn't matter) specified in argv.
  */
 static struct flist *
-flist_gen_recursive(const struct opts *opts, 
+flist_gen_recursive(struct sess *sess, 
 	size_t argc, char **argv, size_t *sz)
 {
 	int		 rc;
@@ -617,22 +617,22 @@ flist_gen_recursive(const struct opts *opts,
 
 	for (i = 0; i < argc; i++) {
 		rc = flist_gen_recursive_entry
-			(opts, argv[i], &fl, sz, &max);
+			(sess, argv[i], &fl, sz, &max);
 		if (0 == rc)
 			break;
 	}
 
 	if (i < argc) {
-		ERRX1(opts, "flist_gen_recursive_entry");
+		ERRX1(sess, "flist_gen_recursive_entry");
 		flist_free(fl, *sz);
 		fl = NULL;
 		*sz = 0;
 	} else if (0 == *sz) {
-		ERRX(opts, "zero-length file list");
+		ERRX(sess, "zero-length file list");
 		flist_free(fl, *sz);
 		fl = NULL;
 	} else
-		LOG2(opts, "recursively generated %zu filenames", *sz);
+		LOG2(sess, "recursively generated %zu filenames", *sz);
 
 	return fl;
 }
@@ -641,7 +641,7 @@ flist_gen_recursive(const struct opts *opts,
  * The non-recursive version is simply going to 
  */
 static struct flist *
-flist_gen_nonrecursive(const struct opts *opts, 
+flist_gen_nonrecursive(struct sess *sess, 
 	size_t argc, char **argv, size_t *sz)
 {
 	struct flist	*fl = NULL, *f;
@@ -652,7 +652,7 @@ flist_gen_nonrecursive(const struct opts *opts,
 	/* We'll have at most argc. */
 
 	if (NULL == (fl = calloc(argc, sizeof(struct flist)))) {
-		ERR(opts, "calloc");
+		ERR(sess, "calloc");
 		return NULL;
 	}
 
@@ -665,13 +665,13 @@ flist_gen_nonrecursive(const struct opts *opts,
 		if ('\0' == argv[i][0]) 
 			continue;
 		if (-1 == lstat(argv[i], &st)) {
-			ERR(opts, "fstat: %s", argv[i]);
+			ERR(sess, "fstat: %s", argv[i]);
 			goto out;
 		} else if (S_ISDIR(st.st_mode)) {
-			WARNX(opts, "skipping directory: %s", argv[i]);
+			WARNX(sess, "skipping directory: %s", argv[i]);
 			continue;
 		} else if ( ! S_ISREG(st.st_mode)) {
-			WARNX(opts, "skipping non-regular: %s", argv[i]);
+			WARNX(sess, "skipping non-regular: %s", argv[i]);
 			goto out;
 		}
 
@@ -684,7 +684,7 @@ flist_gen_nonrecursive(const struct opts *opts,
 		 */
 
 		if (NULL == (f->path = strdup(argv[i]))) {
-			ERR(opts, "strdup");
+			ERR(sess, "strdup");
 			goto out;
 		}
 
@@ -703,11 +703,11 @@ flist_gen_nonrecursive(const struct opts *opts,
 	}
 
 	if (0 == *sz) {
-		ERRX1(opts, "zero-length file list");
+		ERRX1(sess, "zero-length file list");
 		goto out;
 	}
 
-	LOG2(opts, "non-recursively generated %zu filenames", *sz);
+	LOG2(sess, "non-recursively generated %zu filenames", *sz);
 	rc = 1;
 out:
 	if (0 == rc) {
@@ -720,17 +720,17 @@ out:
 }
 
 struct flist *
-flist_gen(const struct opts *opts, size_t argc, char **argv, size_t *sz)
+flist_gen(struct sess *sess, size_t argc, char **argv, size_t *sz)
 {
 	struct flist	*f;
 
 	*sz = 0;
-	f = opts->recursive ?
-		flist_gen_recursive(opts, argc, argv, sz) :
-		flist_gen_nonrecursive(opts, argc, argv, sz);
+	f = sess->opts->recursive ?
+		flist_gen_recursive(sess, argc, argv, sz) :
+		flist_gen_nonrecursive(sess, argc, argv, sz);
 
 	if (NULL != f)
-		flist_fixup(opts, f, sz);
+		flist_fixup(sess, f, sz);
 
 	return f;
 }

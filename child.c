@@ -34,26 +34,30 @@
 void
 rsync_child(const struct opts *opts, int fd, const struct fargs *f)
 {
-	char 	**args;
-	size_t	  i;
+	struct sess	  sess;
+	char		**args;
+	size_t		  i;
+
+	memset(&sess, 0, sizeof(struct sess));
+	sess.opts = opts;
 
 	/* Construct the remote shell command. */
 
-	if (NULL == (args = fargs_cmdline(opts, f))) {
-		ERRX1(opts, "fargs_cmdline");
+	if (NULL == (args = fargs_cmdline(&sess, f))) {
+		ERRX1(&sess, "fargs_cmdline");
 		exit(EXIT_FAILURE);
 	}
 
 	for (i = 0; NULL != args[i]; i++) 
-		LOG2(opts, "exec[%zu] = %s", i, args[i]);
+		LOG2(&sess, "exec[%zu] = %s", i, args[i]);
 
 	/* Make sure the child's stdin is from the sender. */
 
 	if (-1 == dup2(fd, STDIN_FILENO)) {
-		ERR(opts, "dup2");
+		ERR(&sess, "dup2");
 		exit(EXIT_FAILURE);
 	} if (-1 == dup2(fd, STDOUT_FILENO)) {
-		ERR(opts, "dup2");
+		ERR(&sess, "dup2");
 		exit(EXIT_FAILURE);
 	}
 
@@ -61,7 +65,7 @@ rsync_child(const struct opts *opts, int fd, const struct fargs *f)
 
 	execvp(args[0], args);
 
-	ERR(opts, "execvp: %s", args[0]);
+	ERR(&sess, "execvp: %s", args[0]);
 	exit(EXIT_FAILURE);
 	/* NOTREACHED */
 }

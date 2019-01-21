@@ -28,13 +28,13 @@
  * at one).
  */
 void
-rsync_log(const struct opts *opts, const char *fname, 
+rsync_log(struct sess *sess, const char *fname, 
 	size_t line, int level, const char *fmt, ...)
 {
 	char	*buf = NULL;
 	va_list	 ap;
 
-	if (opts->verbose < level + 1)
+	if (sess->opts->verbose < level + 1)
 		return;
 
 	if (NULL != fmt) {
@@ -57,7 +57,7 @@ rsync_log(const struct opts *opts, const char *fname,
  * However, it is not like errx(3) in that it does not exit.
  */
 void
-rsync_errx(const struct opts *opts, const char *fname, 
+rsync_errx(struct sess *sess, const char *fname, 
 	size_t line, const char *fmt, ...)
 {
 	char	*buf = NULL;
@@ -83,7 +83,7 @@ rsync_errx(const struct opts *opts, const char *fname,
  * However, it is not like err(3) in that it does not exit.
  */
 void
-rsync_err(const struct opts *opts, const char *fname, 
+rsync_err(struct sess *sess, const char *fname, 
 	size_t line, const char *fmt, ...)
 {
 	char	*buf = NULL;
@@ -110,13 +110,13 @@ rsync_err(const struct opts *opts, const char *fname,
  * chain of functions from which the actual warning occurred.
  */
 void
-rsync_errx1(const struct opts *opts, const char *fname, 
+rsync_errx1(struct sess *sess, const char *fname, 
 	size_t line, const char *fmt, ...)
 {
 	char	*buf = NULL;
 	va_list	 ap;
 
-	if (opts->verbose < 1)
+	if (sess->opts->verbose < 1)
 		return;
 
 	if (NULL != fmt) {
@@ -138,7 +138,7 @@ rsync_errx1(const struct opts *opts, const char *fname,
  * Prints a warning message.
  */
 void
-rsync_warnx(const struct opts *opts, const char *fname, 
+rsync_warnx(struct sess *sess, const char *fname, 
 	size_t line, const char *fmt, ...)
 {
 	char	*buf = NULL;
@@ -164,14 +164,14 @@ rsync_warnx(const struct opts *opts, const char *fname,
  * It uses a level detector for when to inhibit printing.
  */
 void
-rsync_warn(const struct opts *opts, int level,
+rsync_warn(struct sess *sess, int level,
 	const char *fname, size_t line, const char *fmt, ...)
 {
 	char	*buf = NULL;
 	va_list	 ap;
 	int	 er = errno;
 
-	if (opts->verbose < level)
+	if (sess->opts->verbose < level)
 		return;
 
 	if (NULL != fmt) {

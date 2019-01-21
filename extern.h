@@ -127,108 +127,104 @@ struct	blkset {
 };
 
 /*
- * Values exchanged in an rsync session between client and server.
+ * Values required during a communication session.
  */
 struct	sess {
-	int32_t		 seed; /* checksum seed */
-	int32_t		 lver; /* local version */
-	int32_t		 rver; /* remote version */
+	const struct opts *opts; /* system options */
+	int32_t		   seed; /* checksum seed */
+	int32_t		   lver; /* local version */
+	int32_t		   rver; /* remote version */
 };
 
-#define LOG1(_opts, _fmt, ...) \
-	rsync_log((_opts), __FILE__, __LINE__, 0, (_fmt), ##__VA_ARGS__)
-#define LOG2(_opts, _fmt, ...) \
-	rsync_log((_opts), __FILE__, __LINE__, 1, (_fmt), ##__VA_ARGS__)
-#define LOG3(_opts, _fmt, ...) \
-	rsync_log((_opts), __FILE__, __LINE__, 2, (_fmt), ##__VA_ARGS__)
-#define LOG4(_opts, _fmt, ...) \
-	rsync_log((_opts), __FILE__, __LINE__, 3, (_fmt), ##__VA_ARGS__)
-#define ERRX1(_opts, _fmt, ...) \
-	rsync_errx1((_opts), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
-#define WARNX(_opts, _fmt, ...) \
-	rsync_warnx((_opts), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
-#define WARN(_opts, _fmt, ...) \
-	rsync_warn((_opts), 0, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
-#define WARN1(_opts, _fmt, ...) \
-	rsync_warn((_opts), 1, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
-#define WARN2(_opts, _fmt, ...) \
-	rsync_warn((_opts), 2, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
-#define ERR(_opts, _fmt, ...) \
-	rsync_err((_opts), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
-#define ERRX(_opts, _fmt, ...) \
-	rsync_errx((_opts), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+#define LOG1(_sess, _fmt, ...) \
+	rsync_log((_sess), __FILE__, __LINE__, 0, (_fmt), ##__VA_ARGS__)
+#define LOG2(_sess, _fmt, ...) \
+	rsync_log((_sess), __FILE__, __LINE__, 1, (_fmt), ##__VA_ARGS__)
+#define LOG3(_sess, _fmt, ...) \
+	rsync_log((_sess), __FILE__, __LINE__, 2, (_fmt), ##__VA_ARGS__)
+#define LOG4(_sess, _fmt, ...) \
+	rsync_log((_sess), __FILE__, __LINE__, 3, (_fmt), ##__VA_ARGS__)
+#define ERRX1(_sess, _fmt, ...) \
+	rsync_errx1((_sess), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+#define WARNX(_sess, _fmt, ...) \
+	rsync_warnx((_sess), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+#define WARN(_sess, _fmt, ...) \
+	rsync_warn((_sess), 0, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+#define WARN1(_sess, _fmt, ...) \
+	rsync_warn((_sess), 1, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+#define WARN2(_sess, _fmt, ...) \
+	rsync_warn((_sess), 2, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+#define ERR(_sess, _fmt, ...) \
+	rsync_err((_sess), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+#define ERRX(_sess, _fmt, ...) \
+	rsync_errx((_sess), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
 
 __BEGIN_DECLS
 
-void		  rsync_log(const struct opts *, 
-			const char *, size_t, int, 
-			const char *, ...)
+void		  rsync_log(struct sess *, 
+			const char *, size_t, int, const char *, ...)
 			__attribute__((format(printf, 5, 6)));
-void		  rsync_warnx1(const struct opts *, 
+void		  rsync_warnx1(struct sess *, 
 			const char *, size_t, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
-void		  rsync_warn(const struct opts *, int,
+void		  rsync_warn(struct sess *, int, 
 			const char *, size_t, const char *, ...)
 			__attribute__((format(printf, 5, 6)));
-void		  rsync_warnx(const struct opts *, 
-			const char *, size_t, const char *, ...)
+void		  rsync_warnx(struct sess *, const char *, 
+			size_t, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
-void		  rsync_err(const struct opts *, 
-			const char *, size_t, const char *, ...)
+void		  rsync_err(struct sess *, const char *, 
+			size_t, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
-void		  rsync_errx(const struct opts *, 
-			const char *, size_t, const char *, ...)
+void		  rsync_errx(struct sess *, const char *, 
+			size_t, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
-void		  rsync_errx1(const struct opts *, 
-			const char *, size_t, const char *, ...)
+void		  rsync_errx1(struct sess *, const char *, 
+			size_t, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
 
-struct flist	 *flist_gen(const struct opts *, size_t, char **, size_t *);
+struct flist	 *flist_gen(struct sess *, size_t, char **, size_t *);
 void		  flist_free(struct flist *, size_t);
-struct flist	 *flist_recv(const struct opts *, int, size_t *);
-int		  flist_send(const struct opts *, 
-			int, const struct flist *, size_t);
+struct flist	 *flist_recv(struct sess *, int, size_t *);
+int		  flist_send(struct sess *, int, const struct flist *, size_t);
 
-char		**fargs_cmdline(const struct opts *, const struct fargs *);
+char		**fargs_cmdline(struct sess *, const struct fargs *);
 
 #if 0
 int		  io_connect_wait(const struct opts *, int);
 int		  io_read_buf_nonblock(const struct opts *, int, void *, size_t, size_t *);
 int		  io_write_line(const struct opts *, int, const char *);
 #endif
-int		  io_read_buf(const struct opts *, int, void *, size_t);
-int		  io_read_byte(const struct opts *, int, uint8_t *);
-int		  io_read_int(const struct opts *, int, int32_t *);
-int		  io_read_size(const struct opts *, int, size_t *);
-int		  io_read_long(const struct opts *, int, int64_t *);
-int		  io_write_buf(const struct opts *, 
-			int, const void *, size_t);
-int		  io_write_byte(const struct opts *, int, uint8_t);
-int		  io_write_int(const struct opts *, int, int32_t);
-int		  io_write_long(const struct opts *, int, int64_t);
+int		  io_read_buf(struct sess *, int, void *, size_t);
+int		  io_read_byte(struct sess *, int, uint8_t *);
+int		  io_read_int(struct sess *, int, int32_t *);
+int		  io_read_size(struct sess *, int, size_t *);
+int		  io_read_long(struct sess *, int, int64_t *);
+int		  io_write_buf(struct sess *, int, const void *, size_t);
+int		  io_write_byte(struct sess *, int, uint8_t);
+int		  io_write_int(struct sess *, int, int32_t);
+int		  io_write_long(struct sess *, int, int64_t);
 
 void		  rsync_child(const struct opts *, int, const struct fargs *)
 			__attribute__((noreturn));
-int		  rsync_receiver(const struct opts *, 
-			const struct sess *, int, int, const char *);
-int		  rsync_sender(const struct opts *, const struct sess *, 
-			int, int, size_t, char **);
+int		  rsync_receiver(struct sess *, int, int, const char *);
+int		  rsync_sender(struct sess *, int, int, size_t, char **);
 int		  rsync_client(const struct opts *, int, const struct fargs *);
 #if 0
 int		  rsync_socket(struct opts *, const struct fargs *);
 #endif
 int		  rsync_server(const struct opts *, size_t, char *[]);
 
-struct blkset	 *blk_recv(const struct opts *, int, size_t, const char *);
-int		  blk_recv_ack(const struct opts *, 
-			int , const struct blkset *, int32_t);
-int		  blk_match(const struct opts *, const struct sess *,
+struct blkset	 *blk_recv(struct sess *, int, size_t, const char *);
+int		  blk_recv_ack(struct sess *, 
+			int, const struct blkset *, int32_t);
+int		  blk_match(struct sess *, 
 			int, const struct blkset *, const char *, size_t);
-int		  blk_send(const struct opts *, int, size_t,
+int		  blk_send(struct sess *, int, size_t,
 			const struct blkset *, const char *);
-int		  blk_send_ack(const struct opts *, int, 
+int		  blk_send_ack(struct sess *, int, 
 			const struct blkset *, size_t);
-int		  blk_merge(const struct opts *, int, int, 
+int		  blk_merge(struct sess *, int, int, 
 			const struct blkset *, int, const char *, 
 			const void *, size_t);
 void		  blkset_free(struct blkset *);
@@ -238,7 +234,7 @@ void		  hash_slow(const void *, size_t,
 			unsigned char *, const struct sess *);
 void		  hash_file(const void *, off_t, unsigned char *);
 
-int		  mkpath(const struct opts *, char *);
+int		  mkpath(struct sess *, char *);
 
 __END_DECLS
 

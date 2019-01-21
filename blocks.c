@@ -35,18 +35,18 @@
  * Return zero on failure, non-zero on success.
  */
 static int
-blk_flush(const struct opts *opts, int fd, const void *b, off_t size)
+blk_flush(struct sess *sess, int fd, const void *b, off_t size)
 {
 	off_t	i = 0, sz;
 
 	while (i < size) {
 		sz = MAX_CHUNK < (size - i) ? 
 			MAX_CHUNK : (size - i);
-		if ( ! io_write_int(opts, fd, sz)) {
-			ERRX1(opts, "io_write_int: data block size");
+		if ( ! io_write_int(sess, fd, sz)) {
+			ERRX1(sess, "io_write_int: data block size");
 			return 0;
-		} else if ( ! io_write_buf(opts, fd, b + i, sz)) {
-			ERRX1(opts, "io_write_buf: data block");
+		} else if ( ! io_write_buf(sess, fd, b + i, sz)) {
+			ERRX1(sess, "io_write_buf: data block");
 			return 0;
 		}
 		i += sz;
@@ -61,10 +61,9 @@ blk_flush(const struct opts *opts, int fd, const void *b, off_t size)
  * Returns the blk or NULL if no matching block was found.
  */
 static struct blk *
-blk_find(const struct opts *opts, const void *buf, 
+blk_find(struct sess *sess, const void *buf, 
 	off_t size, off_t offs, const struct blkset *blks, 
-	const struct sess *sess, size_t csum_length,
-	const char *path)
+	size_t csum_length, const char *path)
 {
 	unsigned char	 md[MD5_DIGEST_LENGTH];
 	uint32_t	 fhash;
@@ -95,7 +94,7 @@ blk_find(const struct opts *opts, const void *buf,
 		if ((size_t)osz != blks->blks[i].len)
 			continue;
 
-		LOG4(opts, "%s: found matching fast match: "
+		LOG4(sess, "%s: found matching fast match: "
 			"position %llu, block %zu "
 			"(position %llu, size %zu): 0x%08x", path,
 			offs, blks->blks[i].idx, blks->blks[i].offs,
@@ -111,7 +110,7 @@ blk_find(const struct opts *opts, const void *buf,
 		if (memcmp(md, blks->blks[i].chksum_long, csum_length))
 			continue;
 
-		LOG4(opts, "%s: sender verifies slow match", path);
+		LOG4(sess, "%s: sender verifies slow match", path);
 		return &blks->blks[i];
 	}
 
@@ -128,10 +127,9 @@ blk_find(const struct opts *opts, const void *buf,
  * Return zero on failure, non-zero on success.
  */
 static int
-blk_match_part(const struct opts *opts, const char *path,
+blk_match_part(struct sess *sess, const char *path,
 	int fd, const void *buf, off_t size, 
-	const struct blkset *blks, const struct sess *sess, 
-	size_t csum_length)
+	const struct blkset *blks, size_t csum_length)
 {
 	off_t	 	 offs, last, end, fromcopy = 0, fromdown = 0;
 	struct blk	*blk;
@@ -147,22 +145,22 @@ blk_match_part(const struct opts *opts, const char *path,
 	end = size + 1 - blks->blks[blks->blksz - 1].len;
 
 	for (last = offs = 0; offs < end; offs++) {
-		blk = blk_find(opts, buf, size, offs, 
-			blks, sess, csum_length, path);
+		blk = blk_find(sess, buf, size, 
+			offs, blks, csum_length, path);
 		if (NULL == blk)
 			continue;
 
 		fromdown += offs - last;
-		LOG4(opts, "%s: flushed %llu B before %zu B block (%zu)", 
+		LOG4(sess, "%s: flushed %llu B before %zu B block (%zu)", 
 			path, offs - last, blk->len, blk->idx);
 
 		/* Flush what we have and follow with our tag. */
 
-		if ( ! blk_flush(opts, fd, buf + last, offs - last)) {
-			ERRX1(opts, "blk_flush");
+		if ( ! blk_flush(sess, fd, buf + last, offs - last)) {
+			ERRX1(sess, "blk_flush");
 			return 0;
-		} else if ( ! io_write_int(opts, fd, -(blk->idx + 1))) {
-			ERRX1(opts, "io_write_int: token");
+		} else if ( ! io_write_int(sess, fd, -(blk->idx + 1))) {
+			ERRX1(sess, "io_write_int: token");
 			return 0;
 		}
 
@@ -171,16 +169,16 @@ blk_match_part(const struct opts *opts, const char *path,
 		last = offs + 1;
 	}
 
-	LOG4(opts, "%s: flushed remaining %llu B", path, size - last);
-	LOG3(opts, "%s: %.2f%% upload", path, 
+	LOG4(sess, "%s: flushed remaining %llu B", path, size - last);
+	LOG3(sess, "%s: %.2f%% upload", path, 
 		100.0 * fromdown / (fromcopy + fromdown));
 
 	/* Emit remaining data and send terminator. */
 
-	if ( ! blk_flush(opts, fd, buf + last, size - last))
-		ERRX1(opts, "blk_flush");
-	else if ( ! io_write_int(opts, fd, 0))
-		ERRX1(opts, "io_write_int: data block size");
+	if ( ! blk_flush(sess, fd, buf + last, size - last))
+		ERRX1(sess, "blk_flush");
+	else if ( ! io_write_int(sess, fd, 0))
+		ERRX1(sess, "io_write_int: data block size");
 
 	return 1;
 }
@@ -190,16 +188,15 @@ blk_match_part(const struct opts *opts, const char *path,
  * Return zero on failure, non-zero on success.
  */
 static int
-blk_match_full(const struct opts *opts, 
-	int fd, const void *buf, off_t size)
+blk_match_full(struct sess *sess, int fd, const void *buf, off_t size)
 {
 
 	/* Flush, then indicate that we have no more data to send. */
 
-	if ( ! blk_flush(opts, fd, buf, size))
-		ERRX1(opts, "blk_flush");
-	else if ( ! io_write_int(opts, fd, 0))
-		ERRX1(opts, "io_write_int: data block size");
+	if ( ! blk_flush(sess, fd, buf, size))
+		ERRX1(sess, "blk_flush");
+	else if ( ! io_write_int(sess, fd, 0))
+		ERRX1(sess, "io_write_int: data block size");
 	else
 		return 1;
 
@@ -212,9 +209,8 @@ blk_match_full(const struct opts *opts,
  * Return zero on failure, non-zero on success.
  */
 int
-blk_match(const struct opts *opts, const struct sess *sess,
-	int fd, const struct blkset *blks, const char *path, 
-	size_t csum_length)
+blk_match(struct sess *sess, int fd, const struct blkset *blks, 
+	const char *path, size_t csum_length)
 {
 	int	 	 nfd, rc = 0;
 	struct stat	 st;
@@ -225,10 +221,10 @@ blk_match(const struct opts *opts, const struct sess *sess,
 	/* Start by mapping our file into memory. */
 
 	if (-1 == (nfd = open(path, O_RDONLY, 0))) {
-		ERR(opts, "open: %s", path);
+		ERR(sess, "open: %s", path);
 		return 0;
 	} else if (-1 == fstat(nfd, &st)) {
-		ERR(opts, "fstat: %s", path);
+		ERR(sess, "fstat: %s", path);
 		close(nfd);
 		return 0;
 	}
@@ -236,7 +232,7 @@ blk_match(const struct opts *opts, const struct sess *sess,
 	mapsz = st.st_size;
 	map = mmap(NULL, mapsz, PROT_READ, MAP_SHARED, nfd, 0);
 	if (MAP_FAILED == map) {
-		ERR(opts, "mmap: %s", path);
+		ERR(sess, "mmap: %s", path);
 		close(nfd);
 		return 0;
 	}
@@ -248,22 +244,22 @@ blk_match(const struct opts *opts, const struct sess *sess,
 	 */
 
 	if (st.st_size && blks->blksz) {
-		blk_match_part(opts, path, fd, map, 
-			st.st_size, blks, sess, csum_length);
-		LOG3(opts, "%s: sent chunked %zu blocks of "
+		blk_match_part(sess, path, fd, map, 
+			st.st_size, blks, csum_length);
+		LOG3(sess, "%s: sent chunked %zu blocks of "
 			"%zu B (%zu B remainder)", path, blks->blksz, 
 			blks->len, blks->rem);
 	} else {
-		blk_match_full(opts, fd, map, st.st_size);
-		LOG3(opts, "%s: sent un-chunked %llu B", path, st.st_size);
+		blk_match_full(sess, fd, map, st.st_size);
+		LOG3(sess, "%s: sent un-chunked %llu B", path, st.st_size);
 	}
 
 	/* Now write the full file hash. */
 
 	hash_file(map, st.st_size, filemd);
 
-	if ( ! io_write_buf(opts, fd, filemd, MD5_DIGEST_LENGTH)) {
-		ERRX1(opts, "io_write_buf: data blocks hash");
+	if ( ! io_write_buf(sess, fd, filemd, MD5_DIGEST_LENGTH)) {
+		ERRX1(sess, "io_write_buf: data blocks hash");
 		goto out;
 	}
 
@@ -291,18 +287,18 @@ blkset_free(struct blkset *p)
  * Returns zero on failure, non-zero on success.
  */
 int
-blk_recv_ack(const struct opts *opts, 
+blk_recv_ack(struct sess *sess, 
 	int fd, const struct blkset *blocks, int32_t idx)
 {
 
-	if ( ! io_write_int(opts, fd, idx))
-		ERRX1(opts, "io_write_int: send ack");
-	else if ( ! io_write_int(opts, fd, blocks->blksz))
-		ERRX1(opts, "io_write_int: send ack: block count");
-	else if ( ! io_write_int(opts, fd, blocks->len))
-		ERRX1(opts, "io_write_int: send ack: block size");
-	else if ( ! io_write_int(opts, fd, blocks->rem))
-		ERRX1(opts, "io_write_int: send ack: remainder");
+	if ( ! io_write_int(sess, fd, idx))
+		ERRX1(sess, "io_write_int: send ack");
+	else if ( ! io_write_int(sess, fd, blocks->blksz))
+		ERRX1(sess, "io_write_int: send ack: block count");
+	else if ( ! io_write_int(sess, fd, blocks->len))
+		ERRX1(sess, "io_write_int: send ack: block size");
+	else if ( ! io_write_int(sess, fd, blocks->rem))
+		ERRX1(sess, "io_write_int: send ack: remainder");
 	else
 		return 1;
 
@@ -314,7 +310,7 @@ blk_recv_ack(const struct opts *opts,
  * Returns the set of blocks or NULL on failure.
  */
 struct blkset *
-blk_recv(const struct opts *opts, int fd, 
+blk_recv(struct sess *sess, int fd, 
 	size_t csum_length, const char *path)
 {
 	struct blkset	*s;
@@ -324,7 +320,7 @@ blk_recv(const struct opts *opts, int fd,
 	off_t		 offs = 0;
 
 	if (NULL == (s = calloc(1, sizeof(struct blkset)))) {
-		ERR(opts, "calloc");
+		ERR(sess, "calloc");
 		return NULL;
 	}
 
@@ -333,29 +329,29 @@ blk_recv(const struct opts *opts, int fd,
 	 * in reading the individual blocks for this file.
 	 */
 
-	if ( ! io_read_size(opts, fd, &s->blksz)) {
-		ERRX1(opts, "io_read_size: block count");
+	if ( ! io_read_size(sess, fd, &s->blksz)) {
+		ERRX1(sess, "io_read_size: block count");
 		goto out;
-	} else if ( ! io_read_size(opts, fd, &s->len)) {
-		ERRX1(opts, "io_read_sisze: block length");
+	} else if ( ! io_read_size(sess, fd, &s->len)) {
+		ERRX1(sess, "io_read_sisze: block length");
 		goto out;
-	} else if ( ! io_read_size(opts, fd, &s->rem)) {
-		ERRX1(opts, "io_read_int: block remainder");
+	} else if ( ! io_read_size(sess, fd, &s->rem)) {
+		ERRX1(sess, "io_read_int: block remainder");
 		goto out;
 	} else if (s->rem && s->rem >= s->len) {
-		ERRX(opts, "block remainder is "
+		ERRX(sess, "block remainder is "
 			"greater than block size");
 		goto out;
 	}
 
-	LOG3(opts, "%s: read block prologue: %zu blocks of "
+	LOG3(sess, "%s: read block prologue: %zu blocks of "
 		"%zu B, %zu B remainder", path, s->blksz, 
 		s->len, s->rem);
 
 	if (s->blksz) {
 		s->blks = calloc(s->blksz, sizeof(struct blk));
 		if (NULL == s->blks) {
-			ERR(opts, "calloc");
+			ERR(sess, "calloc");
 			goto out;
 		}
 	}
@@ -364,16 +360,16 @@ blk_recv(const struct opts *opts, int fd,
 
 	for (j = 0; j < s->blksz; j++) {
 		b = &s->blks[j];
-		if ( ! io_read_int(opts, fd, &i)) {
-			ERRX1(opts, "io_read_int: fast checksum");
+		if ( ! io_read_int(sess, fd, &i)) {
+			ERRX1(sess, "io_read_int: fast checksum");
 			goto out;
 		}
 		b->chksum_short = i;
 
 		assert(csum_length <= sizeof(b->chksum_long));
-		if ( ! io_read_buf(opts, 
+		if ( ! io_read_buf(sess, 
 		    fd, b->chksum_long, csum_length)) {
-			ERRX1(opts, "io_read_buf: slow checksum");
+			ERRX1(sess, "io_read_buf: slow checksum");
 			goto out;
 		}
 
@@ -387,13 +383,13 @@ blk_recv(const struct opts *opts, int fd,
 		b->len = (j == (s->blksz - 1) && s->rem) ? s->rem : s->len;
 		offs += b->len;
 
-		LOG4(opts, "%s: read block %zu, length %zu B, "
+		LOG4(sess, "%s: read block %zu, length %zu B, "
 			"checksum=0x%08x", path, b->idx, b->len, 
 			b->chksum_short);
 	}
 
 	s->size = offs;
-	LOG3(opts, "%s: read blocks: %zu blocks, %llu "
+	LOG3(sess, "%s: read blocks: %zu blocks, %llu "
 		"B total blocked data", path, s->blksz, s->size);
 	return s;
 out:
@@ -406,27 +402,27 @@ out:
  * Return zero on failure, non-zero on success.
  */
 int
-blk_send_ack(const struct opts *opts, 
-	int fd, const struct blkset *blocks, size_t idx)
+blk_send_ack(struct sess *sess, int fd, 
+	const struct blkset *blocks, size_t idx)
 {
 	size_t		 rem, len, blksz, nidx;
 
-	if ( ! io_read_size(opts, fd, &nidx))
-		ERRX1(opts, "io_read_size: read ack");
+	if ( ! io_read_size(sess, fd, &nidx))
+		ERRX1(sess, "io_read_size: read ack");
 	else if (idx != nidx)
-		ERRX1(opts, "read ack: indices don't match");
-	else if ( ! io_read_size(opts, fd, &blksz))
-		ERRX1(opts, "io_read_size: read ack: block count");
+		ERRX1(sess, "read ack: indices don't match");
+	else if ( ! io_read_size(sess, fd, &blksz))
+		ERRX1(sess, "io_read_size: read ack: block count");
 	else if (blksz != blocks->blksz)
-		ERRX1(opts, "read ack: block counts don't match");
-	else if ( ! io_read_size(opts, fd, &len))
-		ERRX1(opts, "io_read_size: read ack: block size");
+		ERRX1(sess, "read ack: block counts don't match");
+	else if ( ! io_read_size(sess, fd, &len))
+		ERRX1(sess, "io_read_size: read ack: block size");
 	else if (len != blocks->len)
-		ERRX1(opts, "read ack: block sizes don't match");
-	else if ( ! io_read_size(opts, fd, &rem))
-		ERRX1(opts, "io_read_size: read ack: remainder");
+		ERRX1(sess, "read ack: block sizes don't match");
+	else if ( ! io_read_size(sess, fd, &rem))
+		ERRX1(sess, "io_read_size: read ack: remainder");
 	else if (rem != blocks->rem)
-		ERRX1(opts, "read ack: block remainders don't match");
+		ERRX1(sess, "read ack: block remainders don't match");
 	else
 		return 1;
 
@@ -439,7 +435,7 @@ blk_send_ack(const struct opts *opts,
  * Returns zero on failure, non-zero on success.
  */
 int
-blk_merge(const struct opts *opts, int fd, int ffd,
+blk_merge(struct sess *sess, int fd, int ffd,
 	const struct blkset *block, int outfd, const char *path, 
 	const void *map, size_t mapsz)
 {
@@ -457,8 +453,8 @@ blk_merge(const struct opts *opts, int fd, int ffd,
 	MD5Init(&ctx);
 
 	for (;;) {
-		if ( ! io_read_int(opts, fd, &rawtok)) {
-			ERRX1(opts, "io_read_int: data block size");
+		if ( ! io_read_int(sess, fd, &rawtok)) {
+			ERRX1(sess, "io_read_int: data block size");
 			goto out;
 		} else if (0 == rawtok) 
 			break;
@@ -466,33 +462,33 @@ blk_merge(const struct opts *opts, int fd, int ffd,
 		if (rawtok > 0) {
 			sz = rawtok;
 			if (NULL == (pp = realloc(buf, sz))) {
-				ERR(opts, "realloc");
+				ERR(sess, "realloc");
 				goto out;
 			} 
 			buf = pp;
-			if ( ! io_read_buf(opts, fd, buf, sz)) {
-				ERRX1(opts, "io_read_int: data block");
+			if ( ! io_read_buf(sess, fd, buf, sz)) {
+				ERRX1(sess, "io_read_int: data block");
 				goto out;
 			}
 
 			if ((ssz = write(outfd, buf, sz)) < 0) {
-				ERR(opts, "write: temporary file");
+				ERR(sess, "write: temporary file");
 				goto out;
 			} else if ((size_t)ssz != sz) {
-				ERRX(opts, "write: short write");
+				ERRX(sess, "write: short write");
 				goto out;
 			}
 
 			fromdown += sz;
 			total += sz;
-			LOG4(opts, "%s: received %zd bytes, "
+			LOG4(sess, "%s: received %zd bytes, "
 				"now %llu total", path, ssz, total);
 
 			MD5Update(&ctx, buf, sz);
 		} else {
 			tok = -rawtok - 1;
 			if (tok >= block->blksz) {
-				ERRX(opts, "token not in block set");
+				ERRX(sess, "token not in block set");
 				goto out;
 			}
 
@@ -511,16 +507,16 @@ blk_merge(const struct opts *opts, int fd, int ffd,
 				block->blks[tok].len);
 
 			if (ssz < 0) {
-				ERR(opts, "write: temporary file");
+				ERR(sess, "write: temporary file");
 				goto out;
 			} else if ((size_t)ssz != block->blks[tok].len) {
-				ERRX(opts, "write: short write");
+				ERRX(sess, "write: short write");
 				goto out;
 			}
 
 			fromcopy += block->blks[tok].len;
 			total += block->blks[tok].len;
-			LOG4(opts, "%s: copied %zu bytes, now %llu total", 
+			LOG4(sess, "%s: copied %zu bytes, now %llu total", 
 				path, block->blks[tok].len, total);
 
 			MD5Update(&ctx, 
@@ -531,20 +527,20 @@ blk_merge(const struct opts *opts, int fd, int ffd,
 
 	/* Make sure our resulting MD5 hashes match. */
 
-	if ( ! io_read_buf(opts, fd, md, MD5_DIGEST_LENGTH)) {
-		ERRX1(opts, "io_read_buf: data blocks hash");
+	if ( ! io_read_buf(sess, fd, md, MD5_DIGEST_LENGTH)) {
+		ERRX1(sess, "io_read_buf: data blocks hash");
 		goto out;
 	}
 
 	MD5Final(ourmd, &ctx);
 
 	if (memcmp(md, ourmd, MD5_DIGEST_LENGTH)) {
-		ERRX(opts, "file hash does not match");
+		ERRX(sess, "file hash does not match");
 		goto out;
 	}
 
-	LOG3(opts, "%s: merged %llu total bytes", path, total);
-	LOG3(opts, "%s: %.2f%% upload", path, 100.0 * fromdown / total);
+	LOG3(sess, "%s: merged %llu total bytes", path, total);
+	LOG3(sess, "%s: %.2f%% upload", path, 100.0 * fromdown / total);
 	rc = 1;
 out:
 	free(buf);
@@ -556,36 +552,36 @@ out:
  * Return zero on failure, non-zero on success.
  */
 int
-blk_send(const struct opts *opts, int fd, 
+blk_send(struct sess *sess, int fd, 
 	size_t len, const struct blkset *p, const char *path)
 {
 	size_t	 i;
 	const struct blk *b;
 
-	if ( ! io_write_int(opts, fd, p->blksz)) {
-		ERRX1(opts, "io_write_int: block count");
+	if ( ! io_write_int(sess, fd, p->blksz)) {
+		ERRX1(sess, "io_write_int: block count");
 		return 0;
-	} else if ( ! io_write_int(opts, fd, p->len)) {
-		ERRX1(opts, "io_write_int: block length");
+	} else if ( ! io_write_int(sess, fd, p->len)) {
+		ERRX1(sess, "io_write_int: block length");
 		return 0;
-	} else if ( ! io_write_int(opts, fd, p->rem)) {
-		ERRX1(opts, "io_write_int: block remainder");
+	} else if ( ! io_write_int(sess, fd, p->rem)) {
+		ERRX1(sess, "io_write_int: block remainder");
 		return 0;
 	} 
 
 	for (i = 0; i < p->blksz; i++) {
 		b = &p->blks[i];
-		if ( ! io_write_int(opts, fd, b->chksum_short)) {
-			ERRX1(opts, "io_write_int: short checksum");
+		if ( ! io_write_int(sess, fd, b->chksum_short)) {
+			ERRX1(sess, "io_write_int: short checksum");
 			return 0;
 		}
-		if ( ! io_write_buf(opts, fd, b->chksum_long, len)) {
-			ERRX1(opts, "io_write_int: long checksum");
+		if ( ! io_write_buf(sess, fd, b->chksum_long, len)) {
+			ERRX1(sess, "io_write_int: long checksum");
 			return 0;
 		}
 	}
 
-	LOG3(opts, "%s: sent block metadata: %zu blocks of %zu B, "
+	LOG3(sess, "%s: sent block metadata: %zu blocks of %zu B, "
 		"%zu B remainder", path, p->blksz, p->len, p->rem);
 	return 1;
 }

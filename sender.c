@@ -26,24 +26,24 @@
 #include "extern.h"
 
 static int
-stats(const struct opts *opts, int fdout)
+stats(struct sess *sess, int fdout)
 {
 
-	if ( ! opts->server)
+	if ( ! sess->opts->server)
 		return 1;
 
-	if ( ! io_write_int(opts, fdout, 10)) {
-		ERRX1(opts, "io_write_int: total read");
+	if ( ! io_write_int(sess, fdout, 10)) {
+		ERRX1(sess, "io_write_int: total read");
 		return 0;
-	} else if ( ! io_write_int(opts, fdout, 20)) {
-		ERRX1(opts, "io_write_int: total write");
+	} else if ( ! io_write_int(sess, fdout, 20)) {
+		ERRX1(sess, "io_write_int: total write");
 		return 0;
-	} else if ( ! io_write_int(opts, fdout, 30)) {
-		ERRX1(opts, "io_write_int: total size");
+	} else if ( ! io_write_int(sess, fdout, 30)) {
+		ERRX1(sess, "io_write_int: total size");
 		return 0;
 	} 
 
-	LOG2(opts, "stats written");
+	LOG2(sess, "stats written");
 	return 1;
 }
 
@@ -57,8 +57,8 @@ stats(const struct opts *opts, int fdout)
  * Pledges: stdio, rpath.
  */
 int
-rsync_sender(const struct opts *opts, const struct sess *sess, 
-	int fdin, int fdout, size_t argc, char **argv)
+rsync_sender(struct sess *sess, int fdin, 
+	int fdout, size_t argc, char **argv)
 {
 	struct flist	*fl = NULL;
 	size_t		 flsz = 0, phase = 0,
@@ -68,7 +68,7 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 	struct blkset	*blks = NULL;
 
 	if (-1 == pledge("stdio rpath", NULL)) {
-		ERR(opts, "pledge");
+		ERR(sess, "pledge");
 		return 0;
 	}
 
@@ -78,29 +78,29 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 	 * This will also remove all invalid files.
 	 */
 
-	if (NULL == (fl = flist_gen(opts, argc, argv, &flsz))) {
-		ERRX1(opts, "flist_gen");
+	if (NULL == (fl = flist_gen(sess, argc, argv, &flsz))) {
+		ERRX1(sess, "flist_gen");
 		goto out;
 	}
 
 	/* Now send them to the receiver server. */
 
-	if ( ! flist_send(opts, fdout, fl, flsz)) {
-		ERRX1(opts, "flist_send");
+	if ( ! flist_send(sess, fdout, fl, flsz)) {
+		ERRX1(sess, "flist_send");
 		goto out;
-	} else if ( ! io_write_int(opts, fdout, 0)) {
-		ERRX1(opts, "io_write_int: io_error");
+	} else if ( ! io_write_int(sess, fdout, 0)) {
+		ERRX1(sess, "io_write_int: io_error");
 		goto out;
 	}
 
 	/* XXX: what is this? */
 
-	if (opts->server) {
-		if ( ! io_read_int(opts, fdin, &preamble)) {
-			ERRX1(opts, "io_read_int: zero premable");
+	if (sess->opts->server) {
+		if ( ! io_read_int(sess, fdin, &preamble)) {
+			ERRX1(sess, "io_read_int: zero premable");
 			goto out;
 		} else if (0 != preamble) {
-			ERRX1(opts, "preamble value must be zero");
+			ERRX1(sess, "preamble value must be zero");
 			goto out;
 		}
 	}
@@ -110,12 +110,12 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 	 * second has a full 16-byte checksum.
 	 */
 
-	LOG2(opts, "sender transmitting "
+	LOG2(sess, "sender transmitting "
 		"%zu-checksum data", csum_length);
 
 	for (;;) {
-		if ( ! io_read_int(opts, fdin, &idx)) {
-			ERRX1(opts, "io_read_int: index");
+		if ( ! io_read_int(sess, fdin, &idx)) {
+			ERRX1(sess, "io_read_int: index");
 			goto out;
 		} 
 
@@ -126,16 +126,16 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 		 */
 
 		if (-1 == idx) {
-			if ( ! io_write_int(opts, fdout, idx)) {
-				ERRX1(opts, "io_write_int: phase ack");
+			if ( ! io_write_int(sess, fdout, idx)) {
+				ERRX1(sess, "io_write_int: phase ack");
 				goto out;
 			}
 
 			/* FIXME: I don't understand this ack. */
 
-			if (opts->server && sess->rver > 20)
-				if ( ! io_write_int(opts, fdout, idx)) {
-					ERRX1(opts, "io_write_int: "
+			if (sess->opts->server && sess->rver > 20)
+				if ( ! io_write_int(sess, fdout, idx)) {
+					ERRX1(sess, "io_write_int: "
 						"superfluous ack");
 					goto out;
 				}
@@ -143,7 +143,7 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 			if (phase++)
 				break;
 			csum_length = CSUM_LENGTH_PHASE2;
-			LOG2(opts, "sender transmitting "
+			LOG2(sess, "sender transmitting "
 				"%zu-checksum data", csum_length);
 			continue;
 		}
@@ -151,28 +151,29 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 		/* Validate index and file type. */
 
 		if (idx < 0 || (uint32_t)idx >= flsz) {
-			ERRX(opts, "file index out of bounds: "
+			ERRX(sess, "file index out of bounds: "
 				"invalid %" PRId32 " out of %zu",
 				idx, flsz);
 			goto out;
 		} else if (S_ISDIR(fl[idx].st.mode)) {
-			ERRX(opts, "blocks requested for "
+			ERRX(sess, "blocks requested for "
 				"directory file: %s", fl[idx].path);
 			goto out;
 		}
 
 		/* Dry-run doesn't do anything. */
 
-		if (opts->dry_run) {
-			if ( ! io_write_int(opts, fdout, idx)) {
-				ERRX1(opts, "io_write_int: "
+		if (sess->opts->dry_run) {
+			if ( ! io_write_int(sess, fdout, idx)) {
+				ERRX1(sess, "io_write_int: "
 					"send ack (dry-run)");
 				goto out;
 			}
 			continue;
 		}
 
-		LOG1(opts, "%s", fl[idx].path);
+		/* FIXME. */
+		LOG1(sess, "%s", fl[idx].path);
 
 		/*
 		 * The server will now send us its view of the file.
@@ -183,27 +184,27 @@ rsync_sender(const struct opts *opts, const struct sess *sess,
 		 * don't have.
 		 */
 
-		blks = blk_recv(opts, fdin, csum_length, fl[idx].path);
+		blks = blk_recv(sess, fdin, csum_length, fl[idx].path);
 		if (NULL == blks) {
-			ERRX1(opts, "blk_recv");
+			ERRX1(sess, "blk_recv");
 			goto out;
-		} else if ( ! blk_recv_ack(opts, fdout, blks, idx)) {
-			ERRX1(opts, "blk_recv_ack");
+		} else if ( ! blk_recv_ack(sess, fdout, blks, idx)) {
+			ERRX1(sess, "blk_recv_ack");
 			goto out;
 		}
 
-		c = blk_match(opts, sess, fdout, 
-			blks, fl[idx].path, csum_length);
+		c = blk_match(sess, fdout, blks, 
+			fl[idx].path, csum_length);
 		blkset_free(blks);
 
 		if ( ! c) {
-			ERRX1(opts, "blk_match");
+			ERRX1(sess, "blk_match");
 			goto out;
 		}
 	}
 
-	stats(opts, fdout);
-	LOG2(opts, "sender finished updating");
+	stats(sess, fdout);
+	LOG2(sess, "sender finished updating");
 	rc = 1;
 out:
 	flist_free(fl, flsz);

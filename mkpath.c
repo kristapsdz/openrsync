@@ -41,7 +41,7 @@
  *	path     - path
  */
 int
-mkpath(const struct opts *opts, char *path)
+mkpath(struct sess *sess, char *path)
 {
 	struct stat sb;
 	char *slash;
@@ -59,12 +59,12 @@ mkpath(const struct opts *opts, char *path)
 		if (stat(path, &sb)) {
 			if (errno != ENOENT || (mkdir(path, 0777) &&
 			    errno != EEXIST)) {
-				ERR(opts, "stat: %s", path);
+				ERR(sess, "stat: %s", path);
 				return (-1);
 			}
 		} else if (!S_ISDIR(sb.st_mode)) {
 			errno = ENOTDIR;
-			ERR(opts, "stat: %s", path);
+			ERR(sess, "stat: %s", path);
 			return (-1);
 		}
 

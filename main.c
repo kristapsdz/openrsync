@@ -66,22 +66,18 @@ fargs_is_remote(const char *v)
  * We also make sure that the arguments are consistent, that is, if
  * we're going to transfer from the local to the remote, that no
  * filenames for the local transfer indicate remote hosts.
- * Returns the parsed and sanitised options.
- * Exits on failure.
+ * Always returns the parsed and sanitised options.
  */
 static struct fargs *
 fargs_parse(size_t argc, char *argv[])
 {
-	struct fargs	 *f = NULL;
-	char		 *cp;
-	size_t		  i, j, len = 0;
+	struct fargs	*f = NULL;
+	char		*cp;
+	size_t		 i, j, len = 0;
 
-	/* Sanity-check: no rsync:// or plain :: arguments. */
+	/* No :: arguments yet. */
 
 	for (i = 0; i < argc; i++) {
-		if (0 == strncmp(argv[i], "rsync://", 8))
-			errx(EXIT_FAILURE, "rsync protocol "
-				"sources not supported: %s", argv[i]);
 		j = strcspn(argv[i], ":/");
 		if (':' == argv[i][j] && ':' == argv[i][j + 1])
 			errx(EXIT_FAILURE, "rsync protocol (implicit) "
@@ -139,14 +135,32 @@ fargs_parse(size_t argc, char *argv[])
 		err(EXIT_FAILURE, "strdup");
 
 	if (NULL != f->host) {
-		cp = strchr(f->host, ':');
-		assert(NULL != cp);
-		*cp = '\0';
+		if (0 == strncasecmp(f->host, "rsync://", 8)) {
+			f->remote = 1;
+			len = strlen(f->host) - 8 + 1;
+			memmove(f->host, f->host + 8, len);
+			if (NULL == (cp = strchr(f->host, '/')))
+				errx(EXIT_FAILURE, "rsync protocol "
+					"requires a module name");
+			*cp++ = '\0';
+			f->module = cp;
+			if (NULL != (cp = strchr(f->module, '/')))
+				*cp = '\0';
+		} else {
+			cp = strchr(f->host, ':');
+			assert(NULL != cp);
+			*cp = '\0';
+		}
 		if (0 == (len = strlen(f->host)))
 			errx(EXIT_FAILURE, "empty remote host");
+		if (f->remote && 0 == strlen(f->module))
+			errx(EXIT_FAILURE, "empty remote module");
 	}
 
-	/* Sanity check: mix of remote and local files. */
+	/* 
+	 * Sanity check: mix of remote and local files.
+	 * FIXME: check mix of rsync:// and otherwise for remote.
+	 */
 
 	if (FARGS_SENDER == f->mode || FARGS_LOCAL == f->mode)
 		for (i = 0; i < f->sourcesz; i++)
@@ -169,26 +183,42 @@ fargs_parse(size_t argc, char *argv[])
 		assert(len > 0);
 		j = strlen(f->sink);
 		memmove(f->sink, f->sink + len + 1, j - len);
-	} else if (FARGS_RECEIVER == f->mode) {
-		assert(NULL != f->host);
-		assert(len > 0);
-		for (i = 0; i < f->sourcesz; i++) {
-			j = strlen(f->sources[i]);
-			if (':' == f->sources[i][0]) {
-				memmove(f->sources[i],
-					f->sources[i] + 1,
-					j);
-				continue;
-			}
-			if (strncmp(f->sources[i], f->host, len) ||
-			    ':' != f->sources[i][len])
-				errx(EXIT_FAILURE, "remote host does "
-					"not match %s, %s", f->host, 
-					f->sources[i]);
+		return f;
+	} else if (FARGS_RECEIVER != f->mode)
+		return f;
+
+	assert(NULL != f->host);
+	assert(len > 0);
+	for (i = 0; i < f->sourcesz; i++) {
+		j = strlen(f->sources[i]);
+		if (f->remote) {
+			cp = f->sources[i];
+			if (strncasecmp(cp, "rsync://", 8))
+				errx(EXIT_FAILURE, "remote host "
+					"not rsync: %s", f->sources[i]);
+			cp += 8;
+			if (strncmp(cp, f->host, len))
+				errx(EXIT_FAILURE, "different remote "
+					"host: %s", f->sources[i]);
+			cp += len;
+			if ('/' != *cp && '\0' != *cp) 
+				errx(EXIT_FAILURE, "different remote "
+					"module: %s", f->sources[i]);
 			memmove(f->sources[i], 
-				f->sources[i] + len + 1,
-				j - len);
+				f->sources[i] + len + 8 + 1, 
+				j - len - 8);
+			continue;
 		}
+		if (':' == f->sources[i][0]) {
+			memmove(f->sources[i], f->sources[i] + 1, j);
+			continue;
+		}
+		if (strncmp(f->sources[i], f->host, len) ||
+		    ':' != f->sources[i][len])
+			errx(EXIT_FAILURE, "different remote "
+				"host: %s", f->sources[i]);
+		memmove(f->sources[i], 
+			f->sources[i] + len + 1, j - len);
 	}
 
 	return f;
@@ -276,6 +306,20 @@ main(int argc, char *argv[])
 
 	fargs = fargs_parse(argc, argv);
 	assert(NULL != fargs);
+	if (fargs->remote) 
+		errx(EXIT_FAILURE, "rsync:// hosts not yet supported");
+
+#if 0
+	if (fargs->remote) {
+		if (-1 == pledge("dns inet unveil stdio rpath wpath cpath fattr", NULL)) {
+			ERR(&opts, "pledge");
+			exit(EXIT_FAILURE);
+		}
+		c = rsync_socket(&opts, fargs);
+		fargs_free(fargs);
+		return c ? EXIT_SUCCESS : EXIT_FAILURE;
+	}
+#endif
 
 	flags = SOCK_STREAM | SOCK_NONBLOCK;
 
@@ -290,10 +334,8 @@ main(int argc, char *argv[])
 
 	/* Drop the fork possibility. */
 
-	if (-1 == pledge("unveil exec stdio rpath wpath cpath fattr", NULL)) {
-		ERR(&opts, "pledge");
-		exit(EXIT_FAILURE);
-	}
+	if (-1 == pledge("unveil exec stdio rpath wpath cpath fattr", NULL))
+		err(EXIT_FAILURE, "pledge");
 
 	if (0 == child) {
 		close(fds[0]);
