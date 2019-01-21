@@ -63,6 +63,8 @@ struct	fargs {
 	size_t	   sourcesz; /* number of sources */
 	char	  *sink; /* transfer endpoint */
 	enum fmode mode; /* mode of operation */
+	int	   remote; /* uses rsync:// for remote */
+	char	  *module; /* if rsync://, the module */
 };
 
 /*
@@ -187,6 +189,13 @@ struct flist	 *flist_recv(const struct opts *, int, size_t *);
 int		  flist_send(const struct opts *, 
 			int, const struct flist *, size_t);
 
+char		**fargs_cmdline(const struct opts *, const struct fargs *);
+
+#if 0
+int		  io_connect_wait(const struct opts *, int);
+int		  io_read_buf_nonblock(const struct opts *, int, void *, size_t, size_t *);
+int		  io_write_line(const struct opts *, int, const char *);
+#endif
 int		  io_read_buf(const struct opts *, int, void *, size_t);
 int		  io_read_byte(const struct opts *, int, uint8_t *);
 int		  io_read_int(const struct opts *, int, int32_t *);
@@ -205,6 +214,9 @@ int		  rsync_receiver(const struct opts *,
 int		  rsync_sender(const struct opts *, const struct sess *, 
 			int, int, size_t, char **);
 int		  rsync_client(const struct opts *, int, const struct fargs *);
+#if 0
+int		  rsync_socket(struct opts *, const struct fargs *);
+#endif
 int		  rsync_server(const struct opts *, size_t, char *[]);
 
 struct blkset	 *blk_recv(const struct opts *, int, size_t, const char *);
