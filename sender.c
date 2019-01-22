@@ -132,12 +132,14 @@ rsync_sender(struct sess *sess, int fdin,
 
 			/* FIXME: I don't understand this ack. */
 
+#if 0
 			if (sess->opts->server && sess->rver > 20)
 				if ( ! io_write_int(sess, fdout, idx)) {
 					ERRX1(sess, "io_write_int: "
 						"superfluous ack");
 					goto out;
 				}
+#endif
 
 			if (phase++)
 				break;

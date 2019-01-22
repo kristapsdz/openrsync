@@ -236,6 +236,8 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 	 * the file, but we need to be able to mmap() it.
 	 */
 
+	p->csum = csumlen;
+
 	if (-1 != ffd) {
 		mapsz = st.st_size;
 		map = mmap(NULL, mapsz, PROT_READ, MAP_SHARED, ffd, 0);
