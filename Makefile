@@ -10,7 +10,8 @@ OBJS	 = blocks.o \
 	   mkpath.o \
 	   receiver.o \
 	   sender.o \
-	   server.o
+	   server.o \
+	   socket.o
 ALLOBJS	 = $(OBJS) \
 	   main.o
 AFLS	 = afl/test-blk_recv \
