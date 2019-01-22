@@ -216,11 +216,11 @@ int		  rsync_client(const struct opts *, int, const struct fargs *);
 int		  rsync_socket(const struct opts *, const struct fargs *);
 int		  rsync_server(const struct opts *, size_t, char *[]);
 
-struct blkset	 *blk_recv(struct sess *, int, size_t, const char *);
+struct blkset	 *blk_recv(struct sess *, int, const char *);
 int		  blk_recv_ack(struct sess *, 
 			int, const struct blkset *, int32_t);
-int		  blk_match(struct sess *, 
-			int, const struct blkset *, const char *, size_t);
+int		  blk_match(struct sess *, int, 
+			const struct blkset *, const char *);
 int		  blk_send(struct sess *, int, size_t,
 			const struct blkset *, const char *);
 int		  blk_send_ack(struct sess *, int, 
