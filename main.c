@@ -47,6 +47,8 @@ fargs_free(struct fargs *p)
 
 /*
  * A remote host is has a colon before the first path separator.
+ * This works for rsh remote hosts (host:/foo/bar), implicit rsync
+ * remote hosts (host::/foo/bar), and explicit (rsync://host/foo).
  * Return zero if local, non-zero if remote.
  */
 static int
@@ -56,6 +58,22 @@ fargs_is_remote(const char *v)
 
 	pos = strcspn(v, ":/");
 	return ':' == v[pos];
+}
+
+/*
+ * Test whether a remote host is specifically an rsync daemon.
+ * Return zero if not, non-zero if so.
+ */
+static int
+fargs_is_daemon(const char *v)
+{
+	size_t	 pos;
+
+	if (0 == strncasecmp(v, "rsync://", 8))
+		return 1;
+
+	pos = strcspn(v, ":/");
+	return ':' == v[pos] && ':' == v[pos + 1];
 }
 
 /*
@@ -74,15 +92,6 @@ fargs_parse(size_t argc, char *argv[])
 	struct fargs	*f = NULL;
 	char		*cp;
 	size_t		 i, j, len = 0;
-
-	/* No :: arguments yet. */
-
-	for (i = 0; i < argc; i++) {
-		j = strcspn(argv[i], ":/");
-		if (':' == argv[i][j] && ':' == argv[i][j + 1])
-			errx(EXIT_FAILURE, "rsync protocol (implicit) "
-				"sources not supported: %s", argv[i]);
-	}
 
 	/* Allocations. */
 
@@ -136,6 +145,7 @@ fargs_parse(size_t argc, char *argv[])
 
 	if (NULL != f->host) {
 		if (0 == strncasecmp(f->host, "rsync://", 8)) {
+			/* rsync://host/module[/path] */
 			f->remote = 1;
 			len = strlen(f->host) - 8 + 1;
 			memmove(f->host, f->host + 8, len);
@@ -147,9 +157,18 @@ fargs_parse(size_t argc, char *argv[])
 			if (NULL != (cp = strchr(f->module, '/')))
 				*cp = '\0';
 		} else {
+			/* host:[/path] */
 			cp = strchr(f->host, ':');
 			assert(NULL != cp);
-			*cp = '\0';
+			*cp++ = '\0';
+			if (':' == *cp) {
+				/* host::module[/path] */
+				f->remote = 1;
+				f->module = ++cp;
+				cp = strchr(f->module, '/');
+				if (NULL != cp)
+					*cp = '\0';
+			}
 		}
 		if (0 == (len = strlen(f->host)))
 			errx(EXIT_FAILURE, "empty remote host");
@@ -157,68 +176,111 @@ fargs_parse(size_t argc, char *argv[])
 			errx(EXIT_FAILURE, "empty remote module");
 	}
 
-	/* 
-	 * Sanity check: mix of remote and local files.
-	 * FIXME: check mix of rsync:// and otherwise for remote.
-	 */
+	/* Make sure we have the same "hostspec" for all files. */
 
-	if (FARGS_SENDER == f->mode || FARGS_LOCAL == f->mode)
-		for (i = 0; i < f->sourcesz; i++)
-			if (fargs_is_remote(f->sources[i]))
+	if ( ! f->remote) {
+		if (FARGS_SENDER == f->mode || 
+		    FARGS_LOCAL == f->mode)
+			for (i = 0; i < f->sourcesz; i++) {
+				if ( ! fargs_is_remote(f->sources[i]))
+					continue;
 				errx(EXIT_FAILURE, "remote file in "
 					"list of local sources: %s", 
 					f->sources[i]);
-
-	if (FARGS_RECEIVER == f->mode)
-		for (i = 0; i < f->sourcesz; i++)
-			if ( ! fargs_is_remote(f->sources[i]))
+			}
+		if (FARGS_RECEIVER == f->mode)
+			for (i = 0; i < f->sourcesz; i++) {
+				if (fargs_is_remote(f->sources[i]) &&
+				    ! fargs_is_daemon(f->sources[i]))
+					continue;
+				if (fargs_is_daemon(f->sources[i]))
+					errx(EXIT_FAILURE, "remote "
+						"daemon in list of "
+						"remote sources: %s",
+						f->sources[i]);
 				errx(EXIT_FAILURE, "local file in "
 					"list of remote sources: %s", 
 					f->sources[i]);
+			}
+	} else {
+		if (FARGS_RECEIVER != f->mode)
+			errx(EXIT_FAILURE, "sender mode for remote "
+				"daemon receivers not yet supported");
+		for (i = 0; i < f->sourcesz; i++) {
+			if (fargs_is_daemon(f->sources[i]))
+				continue;
+			errx(EXIT_FAILURE, "non-remote daemon file "
+				"in list of remote daemon sources: "
+				"%s", f->sources[i]);
+		}
+	}
 
-	/* Now strip our hostname. */
+	/* 
+	 * If we're not remote and a sender, strip our hostname.
+	 * Then exit if we're a sender or a local connection.
+	 */
 
-	if (FARGS_SENDER == f->mode) {
-		assert(NULL != f->host);
-		assert(len > 0);
-		j = strlen(f->sink);
-		memmove(f->sink, f->sink + len + 1, j - len);
-		return f;
-	} else if (FARGS_RECEIVER != f->mode)
-		return f;
+	if ( ! f->remote) {
+		if (FARGS_SENDER == f->mode) {
+			assert(NULL != f->host);
+			assert(len > 0);
+			j = strlen(f->sink);
+			memmove(f->sink, f->sink + len + 1, j - len);
+			return f;
+		} else if (FARGS_RECEIVER != f->mode)
+			return f;
+	}
+
+	/* 
+	 * Now strip the hostnames from the remote host.
+	 *   rsync://host/module/path -> module/path
+	 *   host::module/path -> module/path
+	 *   host:path -> path
+	 * Also make sure that the remote hosts are the same.
+	 */
 
 	assert(NULL != f->host);
 	assert(len > 0);
+
 	for (i = 0; i < f->sourcesz; i++) {
-		j = strlen(f->sources[i]);
-		if (f->remote) {
-			cp = f->sources[i];
-			if (strncasecmp(cp, "rsync://", 8))
-				errx(EXIT_FAILURE, "remote host "
-					"not rsync: %s", f->sources[i]);
+		cp = f->sources[i];
+		j = strlen(cp);
+		if (f->remote && 
+		    0 == strncasecmp(cp, "rsync://", 8)) {
+			/* rsync://path */
 			cp += 8;
-			if (strncmp(cp, f->host, len))
+			if (strncmp(cp, f->host, len) ||
+			    ('/' != cp[len] && '\0' != cp[len]))
 				errx(EXIT_FAILURE, "different remote "
 					"host: %s", f->sources[i]);
-			cp += len;
-			if ('/' != *cp && '\0' != *cp) 
-				errx(EXIT_FAILURE, "different remote "
-					"module: %s", f->sources[i]);
 			memmove(f->sources[i], 
 				f->sources[i] + len + 8 + 1, 
 				j - len - 8);
-			continue;
-		}
-		if (':' == f->sources[i][0]) {
+		} else if (f->remote && 0 == strncmp(cp, "::", 2)) {
+			/* ::path */
+			memmove(f->sources[i], 
+				f->sources[i] + 2, j - 1);
+		} else if (f->remote) {
+			/* host::path */
+			if (strncmp(cp, f->host, len) ||
+			    (':' != cp[len] && '\0' != cp[len]))
+				errx(EXIT_FAILURE, "different remote "
+					"host: %s", f->sources[i]);
+			memmove(f->sources[i],
+				f->sources[i] + len + 2,
+				j - len - 1);
+		} else if (':' == cp[0]) {
+			/* :path */
 			memmove(f->sources[i], f->sources[i] + 1, j);
-			continue;
+		} else {
+			/* host:path */
+			if (strncmp(cp, f->host, len) ||
+			    (':' != cp[len] && '\0' != cp[len]))
+				errx(EXIT_FAILURE, "different remote "
+					"host: %s", f->sources[i]);
+			memmove(f->sources[i], 
+				f->sources[i] + len + 1, j - len);
 		}
-		if (strncmp(f->sources[i], f->host, len) ||
-		    ':' != f->sources[i][len])
-			errx(EXIT_FAILURE, "different remote "
-				"host: %s", f->sources[i]);
-		memmove(f->sources[i], 
-			f->sources[i] + len + 1, j - len);
 	}
 
 	return f;
@@ -237,10 +299,7 @@ main(int argc, char *argv[])
 		{ "checksum-choice", required_argument,	NULL,	0 },
 		{ NULL,		0,		NULL,		0 }};
 
-	/* 
-	 * Global pledge.
-	 * This takes into account all possible pledge paths.
-	 */
+	/* Global pledge. */
 
 	if (-1 == pledge("dns inet unveil exec stdio rpath wpath cpath proc fattr", NULL))
 		err(EXIT_FAILURE, "pledge");
@@ -307,13 +366,27 @@ main(int argc, char *argv[])
 	fargs = fargs_parse(argc, argv);
 	assert(NULL != fargs);
 
+	/*
+	 * If we're contacting an rsync:// daemon, then we don't need to
+	 * fork, because we won't start a server ourselves.
+	 * Route directly into the socket code, in that case.
+	 */
+
 	if (fargs->remote) {
+		assert(FARGS_RECEIVER == fargs->mode);
 		if (-1 == pledge("dns inet unveil stdio rpath wpath cpath fattr", NULL)) 
 			err(EXIT_FAILURE, "pledge");
 		c = rsync_socket(&opts, fargs);
 		fargs_free(fargs);
 		return c ? EXIT_SUCCESS : EXIT_FAILURE;
 	}
+
+	/* Drop the dns/inet possibility. */
+
+	if (-1 == pledge("unveil exec stdio rpath wpath cpath proc fattr", NULL))
+		err(EXIT_FAILURE, "pledge");
+
+	/* Create a bidirectional socket and start our child. */
 
 	flags = SOCK_STREAM | SOCK_NONBLOCK;
 
