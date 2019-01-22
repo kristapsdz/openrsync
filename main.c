@@ -242,7 +242,7 @@ main(int argc, char *argv[])
 	 * This takes into account all possible pledge paths.
 	 */
 
-	if (-1 == pledge("unveil exec stdio rpath wpath cpath proc fattr", NULL))
+	if (-1 == pledge("dns inet unveil exec stdio rpath wpath cpath proc fattr", NULL))
 		err(EXIT_FAILURE, "pledge");
 
 	memset(&opts, 0, sizeof(struct opts));
@@ -306,20 +306,14 @@ main(int argc, char *argv[])
 
 	fargs = fargs_parse(argc, argv);
 	assert(NULL != fargs);
-	if (fargs->remote) 
-		errx(EXIT_FAILURE, "rsync:// hosts not yet supported");
 
-#if 0
 	if (fargs->remote) {
-		if (-1 == pledge("dns inet unveil stdio rpath wpath cpath fattr", NULL)) {
-			ERR(&opts, "pledge");
-			exit(EXIT_FAILURE);
-		}
+		if (-1 == pledge("dns inet unveil stdio rpath wpath cpath fattr", NULL)) 
+			err(EXIT_FAILURE, "pledge");
 		c = rsync_socket(&opts, fargs);
 		fargs_free(fargs);
 		return c ? EXIT_SUCCESS : EXIT_FAILURE;
 	}
-#endif
 
 	flags = SOCK_STREAM | SOCK_NONBLOCK;
 
