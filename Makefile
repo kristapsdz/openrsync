@@ -33,7 +33,7 @@ install: openrsync
 	mkdir -p $(PREFIX)/share/man/man1
 	mkdir -p $(PREFIX)/share/man/man5
 	install -m 0444 openrsync.1 $(PREFIX)/share/man/man1
-	install -m 0444 rsync.5 $(PREFIX)/share/man/man5
+	install -m 0444 rsync.5 rsyncd.5 $(PREFIX)/share/man/man5
 	install -m 0555 openrsync $(PREFIX)/bin
 	ln -f $(PREFIX)/bin/openrsync $(PREFIX)/bin/rsync
 
@@ -42,6 +42,7 @@ uninstall:
 	rm -f $(PREFIX)/bin/rsync
 	rm -f $(PREFIX)/share/man/man1/openrsync.1
 	rm -f $(PREFIX)/share/man/man5/rsync.5
+	rm -f $(PREFIX)/share/man/man5/rsyncd.5
 
 clean:
 	rm -f $(ALLOBJS) openrsync $(AFLS)
