@@ -191,6 +191,9 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 		if (-1 == fstat(ffd, &st)) {
 			WARN(sess, "fstat: %s", f->path);
 			goto out;
+		} else if (S_ISDIR(st.st_mode)) {
+			LOG3(sess, "skipping directory: %s", f->path);
+			return 1;
 		} else if ( ! S_ISREG(st.st_mode)) {
 			WARNX(sess, "not a regular file: %s", f->path);
 			goto out;
@@ -497,6 +500,8 @@ rsync_receiver(struct sess *sess,
 	 * This will be the basis of all future files.
 	 */
 
+	LOG2(sess, "receiver writing into: %s", root);
+
 	if (-1 == (dfd = open(root, O_RDONLY | O_DIRECTORY, 0))) {
 		ERR(sess, "open: %s", root);
 		goto out;
@@ -509,8 +514,7 @@ rsync_receiver(struct sess *sess,
 	 * til I understand the need.
 	 */
 
-	LOG2(sess, "receiver ready for %zu-checksum "
-		"data: %s", csum_length, root);
+	LOG2(sess, "receiver ready for phase 1 data: %s", root);
 
 	if (NULL == (newdir = calloc(flsz, sizeof(int)))) {
 		ERR(sess, "calloc");
@@ -553,6 +557,8 @@ rsync_receiver(struct sess *sess,
 		}
 		phase++;
 		csum_length = CSUM_LENGTH_PHASE2;
+		LOG2(sess, "receiver ready for "
+			"phase 2 data: %s", root);
 
 		/* 
 		 * FIXME: under what conditions should we resend files?

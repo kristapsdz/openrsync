@@ -60,8 +60,7 @@ rsync_sender(struct sess *sess, int fdin,
 	int fdout, size_t argc, char **argv)
 {
 	struct flist	*fl = NULL;
-	size_t		 flsz = 0, phase = 0,
-			 csum_length = CSUM_LENGTH_PHASE1;
+	size_t		 flsz = 0, phase = 0;
 	int		 rc = 0, c;
 	int32_t		 idx, preamble;
 	struct blkset	*blks = NULL;
@@ -109,8 +108,7 @@ rsync_sender(struct sess *sess, int fdin,
 	 * second has a full 16-byte checksum.
 	 */
 
-	LOG2(sess, "sender transmitting "
-		"%zu-checksum data", csum_length);
+	LOG2(sess, "sender transmitting phase 1 data");
 
 	for (;;) {
 		if ( ! io_read_int(sess, fdin, &idx)) {
@@ -132,20 +130,16 @@ rsync_sender(struct sess *sess, int fdin,
 
 			/* FIXME: I don't understand this ack. */
 
-#if 0
-			if (sess->opts->server && sess->rver > 20)
+			if (sess->opts->server && sess->rver > 27)
 				if ( ! io_write_int(sess, fdout, idx)) {
 					ERRX1(sess, "io_write_int: "
 						"superfluous ack");
 					goto out;
 				}
-#endif
 
 			if (phase++)
 				break;
-			csum_length = CSUM_LENGTH_PHASE2;
-			LOG2(sess, "sender transmitting "
-				"%zu-checksum data", csum_length);
+			LOG2(sess, "sender transmitting phase 2 data");
 			continue;
 		}
 
@@ -173,9 +167,6 @@ rsync_sender(struct sess *sess, int fdin,
 			continue;
 		}
 
-		/* FIXME. */
-		LOG1(sess, "%s", fl[idx].path);
-
 		/*
 		 * The server will now send us its view of the file.
 		 * It does so by cutting a file into a series of blocks
@@ -185,7 +176,7 @@ rsync_sender(struct sess *sess, int fdin,
 		 * don't have.
 		 */
 
-		blks = blk_recv(sess, fdin, csum_length, fl[idx].path);
+		blks = blk_recv(sess, fdin, fl[idx].path);
 		if (NULL == blks) {
 			ERRX1(sess, "blk_recv");
 			goto out;
@@ -194,8 +185,7 @@ rsync_sender(struct sess *sess, int fdin,
 			goto out;
 		}
 
-		c = blk_match(sess, fdout, blks, 
-			fl[idx].path, csum_length);
+		c = blk_match(sess, fdout, blks, fl[idx].path);
 		blkset_free(blks);
 
 		if ( ! c) {

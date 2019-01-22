@@ -61,9 +61,8 @@ blk_flush(struct sess *sess, int fd, const void *b, off_t size)
  * Returns the blk or NULL if no matching block was found.
  */
 static struct blk *
-blk_find(struct sess *sess, const void *buf, 
-	off_t size, off_t offs, const struct blkset *blks, 
-	size_t csum_length, const char *path)
+blk_find(struct sess *sess, const void *buf, off_t size, 
+	off_t offs, const struct blkset *blks, const char *path)
 {
 	unsigned char	 md[MD5_DIGEST_LENGTH];
 	uint32_t	 fhash;
@@ -107,7 +106,7 @@ blk_find(struct sess *sess, const void *buf,
 			have_md = 1;
 		}
 
-		if (memcmp(md, blks->blks[i].chksum_long, csum_length))
+		if (memcmp(md, blks->blks[i].chksum_long, blks->csum))
 			continue;
 
 		LOG4(sess, "%s: sender verifies slow match", path);
@@ -127,9 +126,8 @@ blk_find(struct sess *sess, const void *buf,
  * Return zero on failure, non-zero on success.
  */
 static int
-blk_match_part(struct sess *sess, const char *path,
-	int fd, const void *buf, off_t size, 
-	const struct blkset *blks, size_t csum_length)
+blk_match_part(struct sess *sess, const char *path, int fd, 
+	const void *buf, off_t size, const struct blkset *blks)
 {
 	off_t	 	 offs, last, end, fromcopy = 0, fromdown = 0;
 	struct blk	*blk;
@@ -145,8 +143,7 @@ blk_match_part(struct sess *sess, const char *path,
 	end = size + 1 - blks->blks[blks->blksz - 1].len;
 
 	for (last = offs = 0; offs < end; offs++) {
-		blk = blk_find(sess, buf, size, 
-			offs, blks, csum_length, path);
+		blk = blk_find(sess, buf, size, offs, blks, path);
 		if (NULL == blk)
 			continue;
 
@@ -209,8 +206,8 @@ blk_match_full(struct sess *sess, int fd, const void *buf, off_t size)
  * Return zero on failure, non-zero on success.
  */
 int
-blk_match(struct sess *sess, int fd, const struct blkset *blks, 
-	const char *path, size_t csum_length)
+blk_match(struct sess *sess, int fd, 
+	const struct blkset *blks, const char *path)
 {
 	int	 	 nfd, rc = 0;
 	struct stat	 st;
@@ -244,8 +241,7 @@ blk_match(struct sess *sess, int fd, const struct blkset *blks,
 	 */
 
 	if (st.st_size && blks->blksz) {
-		blk_match_part(sess, path, fd, map, 
-			st.st_size, blks, csum_length);
+		blk_match_part(sess, path, fd, map, st.st_size, blks);
 		LOG3(sess, "%s: sent chunked %zu blocks of "
 			"%zu B (%zu B remainder)", path, blks->blksz, 
 			blks->len, blks->rem);
@@ -312,8 +308,7 @@ blk_recv_ack(struct sess *sess,
  * Returns the set of blocks or NULL on failure.
  */
 struct blkset *
-blk_recv(struct sess *sess, int fd, 
-	size_t csum_length, const char *path)
+blk_recv(struct sess *sess, int fd, const char *path)
 {
 	struct blkset	*s;
 	int32_t		 i;
@@ -337,11 +332,11 @@ blk_recv(struct sess *sess, int fd,
 	} else if ( ! io_read_size(sess, fd, &s->len)) {
 		ERRX1(sess, "io_read_sisze: block length");
 		goto out;
-	} else if ( ! io_read_size(sess, fd, &s->rem)) {
-		ERRX1(sess, "io_read_int: block remainder");
-		goto out;
 	} else if ( ! io_read_size(sess, fd, &s->csum)) {
 		ERRX1(sess, "io_read_int: checksum length");
+		goto out;
+	} else if ( ! io_read_size(sess, fd, &s->rem)) {
+		ERRX1(sess, "io_read_int: block remainder");
 		goto out;
 	} else if (s->rem && s->rem >= s->len) {
 		ERRX(sess, "block remainder is "
@@ -350,8 +345,8 @@ blk_recv(struct sess *sess, int fd,
 	}
 
 	LOG3(sess, "%s: read block prologue: %zu blocks of "
-		"%zu B, %zu B remainder", path, s->blksz, 
-		s->len, s->rem);
+		"%zu B, %zu B remainder, %zu B checksum", path, 
+		s->blksz, s->len, s->rem, s->csum);
 
 	if (s->blksz) {
 		s->blks = calloc(s->blksz, sizeof(struct blk));
@@ -371,9 +366,9 @@ blk_recv(struct sess *sess, int fd,
 		}
 		b->chksum_short = i;
 
-		assert(csum_length <= sizeof(b->chksum_long));
+		assert(s->csum <= sizeof(b->chksum_long));
 		if ( ! io_read_buf(sess, 
-		    fd, b->chksum_long, csum_length)) {
+		    fd, b->chksum_long, s->csum)) {
 			ERRX1(sess, "io_read_buf: slow checksum");
 			goto out;
 		}
@@ -597,7 +592,8 @@ blk_send(struct sess *sess, int fd,
 		}
 	}
 
-	LOG3(sess, "%s: sent block metadata: %zu blocks of %zu B, "
-		"%zu B remainder", path, p->blksz, p->len, p->rem);
+	LOG3(sess, "%s: sent block prologue: %zu blocks of %zu B, "
+		"%zu B remainder, %zu B checksum", path, 
+		p->blksz, p->len, p->rem, p->csum);
 	return 1;
 }
