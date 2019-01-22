@@ -27,7 +27,7 @@ protocol described in this relates to the BSD-licensed
 .Xr openrsync 1 ,
 a re-implementation of the GPL-licensed reference utility
 .Xr rsync 1 .
-It is compatible with version 20 of the reference, although it requires
+It is compatible with version 27 of the reference, although it requires
 the use of MD5 checksums instead of MD4.
 .Pp
 The
@@ -37,8 +37,6 @@ protocol is an envelope protocol for
 between a client and an rsync://-capable server.
 It provides a means to exchange capabilities information prior to file
 transfer.
-It also changes the underlying transport to use multiplexing so that the
-server's error messages may be serialised.
 .Pp
 In this document,
 .Qq client
@@ -59,26 +57,7 @@ information) is not described in this document.
 .Ss Data types
 These are the same as in
 .Xr rsync 5 .
-A newline, as described in this document, is always a standalone \en.
-.Ss Multiplexing
-.Nm
-uses the same wire format as described in
-.Xr rsync 5 ,
-except that data is wrapped in a multiplexing envelope protocol.
-Each transmission is composed as follows:
-.Pp
-.Bl -enum -compact
-.It
-envelope header (4 bytes)
-.It
-envelope payload (arbitrary length)
-.El
-.Pp
-The first byte of the envelope header consists of a tag.
-If the tag is 7, the payload is normal data conforming to
-.Xr rsync 5 .
-Otherwise, the payload is out-of-band data, such as server messages.
-This may be discarded, but is usually shown to the operator.
+A newline is always a standalone \en.
 .Ss Client process
 After initialising a connection, the client and server exchange the
 following information, in order.

@@ -27,7 +27,7 @@ protocol described in this relates to the BSD-licensed
 .Xr openrsync 1 ,
 a re-implementation of the GPL-licensed reference utility
 .Xr rsync 1 .
-It is compatible with version 20 of the reference, although it requires
+It is compatible with version 27 of the reference, although it requires
 the use of MD5 checksums instead of MD4.
 .Pp
 In this document, the
@@ -52,6 +52,26 @@ The fast checksum is a derivative of Adler-32.
 The long checksum is MD5.
 For non-whole-file long checksums, the sum is made over the checksum
 seed first (serialised in little-endian format), then the data.
+.Ss Multiplexing
+Most
+.Nm
+transmissions are wrapped in a multiplexing envelope protocol.
+It is composed as follows:
+.Pp
+.Bl -enum -compact
+.It
+envelope header (4 bytes)
+.It
+envelope payload (arbitrary length)
+.El
+.Pp
+The first byte of the envelope header consists of a tag.
+If the tag is 7, the payload is normal data.
+Otherwise, the payload is out-of-band data, such as server messages.
+This may be discarded, but is usually shown to the operator.
+.Pp
+The only data not using this envelope are the initial handshake between
+client and server.
 .Ss Client process
 The client can operate in sender or receiver mode depending upon the
 command-line source and destination.
@@ -63,7 +83,11 @@ to the client.
 If neither are remote, the client operates in sender mode.
 These are all mutually exclusive.
 .Pp
-When the client starts, regardless its mode, it first handshakes the server:
+When the client starts, regardless its mode, it first handshakes the
+server.
+This exchange is
+.Em not
+multiplexed.
 .Pp
 .Bl -enum -compact
 .It
@@ -74,6 +98,8 @@ receive remote version (integer)
 receive random seed (integer)
 .El
 .Pp
+Following this, the client multiplexes when reading from the server.
+(Transmissions sent from client to server are not multiplexed.)
 If the client is in sender mode, it then sends data on each file to be
 synchronised as follows.
 .Pp
@@ -221,7 +247,10 @@ When in sender mode, the server pushes data to the client.
 In receiver, the opposite is true.
 .Pp
 When the server starts, regardless the mode, it first handshakes the
-client:
+client.
+This exchange is
+.Em not
+multiplexed.
 .Pp
 .Bl -enum -compact
 .It
@@ -232,8 +261,10 @@ receive remote version (integer)
 send random seed (integer)
 .El
 .Pp
-Following that, it either sends the file list (in sender mode) or
-receives it in receiver mode.
+Following this, the server multiplexes when writing to the client.
+(Transmissions received from the client are not multiplexed.)
+It then either sends the file list (in sender mode) or receives it in
+receiver mode.
 This is described in the
 .Sx Client process
 section.
@@ -255,7 +286,7 @@ the receiver does not receive statistics when in server mode
 .It
 when in server mode
 .Em and
-when communicating to a client with a newer protocol (>20), the phase
+when communicating to a client with a newer protocol (>27), the phase
 change integer (-1) must be sent twice
 .El
 .Pp
