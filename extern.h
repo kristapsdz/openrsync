@@ -134,6 +134,8 @@ struct	sess {
 	int32_t		   seed; /* checksum seed */
 	int32_t		   lver; /* local version */
 	int32_t		   rver; /* remote version */
+	int		   mplex_reads; /* multiplexing reads? */
+	size_t		   mplex_read_remain; /* remaining bytes */
 };
 
 #define LOG1(_sess, _fmt, ...) \
@@ -190,11 +192,6 @@ int		  flist_send(struct sess *, int, const struct flist *, size_t);
 
 char		**fargs_cmdline(struct sess *, const struct fargs *);
 
-#if 0
-int		  io_connect_wait(const struct opts *, int);
-int		  io_read_buf_nonblock(const struct opts *, int, void *, size_t, size_t *);
-int		  io_write_line(const struct opts *, int, const char *);
-#endif
 int		  io_read_buf(struct sess *, int, void *, size_t);
 int		  io_read_byte(struct sess *, int, uint8_t *);
 int		  io_read_int(struct sess *, int, int32_t *);
@@ -203,16 +200,18 @@ int		  io_read_long(struct sess *, int, int64_t *);
 int		  io_write_buf(struct sess *, int, const void *, size_t);
 int		  io_write_byte(struct sess *, int, uint8_t);
 int		  io_write_int(struct sess *, int, int32_t);
+int		  io_write_line(struct sess *, int, const char *);
 int		  io_write_long(struct sess *, int, int64_t);
+
+int		  io_read_blocking(struct sess *, int, void *, size_t);
+int		  io_read_nonblocking(struct sess *, int, void *, size_t, size_t *);
 
 void		  rsync_child(const struct opts *, int, const struct fargs *)
 			__attribute__((noreturn));
 int		  rsync_receiver(struct sess *, int, int, const char *);
 int		  rsync_sender(struct sess *, int, int, size_t, char **);
 int		  rsync_client(const struct opts *, int, const struct fargs *);
-#if 0
-int		  rsync_socket(struct opts *, const struct fargs *);
-#endif
+int		  rsync_socket(const struct opts *, const struct fargs *);
 int		  rsync_server(const struct opts *, size_t, char *[]);
 
 struct blkset	 *blk_recv(struct sess *, int, size_t, const char *);

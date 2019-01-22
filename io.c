@@ -14,13 +14,13 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#include <sys/socket.h>
 #include <sys/stat.h>
 
+#include <assert.h>
 #include <endian.h>
 #include <errno.h>
-#include <inttypes.h> /* debugging */
 #include <poll.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -29,7 +29,7 @@
 #include "extern.h"
 
 /*
- * Write buffer to non-blocking descriptor.
+ * Write "buf" of size "sz" to non-blocking descriptor.
  * Returns zero on failure, non-zero on success (all bytes written to
  * the descriptor).
  */
@@ -37,13 +37,12 @@ int
 io_write_buf(struct sess *sess, int fd, const void *buf, size_t sz)
 {
 	struct pollfd	pfd;
-	size_t		bsz = sz;
 	ssize_t		wsz;
 
 	pfd.fd = fd;
 	pfd.events = POLLOUT;
 
-	while (bsz > 0) {
+	while (sz > 0) {
 		if (poll(&pfd, 1, INFTIM) < 0) {
 			ERR(sess, "poll");
 			return 0;
@@ -59,7 +58,7 @@ io_write_buf(struct sess *sess, int fd, const void *buf, size_t sz)
 			return 0;
 		}
 
-		if ((wsz = write(fd, buf, bsz)) < 0) {
+		if ((wsz = write(fd, buf, sz)) < 0) {
 			ERR(sess, "write");
 			return 0;
 		} else if (0 == wsz) {
@@ -67,12 +66,16 @@ io_write_buf(struct sess *sess, int fd, const void *buf, size_t sz)
 			return 0;
 		}
 		buf += wsz;
-		bsz -= wsz;
+		sz -= wsz;
 	}
 
 	return 1;
 }
 
+/*
+ * Write "line" (NUL-terminated) followed by a newline.
+ * Returns zero on failure, non-zero on succcess.
+ */
 int
 io_write_line(struct sess *sess, int fd, const char *line)
 {
@@ -92,11 +95,13 @@ io_write_line(struct sess *sess, int fd, const char *line)
  * Returns zero on failure, non-zero on success (zero or more bytes).
  */
 int
-io_read_buf_nonblock(struct sess *sess, 
+io_read_nonblocking(struct sess *sess, 
 	int fd, void *buf, size_t bsz, size_t *sz)
 {
 	struct pollfd	pfd;
 	ssize_t		rsz;
+
+	*sz = 0;
 
 	if (0 == bsz)
 		return 1;
@@ -129,86 +134,131 @@ io_read_buf_nonblock(struct sess *sess,
  * Blocking read of the full size of the buffer.
  * Returns 0 on failure, non-zero on success (all bytes read).
  */
-static int
-io_read_block(struct sess *sess, int fd, void *buf, size_t sz)
+int
+io_read_blocking(struct sess *sess, int fd, void *buf, size_t sz)
 {
-	size_t	 bsz = sz, rsz;
+	size_t	 rsz;
 	int	 c;
 
-	while (bsz > 0) {
-		c = io_read_buf_nonblock(sess, fd, buf, bsz, &rsz);
+	while (sz > 0) {
+		c = io_read_nonblocking(sess, fd, buf, sz, &rsz);
 		if ( ! c) {
-			ERRX1(sess, "io_read_buf_nonblock");
+			ERRX1(sess, "io_read_nonblocking");
 			return 0;
 		}else if (0 == rsz) {
-			ERRX(sess, "io_read_buf_nonblock: short read");
+			ERRX(sess, "io_read_nonblocking: short read");
 			return 0;
 		}
 		buf += rsz;
-		bsz -= rsz;
+		sz -= rsz;
 	}
 
 	return 1;
 }
 
 /*
- * Read buffer from non-blocking descriptor.
+ * Read buffer from non-blocking descriptor, possibly in multiplex read
+ * mode.
  * Returns zero on failure, non-zero on success (all bytes read from
  * the descriptor).
  */
 int
 io_read_buf(struct sess *sess, int fd, void *buf, size_t sz)
 {
-	return io_read_block(sess, fd, buf, sz);
-#if 0
-	char	 mplexbuf[1024];
+	char	 mpbuf[1024];
 	int32_t	 tagbuf, tag;
-	size_t	 rsz, rem;
+	size_t	 rsz;
 
-	if (0 == sz)
-		return 1;
+	/* If we're not multiplexing, read directly. */
 
-	if ( ! opts->multiplex_reads) 
-		return io_read_block(opts, fd, buf, sz);
+	if ( ! sess->mplex_reads) {
+		assert(0 == sess->mplex_read_remain);
+		return io_read_blocking(sess, fd, buf, sz);
+	}
 
 	while (sz > 0) {
-		LOG1(opts, "reading multiplex tag");
-		if ( ! io_read_block(opts, fd, &tagbuf, sizeof(tagbuf))) {
-			ERRX1(opts, "io_read_block: multiplex tag");
+		/*
+		 * First, check to see if we have any regular data
+		 * hanging around waiting to be read.
+		 * If so, read the lesser of that data and whatever
+		 * amount we currently want.
+		 */
+
+		if (sess->mplex_read_remain) {
+			rsz = sess->mplex_read_remain < sz ?
+				sess->mplex_read_remain : sz;
+			if ( ! io_read_blocking(sess, fd, buf, rsz)) {
+				ERRX1(sess, "io_read_blocking: "
+					"multiplexed normal data");
+				return 0;
+			}
+			sz -= rsz;
+			sess->mplex_read_remain -= rsz;
+			buf += rsz;
+			continue;
+		}
+
+		/*
+		 * We're multiplexing.
+		 * First, read the 4-byte multiplex tag.
+		 * The first byte is the tag identifier (7 for normal
+		 * data, !7 for out-of-band data), the last three are
+		 * for the remaining data size.
+		 */
+
+		assert(0 == sess->mplex_read_remain);
+		if ( ! io_read_blocking(sess, fd, &tagbuf, sizeof(tagbuf))) {
+			ERRX1(sess, "io_read_blocking: "
+				"multiplex tag identifier");
 			return 0;
 		}
 		tag = letoh32(tagbuf);
-		rem = tag & 0xFFFFFF;
+		sess->mplex_read_remain = tag & 0xFFFFFF;
 		tag >>= 24;
-		LOG1(opts, "multiplex tag: %" PRId32, tag);
-		if (7 == tag) {
-			while (rem > 0) {
-				rsz = rem > sz ? sz : rem;
-				if ( ! io_read_block(opts, fd, buf, rsz)) {
-					ERRX1(opts, "io_read_block: multiplexed data");
-					return 0;
-				}
-				sz -= rsz;
-				buf += rsz;
-				continue;
-			}
-		}
+		if (7 == tag)
+			continue;
 		tag -= 7;
-		if (rem >= sizeof(mplexbuf)) {
-			ERRX(opts, "multiplex buffer overflow");
+
+		if (sess->mplex_read_remain > sizeof(mpbuf)) {
+			ERRX(sess, "multiplex buffer overflow");
+			return 0;
+		} else if (0 == sess->mplex_read_remain)
+			continue;
+
+		if ( ! io_read_blocking(sess, fd, 
+		    mpbuf, sess->mplex_read_remain)) {
+			ERRX1(sess, "io_read_blocking: "
+				"multiplexed out-of-band data");
 			return 0;
 		}
-		if ( ! io_read_block(opts, fd, mplexbuf, rem)) {
-			ERRX1(opts, "io_read_block: multiplexed subchannel");
-			return 0;
+		if ('\n' == mpbuf[sess->mplex_read_remain - 1])
+			mpbuf[--sess->mplex_read_remain] = '\0';
+
+		/* The tag seems to indicate severity...? */
+		
+		switch (tag) {
+		case 3:
+			LOG2(sess, "server (debug): %.*s", 
+				(int)sess->mplex_read_remain, mpbuf);
+			break;
+		case 2:
+			LOG1(sess, "server (info): %.*s", 
+				(int)sess->mplex_read_remain, mpbuf);
+			break;
+		case 1:
+			WARNX(sess, "server (error): %.*s", 
+				(int)sess->mplex_read_remain, mpbuf);
+			break;
+		default:
+			LOG3(sess, "server (unknown channel): %.*s", 
+				(int)sess->mplex_read_remain, mpbuf);
+			break;
 		}
-		if ('\n' == mplexbuf[rem - 1])
-			mplexbuf[--rem] = '\0';
-		LOG1(opts, "multiplexed: %.*s", (int)rem, mplexbuf);
+
+		sess->mplex_read_remain = 0;
 	}
 
 	return 1;
-#endif
 }
 
 int
@@ -332,44 +382,6 @@ io_write_byte(struct sess *sess, int fd, uint8_t val)
 		ERRX(sess, "io_write_buf");
 		return 0;
 	}
-	return 1;
-}
-
-/*
- * Waits for a connection to complete.
- * Unlike other functions, this doesn't just return true/false.
- * If it manages to connect, it returns >1.
- * If it fails to connect because the host cannot be found or the
- * connection was terminaed, it returns 0.
- * If it fails because of non-endpoint-related errors, <0.
- */
-int
-io_connect_wait(struct sess *sess, int fd)
-{
-	struct pollfd	pfd[1];
-	int 		er = 0;
-	socklen_t 	len = sizeof(int);
-
-	pfd[0].fd = fd;
-	pfd[0].events = POLLOUT;
-
-	if (-1 == poll(pfd, 1, INFTIM)) {
-		ERR(sess, "poll");
-		return -1;
-	}
-
-	if (-1 == getsockopt(fd, SOL_SOCKET, SO_ERROR, &er, &len)) {
-		ERR(sess, "getsockopt");
-		return -1;
-	} else if (er != 0) {
-		if (ECONNREFUSED == er || EHOSTUNREACH == er) {
-			return 0;
-		}
-		errno = er;
-		ERR(sess, "connect");
-		return -1;
-	}
-
 	return 1;
 }
 
