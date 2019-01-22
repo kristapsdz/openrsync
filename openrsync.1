@@ -30,12 +30,9 @@ The
 .Nm
 utility synchronises files in the destination directory
 .Ar dst
-with one or more source files
+with one or more source files or directories
 .Ar src .
-Either the source or the destination (but not both) may be on a remote
-host.
-Remote hosts are reached using
-.Xr ssh 1 .
+Either the source or the destination (but not both) may be remote.
 The arguments are as follows:
 .Bl -tag -width Ds
 .It Fl n
@@ -62,6 +59,37 @@ Specify once for files being transferred, twice for specific status,
 thrice for per-file transfer information, and four times for per-file
 breakdowns.
 .El
+.Pp
+Remote
+.Ar src
+or
+.Ar dst
+files and directories have the syntax of
+.Ar host:path
+for connecting via
+.Xr ssh 1 ,
+or
+.Ar rsync://host/path
+or
+.Ar host::path
+for connecting to a remote daemon.
+Subsequent to the first remote
+.Ar src ,
+the host may be dropped to become just
+.Ar :path
+or
+.Ar ::path .
+.Pp
+For connecting to a remote daemon with
+.Ar rsync://host
+or
+.Ar host::path ,
+the first path component is interpreted as a
+.Qq module :
+.Ar host::module/path .
+This only applies to the first
+.Ar src
+invocation; subsequent to that, the module should not be specified.
 .Pp
 By default, new destination files and directories are given the current
 time and the source file permissions.
