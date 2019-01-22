@@ -16,6 +16,8 @@ and [unveil](https://man.openbsd.org/unveil.2).
 
 See
 [rsync.5](https://github.com/kristapsdz/openrsync/blob/master/rsync.5)
+and
+[rsyncd.5](https://github.com/kristapsdz/openrsync/blob/master/rsyncd.5)
 for protocol details or utility documentation in
 [openrsync.1](https://github.com/kristapsdz/openrsync/blob/master/openrsync.1).
 
