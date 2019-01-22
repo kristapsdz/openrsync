@@ -23,7 +23,6 @@
 #include <ctype.h>
 #include <errno.h>
 #include <inttypes.h>
-#include <md5.h>
 #include <netdb.h>
 #include <poll.h>
 #include <resolv.h>
