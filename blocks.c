@@ -297,6 +297,8 @@ blk_recv_ack(struct sess *sess,
 		ERRX1(sess, "io_write_int: send ack: block count");
 	else if ( ! io_write_int(sess, fd, blocks->len))
 		ERRX1(sess, "io_write_int: send ack: block size");
+	else if ( ! io_write_int(sess, fd, blocks->csum))
+		ERRX1(sess, "io_write_int: send ack: checksum length");
 	else if ( ! io_write_int(sess, fd, blocks->rem))
 		ERRX1(sess, "io_write_int: send ack: remainder");
 	else
@@ -337,6 +339,9 @@ blk_recv(struct sess *sess, int fd,
 		goto out;
 	} else if ( ! io_read_size(sess, fd, &s->rem)) {
 		ERRX1(sess, "io_read_int: block remainder");
+		goto out;
+	} else if ( ! io_read_size(sess, fd, &s->csum)) {
+		ERRX1(sess, "io_read_int: checksum length");
 		goto out;
 	} else if (s->rem && s->rem >= s->len) {
 		ERRX(sess, "block remainder is "
@@ -405,7 +410,7 @@ int
 blk_send_ack(struct sess *sess, int fd, 
 	const struct blkset *blocks, size_t idx)
 {
-	size_t		 rem, len, blksz, nidx;
+	size_t		 rem, len, blksz, nidx, csum;
 
 	if ( ! io_read_size(sess, fd, &nidx))
 		ERRX1(sess, "io_read_size: read ack");
@@ -419,6 +424,10 @@ blk_send_ack(struct sess *sess, int fd,
 		ERRX1(sess, "io_read_size: read ack: block size");
 	else if (len != blocks->len)
 		ERRX1(sess, "read ack: block sizes don't match");
+	else if ( ! io_read_size(sess, fd, &csum))
+		ERRX1(sess, "io_read_size: read ack: checksum length");
+	else if (csum != blocks->csum)
+		ERRX1(sess, "read ack: checksum lengths don't match");
 	else if ( ! io_read_size(sess, fd, &rem))
 		ERRX1(sess, "io_read_size: read ack: remainder");
 	else if (rem != blocks->rem)
@@ -564,6 +573,9 @@ blk_send(struct sess *sess, int fd,
 	} else if ( ! io_write_int(sess, fd, p->len)) {
 		ERRX1(sess, "io_write_int: block length");
 		return 0;
+	} else if ( ! io_write_int(sess, fd, p->csum)) {
+		ERRX1(sess, "io_write_int: checksum length");
+		return 0;
 	} else if ( ! io_write_int(sess, fd, p->rem)) {
 		ERRX1(sess, "io_write_int: block remainder");
 		return 0;
@@ -573,6 +585,10 @@ blk_send(struct sess *sess, int fd,
 		b = &p->blks[i];
 		if ( ! io_write_int(sess, fd, b->chksum_short)) {
 			ERRX1(sess, "io_write_int: short checksum");
+			return 0;
+		}
+		if ( ! io_write_buf(sess, fd, b->chksum_long, len)) {
+			ERRX1(sess, "io_write_int: long checksum");
 			return 0;
 		}
 		if ( ! io_write_buf(sess, fd, b->chksum_long, len)) {

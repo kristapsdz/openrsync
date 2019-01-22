@@ -29,6 +29,80 @@
 #include "extern.h"
 
 /*
+ * Write buffer to non-blocking descriptor.
+ * Returns zero on failure, non-zero on success (zero or more bytes).
+ */
+int
+io_write_nonblocking(struct sess *sess, 
+	int fd, const void *buf, size_t bsz, size_t *sz)
+{
+	struct pollfd	pfd;
+	ssize_t		wsz;
+
+	*sz = 0;
+
+	if (0 == bsz)
+		return 1;
+
+	pfd.fd = fd;
+	pfd.events = POLLOUT;
+
+	if (poll(&pfd, 1, INFTIM) < 0) {
+		ERR(sess, "poll");
+		return 0;
+	}
+	if ((pfd.revents & (POLLERR|POLLNVAL))) {
+		ERRX(sess, "poll: bad fd");
+		return 0;
+	} else if ((pfd.revents & POLLHUP)) {
+		ERRX(sess, "poll: hangup");
+		return 0;
+	} else if ( ! (pfd.revents & POLLOUT)) {
+		ERRX(sess, "poll: unknown event");
+		return 0;
+	}
+
+	if ((wsz = write(fd, buf, bsz)) < 0) {
+		ERR(sess, "write");
+		return 0;
+	}
+
+	*sz = wsz;
+	return 1;
+}
+
+/*
+ * Blocking write of the full size of the buffer.
+ * Returns 0 on failure, non-zero on success (all bytes written).
+ */
+int
+io_write_blocking(struct sess *sess, 
+	int fd, const void *buf, size_t sz)
+{
+	struct pollfd	pfd;
+	ssize_t		wsz;
+	int		c;
+
+	pfd.fd = fd;
+	pfd.events = POLLOUT;
+
+	while (sz > 0) {
+		c = io_write_nonblocking(sess, fd, buf, sz, &wsz);
+		if ( ! c) {
+			ERRX1(sess, "io_write_nonblocking");
+			return 0;
+		} else if (0 == wsz) {
+			ERRX(sess, "io_write_nonblocking: short write");
+			return 0;
+		}
+		buf += wsz;
+		sz -= wsz;
+	}
+
+	return 1;
+}
+
+/*
  * Write "buf" of size "sz" to non-blocking descriptor.
  * Returns zero on failure, non-zero on success (all bytes written to
  * the descriptor).
@@ -36,37 +110,26 @@
 int
 io_write_buf(struct sess *sess, int fd, const void *buf, size_t sz)
 {
-	struct pollfd	pfd;
-	ssize_t		wsz;
+	int32_t	 tag, tagbuf;
+	size_t	 wsz;
 
-	pfd.fd = fd;
-	pfd.events = POLLOUT;
+	if ( ! sess->mplex_writes)
+		return io_write_blocking(sess, fd, buf, sz);
 
 	while (sz > 0) {
-		if (poll(&pfd, 1, INFTIM) < 0) {
-			ERR(sess, "poll");
+		wsz = sz & 0xFFFFFF;
+		tag = (7 << 24) + wsz;
+		tagbuf = htole32(tag);
+		if ( ! io_write_blocking(sess, fd, &tagbuf, sizeof(tagbuf))) {
+			ERRX1(sess, "io_write_blocking");
 			return 0;
 		}
-		if ((pfd.revents & (POLLERR|POLLNVAL))) {
-			ERRX(sess, "poll: bad fd");
-			return 0;
-		} else if ((pfd.revents & POLLHUP)) {
-			ERRX(sess, "poll: hangup");
-			return 0;
-		} else if ( ! (pfd.revents & POLLOUT)) {
-			ERRX(sess, "poll: unknown event");
+		if ( ! io_write_blocking(sess, fd, buf, wsz)) {
+			ERRX1(sess, "io_write_blocking");
 			return 0;
 		}
-
-		if ((wsz = write(fd, buf, sz)) < 0) {
-			ERR(sess, "write");
-			return 0;
-		} else if (0 == wsz) {
-			ERRX(sess, "write: short write");
-			return 0;
-		}
-		buf += wsz;
 		sz -= wsz;
+		buf += wsz;
 	}
 
 	return 1;
@@ -135,7 +198,8 @@ io_read_nonblocking(struct sess *sess,
  * Returns 0 on failure, non-zero on success (all bytes read).
  */
 int
-io_read_blocking(struct sess *sess, int fd, void *buf, size_t sz)
+io_read_blocking(struct sess *sess, 
+	int fd, void *buf, size_t sz)
 {
 	size_t	 rsz;
 	int	 c;
@@ -145,7 +209,7 @@ io_read_blocking(struct sess *sess, int fd, void *buf, size_t sz)
 		if ( ! c) {
 			ERRX1(sess, "io_read_nonblocking");
 			return 0;
-		}else if (0 == rsz) {
+		} else if (0 == rsz) {
 			ERRX(sess, "io_read_nonblocking: short read");
 			return 0;
 		}

@@ -62,6 +62,8 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 		", server version %" PRId32 ", seed %" PRId32,
 		sess.lver, sess.rver, sess.seed);
 
+	sess.mplex_reads = 1;
+
 	/*
 	 * Now we need to get our list of files.
 	 * Senders (and locals) send; receivers receive.

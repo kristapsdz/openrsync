@@ -88,6 +88,8 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 		goto out;
 	}
 
+	sess.mplex_writes = 1;
+
 	LOG2(&sess, "server detected client version %" PRId32 
 		", server version %" PRId32 ", seed %" PRId32,
 		sess.rver, sess.lver, sess.seed);

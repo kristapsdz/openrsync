@@ -26,7 +26,7 @@
  * (This was changed in version 27, which is probably the next target
  * for protocol compatibility.)
  */
-#define	RSYNC_PROTOCOL	(20)
+#define	RSYNC_PROTOCOL	(27)
 
 /*
  * Maximum amount of data sent over the wire at once.
@@ -122,6 +122,7 @@ struct	blkset {
 	off_t		 size; /* file size */
 	size_t		 rem; /* terminal block length if non-zero */
 	size_t		 len; /* block length */
+	size_t		 csum; /* checksum length */
 	struct blk	*blks; /* all blocks */
 	size_t		 blksz; /* number of blks */
 };
@@ -136,6 +137,7 @@ struct	sess {
 	int32_t		   rver; /* remote version */
 	int		   mplex_reads; /* multiplexing reads? */
 	size_t		   mplex_read_remain; /* remaining bytes */
+	int		   mplex_writes; /* multiplexing writes? */
 };
 
 #define LOG1(_sess, _fmt, ...) \
