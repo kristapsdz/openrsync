@@ -23,16 +23,22 @@
 .Sh SYNOPSIS
 .Nm openrsync
 .Op Fl nprtv
-.Ar src ...
-.Ar dst
+.Ar source ...
+.Ar directory
 .Sh DESCRIPTION
 The
 .Nm
-utility synchronises files in the destination directory
-.Ar dst
-with one or more source files or directories
-.Ar src .
-Either the source or the destination (but not both) may be remote.
+utility synchronises files in the destination
+.Ar directory
+with one or more
+.Ar source
+files.
+Either the
+.Ar source
+or the destination
+.Ar directory
+may be remote,
+but not both.
 The arguments are as follows:
 .Bl -tag -width Ds
 .It Fl n
@@ -43,13 +49,16 @@ Set destination file or directory permissions to match the source when
 it is updated.
 .It Fl r
 If
-.Ar src
+.Ar source
 designates a directory, synchronise the directory and the entire subtree
 connected at that point.
 If
-.Ar src
+.Ar source
 ends with a slash, only the subtree is synchronised, not the root
 directory.
+If
+.Ar source
+is a file, this has no effect.
 .It Fl t
 Set destination file and directory modification time to match the source
 when it is updated or created.
@@ -60,11 +69,11 @@ thrice for per-file transfer information, and four times for per-file
 breakdowns.
 .El
 .Pp
-Remote
-.Ar src
+A remote
+.Ar source
 or
-.Ar dst
-files and directories have the syntax of
+.Ar directory
+has syntax
 .Ar host:path
 for connecting via
 .Xr ssh 1 ,
@@ -74,7 +83,7 @@ or
 .Ar host::path
 for connecting to a remote daemon.
 Subsequent to the first remote
-.Ar src ,
+.Ar source ,
 the host may be dropped to become just
 .Ar :path
 or
@@ -88,16 +97,18 @@ the first path component is interpreted as a
 .Qq module :
 .Ar host::module/path .
 This only applies to the first
-.Ar src
+.Ar source
 invocation; subsequent to that, the module should not be specified.
 .Pp
 By default, new destination files and directories are given the current
 time and the source file permissions.
 .Pp
 At this time,
-.Ar src
-must be a regular file or directory.
-The destination must be a directory and is created if not found.
+.Ar source
+must be a regular file or directory (local or remote).
+The destination
+.Ar directory
+must be a directory and is created if not found.
 .Pp
 .Nm
 is compatible with the GPL-licensed
