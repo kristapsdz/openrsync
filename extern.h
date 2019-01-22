@@ -63,7 +63,7 @@ struct	fargs {
 	size_t	   sourcesz; /* number of sources */
 	char	  *sink; /* transfer endpoint */
 	enum fmode mode; /* mode of operation */
-	int	   remote; /* uses rsync:// for remote */
+	int	   remote; /* uses rsync:// or :: for remote */
 	char	  *module; /* if rsync://, the module */
 };
 
