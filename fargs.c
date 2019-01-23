@@ -17,6 +17,7 @@
 #include <sys/stat.h>
 
 #include <assert.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 #include "extern.h"
