@@ -287,7 +287,7 @@ io_read_buf(struct sess *sess, int fd, void *buf, size_t sz)
 				"multiplex tag identifier");
 			return 0;
 		}
-		tag = letoh32(tagbuf);
+		tag = le32toh(tagbuf);
 		sess->mplex_read_remain = tag & 0xFFFFFF;
 		tag >>= 24;
 		if (7 == tag)
@@ -397,7 +397,7 @@ io_read_long(struct sess *sess, int fd, int64_t *val)
 		return 0;
 	}
 
-	*val = letoh64(oval);
+	*val = le64toh(oval);
 	return 1;
 }
 
@@ -434,7 +434,7 @@ io_read_int(struct sess *sess, int fd, int32_t *val)
 		return 0;
 	}
 
-	*val = letoh32(oval);
+	*val = le32toh(oval);
 	return 1;
 }
 
