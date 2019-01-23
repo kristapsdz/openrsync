@@ -58,7 +58,7 @@ hash_fast(const void *buf, size_t len)
 }
 
 /*
- * Slow MD5-based hash with leading seed.
+ * Slow MD4-based hash with leading seed.
  */
 void
 hash_slow(const void *buf, size_t len, 
@@ -69,19 +69,6 @@ hash_slow(const void *buf, size_t len,
 
 	MD4_Init(&ctx);
 	MD4_Update(&ctx, (unsigned char *)&seed, sizeof(int32_t));
-	MD4_Update(&ctx, buf, len);
-	MD4_Final(md, &ctx);
-}
-
-/*
- * Hash an entire file (sized buffer).
- */
-void
-hash_file(const void *buf, off_t len, unsigned char *md)
-{
-	MD4_CTX		 ctx;
-
-	MD4_Init(&ctx);
 	MD4_Update(&ctx, buf, len);
 	MD4_Final(md, &ctx);
 }

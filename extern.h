@@ -19,12 +19,6 @@
 
 /*
  * This is the rsync protocol version that we support.
- * This is the oldest currently supported, but also the simplest.
- * One caveat is that we use an updated MD5 algorithm instead of the
- * stipulated MD4, but that can be overridden when talking with
- * reference rsync clients and servers.
- * (This was changed in version 27, which is probably the next target
- * for protocol compatibility.)
  */
 #define	RSYNC_PROTOCOL	(27)
 
@@ -36,7 +30,7 @@
 /*
  * The sender and receiver use a two-phase synchronisation process.
  * The first uses two-byte hashes; the second, 16-byte.
- * (The second must hold a full MD5 digest.)
+ * (The second must hold a full MD4 digest.)
  */
 #define	CSUM_LENGTH_PHASE1 (2)
 #define	CSUM_LENGTH_PHASE2 (16)
@@ -233,7 +227,6 @@ void		  blkset_free(struct blkset *);
 uint32_t	  hash_fast(const void *, size_t);
 void		  hash_slow(const void *, size_t, 
 			unsigned char *, const struct sess *);
-void		  hash_file(const void *, off_t, unsigned char *);
 
 int		  mkpath(struct sess *, char *);
 
