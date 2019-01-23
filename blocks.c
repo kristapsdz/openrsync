@@ -149,8 +149,9 @@ blk_match_part(struct sess *sess, const char *path, int fd,
 			continue;
 
 		fromdown += offs - last;
-		LOG4(sess, "%s: flushed %llu B before %zu B block (%zu)", 
-			path, offs - last, blk->len, blk->idx);
+		LOG4(sess, "%s: flushed %jd B before %zu B block "
+			"(%zu)", path, (intmax_t)(offs - last), 
+			blk->len, blk->idx);
 
 		/* Flush what we have and follow with our tag. */
 
@@ -249,7 +250,8 @@ blk_match(struct sess *sess, int fd,
 			blks->len, blks->rem);
 	} else {
 		blk_match_full(sess, fd, map, st.st_size);
-		LOG3(sess, "%s: sent un-chunked %llu B", path, st.st_size);
+		LOG3(sess, "%s: sent un-chunked %jd B", 
+			path, (intmax_t)st.st_size);
 	}
 
 	/* Now write the full file hash. */
@@ -391,8 +393,8 @@ blk_recv(struct sess *sess, int fd, const char *path)
 	}
 
 	s->size = offs;
-	LOG3(sess, "%s: read blocks: %zu blocks, %llu "
-		"B total blocked data", path, s->blksz, s->size);
+	LOG3(sess, "%s: read blocks: %zu blocks, %jd B total "
+		"blocked data", path, s->blksz, (intmax_t)s->size);
 	return s;
 out:
 	blkset_free(s);
@@ -490,8 +492,8 @@ blk_merge(struct sess *sess, int fd, int ffd,
 
 			fromdown += sz;
 			total += sz;
-			LOG4(sess, "%s: received %zd bytes, "
-				"now %llu total", path, ssz, total);
+			LOG4(sess, "%s: received %zd bytes, now %jd "
+				"total", path, ssz, (intmax_t)total);
 
 			MD4_Update(&ctx, buf, sz);
 		} else {
@@ -525,8 +527,9 @@ blk_merge(struct sess *sess, int fd, int ffd,
 
 			fromcopy += block->blks[tok].len;
 			total += block->blks[tok].len;
-			LOG4(sess, "%s: copied %zu bytes, now %llu total", 
-				path, block->blks[tok].len, total);
+			LOG4(sess, "%s: copied %zu bytes, now %jd "
+				"total", path, block->blks[tok].len, 
+				(intmax_t)total);
 
 			MD4_Update(&ctx, 
 				map + block->blks[tok].offs, 
@@ -548,7 +551,8 @@ blk_merge(struct sess *sess, int fd, int ffd,
 		goto out;
 	}
 
-	LOG3(sess, "%s: merged %llu total bytes", path, total);
+	LOG3(sess, "%s: merged %jd total bytes", 
+		path, (intmax_t)total);
 	LOG3(sess, "%s: %.2f%% upload", path, 100.0 * fromdown / total);
 	rc = 1;
 out:
