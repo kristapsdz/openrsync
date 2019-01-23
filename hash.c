@@ -17,6 +17,7 @@
 #include <sys/types.h>
 
 #include <assert.h>
+#include <endian.h>
 #include <stdint.h>
 #include <stdlib.h>
 
