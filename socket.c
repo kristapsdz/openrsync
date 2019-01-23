@@ -429,15 +429,15 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 	 * on the multiplexer for our reads and writes.
 	 */
 
-	sess.mplex_reads = 1;
-	LOG2(&sess, "read multiplexing enabled");
-
 	/* Protocol exchange: get the random seed. */
 
 	if ( ! io_read_int(&sess, sd, &sess.seed)) {
 		ERRX1(&sess, "io_read_int: seed");
 		goto out;
 	}
+
+	sess.mplex_reads = 1;
+	LOG2(&sess, "read multiplexing enabled");
 
 	LOG2(&sess, "socket detected client version %" PRId32 
 		", server version %" PRId32 ", seed %" PRId32,
