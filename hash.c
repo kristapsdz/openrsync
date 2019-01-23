@@ -17,9 +17,9 @@
 #include <sys/types.h>
 
 #include <assert.h>
-#include <md5.h>
 #include <stdlib.h>
 
+#include "md4.h"
 #include "extern.h"
 
 /*
@@ -64,20 +64,13 @@ void
 hash_slow(const void *buf, size_t len, 
 	unsigned char *md, const struct sess *sess)
 {
-	MD5_CTX		 ctx;
-	int32_t		 seed;
+	MD4_CTX		 ctx;
+	int32_t		 seed = htole32(sess->seed);
 
-	/*
-	 * This seems to be optional, as passing a zero value as the
-	 * seed will create the same hash value each time.
-	 * However, it's harmless to keep it in here.
-	 */
-
-	MD5Init(&ctx);
-	MD5Update(&ctx, buf, len);
-	seed = htole32(sess->seed);
-	MD5Update(&ctx, (unsigned char *)&seed, sizeof(int32_t));
-	MD5Final(md, &ctx);
+	MD4_Init(&ctx);
+	MD4_Update(&ctx, (unsigned char *)&seed, sizeof(int32_t));
+	MD4_Update(&ctx, buf, len);
+	MD4_Final(md, &ctx);
 }
 
 /*
@@ -86,9 +79,9 @@ hash_slow(const void *buf, size_t len,
 void
 hash_file(const void *buf, off_t len, unsigned char *md)
 {
-	MD5_CTX		 ctx;
+	MD4_CTX		 ctx;
 
-	MD5Init(&ctx);
-	MD5Update(&ctx, buf, len);
-	MD5Final(md, &ctx);
+	MD4_Init(&ctx);
+	MD4_Update(&ctx, buf, len);
+	MD4_Final(md, &ctx);
 }
