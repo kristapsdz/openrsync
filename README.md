@@ -9,10 +9,16 @@ It's not ready for wide-spread testing.  Or even narrow-spread beyond
 getting all of the bits to work.  It's not ready for strong attention.
 Or really any attention but by careful programming.
 
-Many have asked about portability.  We're just not there yet, folks.
-But don't worry, the system is easily portable.  The hard part for
-porters is matching OpenBSD's [pledge](https://man.openbsd.org/pledge.2)
-and [unveil](https://man.openbsd.org/unveil.2).
+Many have asked about portability.  The system is moving a bit too fast
+for porting right now, but I was able to copy over
+[oconfigure](https://github.com/kristapsdz/oconfigure), add `config.h`
+as requirement, and mask the OpenBSD-specific functions on both Linux
+and FreeBSD without any problems.
+
+The acutal problem, however, is security in matching OpenBSD's
+[pledge](https://man.openbsd.org/pledge.2) and
+[unveil](https://man.openbsd.org/unveil.2).  This is partly possible
+with FreeBSD's capsicum, but Linux is a mess.
 
 See
 [rsync.5](https://github.com/kristapsdz/openrsync/blob/master/rsync.5)
