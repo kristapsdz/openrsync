@@ -7,6 +7,7 @@ OBJS	 = blocks.o \
 	   hash.o \
 	   io.o \
 	   log.o \
+	   md4.o \
 	   mkpath.o \
 	   receiver.o \
 	   sender.o \
@@ -48,3 +49,5 @@ clean:
 	rm -f $(ALLOBJS) openrsync $(AFLS)
 
 $(ALLOBJS) $(AFLS): extern.h
+
+md4.o hash.o: md4.h
