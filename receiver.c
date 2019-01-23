@@ -264,8 +264,8 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 		for (i = 0; i < p->blksz; i++, offs += p->len)
 			init_blk(&p->blks[i], p, offs, i, map, sess);
 
-		LOG3(sess, "%s: mapped %llu B with %zu "
-			"blocks", f->path, p->size, p->blksz);
+		LOG3(sess, "%s: mapped %jd B with %zu blocks", 
+			f->path, (intmax_t)p->size, p->blksz);
 	} else {
 		p->len = MAX_CHUNK;
 		LOG3(sess, "%s: not mapped", f->path);
