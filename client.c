@@ -85,6 +85,9 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 			goto out;
 		}
 	}
+
+	if (io_read_check(&sess, fd))
+		WARNX(&sess, "data remains in read pipe");
 	
 	rc = 1;
 out:

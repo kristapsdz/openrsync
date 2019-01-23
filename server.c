@@ -113,9 +113,10 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 			goto out;
 		}
 
-		c = rsync_sender(&sess, fdin, fdout, argc, argv);
-		if ( ! c)
+		if ( ! rsync_sender(&sess, fdin, fdout, argc, argv)) {
 			ERRX1(&sess, "rsync_sender");
+			goto out;
+		}
 	} else {
 		LOG2(&sess, "server starting receiver");
 
@@ -135,11 +136,16 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 			goto out;
 		}
 
-		c = rsync_receiver(&sess, fdin, fdout, argv[1]);
-		if ( ! c)
+		if ( ! rsync_receiver(&sess, fdin, fdout, argv[1])) {
 			ERRX1(&sess, "rsync_receiver");
+			goto out;
+		}
 	}
 
+	if (io_read_check(&sess, fdin))
+		WARNX(&sess, "data remains in read pipe");
+
+	c = 1;
 out:
 	return c;
 }

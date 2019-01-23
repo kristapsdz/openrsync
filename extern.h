@@ -190,6 +190,7 @@ char		**fargs_cmdline(struct sess *, const struct fargs *);
 
 int		  io_read_buf(struct sess *, int, void *, size_t);
 int		  io_read_byte(struct sess *, int, uint8_t *);
+int		  io_read_check(struct sess *, int);
 int		  io_read_int(struct sess *, int, int32_t *);
 int		  io_read_size(struct sess *, int, size_t *);
 int		  io_read_long(struct sess *, int, int64_t *);
@@ -215,7 +216,7 @@ int		  blk_recv_ack(struct sess *,
 			int, const struct blkset *, int32_t);
 int		  blk_match(struct sess *, int, 
 			const struct blkset *, const char *);
-int		  blk_send(struct sess *, int, size_t,
+int		  blk_send(struct sess *, int, 
 			const struct blkset *, const char *);
 int		  blk_send_ack(struct sess *, int, 
 			const struct blkset *, size_t);
