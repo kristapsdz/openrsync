@@ -36,6 +36,8 @@ static void
 init_blkset(struct blkset *p, off_t sz)
 {
 
+	p->size = sz;
+
 	/* For now, hard-code the block size. */
 
 	p->len = MAX_CHUNK;
