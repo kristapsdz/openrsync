@@ -152,8 +152,9 @@ flist_send(struct sess *sess, int fd,
 		flag = FLIST_NAME_LONG;
 
 		LOG3(sess, "sending file metadata: %s "
-			"(size %llu, mtime %lld, mode %o)",
-			fn, f->st.size, f->st.mtime, f->st.mode);
+			"(size %jd, mtime %lld, mode %o)",
+			fn, (intmax_t)f->st.size, 
+			f->st.mtime, f->st.mode);
 
 		/* Now write to the wire. */
 
@@ -408,8 +409,9 @@ flist_recv(struct sess *sess, int fd, size_t *sz)
 		} 
 
 		LOG3(sess, "received file metadata: %s "
-			"(size %llu, mtime %lld, mode %o)",
-			ff->path, ff->st.size, ff->st.mtime, ff->st.mode);
+			"(size %jd, mtime %lld, mode %o)",
+			ff->path, (intmax_t)ff->st.size, 
+			ff->st.mtime, ff->st.mode);
 	}
 
 	if (0 == flsz) {
