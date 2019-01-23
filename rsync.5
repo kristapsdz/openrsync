@@ -163,6 +163,8 @@ number of blocks (integer)
 .It
 block length in the file (integer)
 .It
+long checksum length (integer)
+.It
 terminal (remainder) block length (integer)
 .El
 .Pp
@@ -172,7 +174,7 @@ And for each block:
 .It
 short checksum (integer)
 .It
-long checksum (2 byte in phase 1, 16 byte in phase 2)
+long checksum (bytes of checksum length)
 .El
 .Pp
 After the last block, the client must respond with a block
@@ -185,6 +187,8 @@ file index (integer)
 number of blocks (integer)
 .It
 block length (integer)
+.It
+long checksum length (integer)
 .It
 remainder block length (integer)
 .El
