@@ -103,8 +103,10 @@ This must be followed by a standalone newline.
 If the server does not understand or accept any of the command-line
 arguments, it will exit at this point.
 .Pp
-Otherwise, multiplexing read support must then be enabled by both the
-client and the server.
+Following this, the client must read the integer-length session checksum
+seed.
+Multiplexing is subsequently enabled.
+.Pp
 The sequence that follows is stipulated in
 .Xr rsync 5
 following the handshake.
