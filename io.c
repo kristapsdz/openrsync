@@ -94,12 +94,8 @@ int
 io_write_blocking(struct sess *sess, 
 	int fd, const void *buf, size_t sz)
 {
-	struct pollfd	pfd;
-	ssize_t		wsz;
+	size_t		wsz;
 	int		c;
-
-	pfd.fd = fd;
-	pfd.events = POLLOUT;
 
 	while (sz > 0) {
 		c = io_write_nonblocking(sess, fd, buf, sz, &wsz);
