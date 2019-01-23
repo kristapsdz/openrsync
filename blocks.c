@@ -94,10 +94,11 @@ blk_find(struct sess *sess, const void *buf, off_t size,
 			continue;
 
 		LOG4(sess, "%s: found matching fast match: "
-			"position %llu, block %zu "
-			"(position %llu, size %zu): 0x%08x", path,
-			offs, blks->blks[i].idx, blks->blks[i].offs,
-			blks->blks[i].len, fhash);
+			"position %jd, block %zu "
+			"(position %jd, size %zu)", path,
+			(intmax_t)offs, blks->blks[i].idx, 
+			(intmax_t)blks->blks[i].offs,
+			blks->blks[i].len);
 
 		/* Compute slow hash on demand. */
 
@@ -166,7 +167,8 @@ blk_match_part(struct sess *sess, const char *path, int fd,
 		last = offs + 1;
 	}
 
-	LOG4(sess, "%s: flushed remaining %llu B", path, size - last);
+	LOG4(sess, "%s: flushed remaining %jd B", 
+		path, (intmax_t)(size - last));
 	LOG3(sess, "%s: %.2f%% upload", path, 
 		100.0 * fromdown / (fromcopy + fromdown));
 
