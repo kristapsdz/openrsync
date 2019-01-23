@@ -50,4 +50,4 @@ clean:
 
 $(ALLOBJS) $(AFLS): extern.h
 
-md4.o hash.o: md4.h
+md4.o hash.o blocks.o: md4.h

@@ -68,11 +68,7 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 		goto out;
 	}
 
-	/* 
-	 * Standard rsync preamble, server side.
-	 * By sending a non-zero value following that, we trigger
-	 * seeding of the MD5 hashes.
-	 */
+	/* Standard rsync preamble, server side. */
 
 	sess.lver = RSYNC_PROTOCOL;
 	sess.seed = arc4random();
