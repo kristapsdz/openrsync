@@ -560,7 +560,7 @@ out:
  */
 int
 blk_send(struct sess *sess, int fd, 
-	size_t len, const struct blkset *p, const char *path)
+	const struct blkset *p, const char *path)
 {
 	size_t	 i;
 	const struct blk *b;
@@ -585,11 +585,7 @@ blk_send(struct sess *sess, int fd,
 			ERRX1(sess, "io_write_int: short checksum");
 			return 0;
 		}
-		if ( ! io_write_buf(sess, fd, b->chksum_long, len)) {
-			ERRX1(sess, "io_write_int: long checksum");
-			return 0;
-		}
-		if ( ! io_write_buf(sess, fd, b->chksum_long, len)) {
+		if ( ! io_write_buf(sess, fd, b->chksum_long, p->csum)) {
 			ERRX1(sess, "io_write_int: long checksum");
 			return 0;
 		}

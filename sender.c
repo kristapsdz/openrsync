@@ -198,6 +198,7 @@ rsync_sender(struct sess *sess, int fdin,
 	}
 
 	stats(sess, fdout);
+
 	LOG2(sess, "sender finished updating");
 	rc = 1;
 out:

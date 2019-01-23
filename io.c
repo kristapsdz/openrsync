@@ -28,6 +28,21 @@
 
 #include "extern.h"
 
+int
+io_read_check(struct sess *sess, int fd)
+{
+	struct pollfd	pfd;
+
+	pfd.fd = fd;
+	pfd.events = POLLIN;
+
+	if (poll(&pfd, 1, 0) < 0) {
+		ERR(sess, "poll");
+		return -1;
+	}
+	return pfd.revents & POLLIN;
+}
+
 /*
  * Write buffer to non-blocking descriptor.
  * Returns zero on failure, non-zero on success (zero or more bytes).

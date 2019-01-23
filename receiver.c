@@ -319,7 +319,7 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 
 	/* Now transmit the metadata for set and blocks. */
 
-	if ( ! blk_send(sess, fdout, csumlen, p, f->path)) {
+	if ( ! blk_send(sess, fdout, p, f->path)) {
 		ERRX1(sess, "blk_send");
 		goto out;
 	} else if ( ! blk_send_ack(sess, fdin, p, idx)) {
@@ -588,7 +588,15 @@ rsync_receiver(struct sess *sess,
 		goto out;
 	}
 
+	/* Final "goodbye" message. */
+
+	if ( ! io_write_int(sess, fdout, -1)) {
+		ERRX1(sess, "io_write_int: update complete");
+		goto out;
+	}
+
 	LOG2(sess, "receiver finished updating");
+
 	rc = 1;
 out:
 	if (-1 != dfd)
