@@ -27,8 +27,7 @@ protocol described in this relates to the BSD-licensed
 .Xr openrsync 1 ,
 a re-implementation of the GPL-licensed reference utility
 .Xr rsync 1 .
-It is compatible with version 27 of the reference, although it requires
-the use of MD5 checksums instead of MD4.
+It is compatible with version 27 of the reference.
 .Pp
 The
 .Nm
@@ -131,10 +130,4 @@ following the handshake.
 .\" .Sh HISTORY
 .\" .Sh AUTHORS
 .\" .Sh CAVEATS
-.Sh BUGS
-.Xr openrsync 1
-uses MD5 checksumming, but many
-.Xr rsync 1
-utilities do not support this mode in daemon mode.
-If they do not, the daemon will exit following the arguments as sent,
-usually without emitting an error message.
+.\" .Sh BUGS

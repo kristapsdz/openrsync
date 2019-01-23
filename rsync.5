@@ -27,8 +27,7 @@ protocol described in this relates to the BSD-licensed
 .Xr openrsync 1 ,
 a re-implementation of the GPL-licensed reference utility
 .Xr rsync 1 .
-It is compatible with version 27 of the reference, although it requires
-the use of MD5 checksums instead of MD4.
+It is compatible with version 27 of the reference.
 .Pp
 In this document, the
 .Qq client process
@@ -49,9 +48,9 @@ then a 64-bit signed integer.
 .Pp
 There are two types of checksums: long and short (slow and fast).
 The fast checksum is a derivative of Adler-32.
-The long checksum is MD5.
-For non-whole-file long checksums, the sum is made over the checksum
-seed first (serialised in little-endian format), then the data.
+The slow checksum is MD4.
+For long checksums, the sum is made over the checksum seed first
+(serialised in little-endian format), then the data.
 .Ss Multiplexing
 Most
 .Nm
