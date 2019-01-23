@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 
 #include <assert.h>
+#include <endian.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
