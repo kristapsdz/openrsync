@@ -24,6 +24,9 @@
 
 #include "extern.h"
 
+/*
+ * FIXME.
+ */
 static int
 stats(struct sess *sess, int fdout)
 {

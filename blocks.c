@@ -21,12 +21,12 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
-#include <md5.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
+#include "md4.h"
 #include "extern.h"
 
 /*
@@ -64,7 +64,7 @@ static struct blk *
 blk_find(struct sess *sess, const void *buf, off_t size, 
 	off_t offs, const struct blkset *blks, const char *path)
 {
-	unsigned char	 md[MD5_DIGEST_LENGTH];
+	unsigned char	 md[MD4_DIGEST_LENGTH];
 	uint32_t	 fhash;
 	off_t		 remain, osz;
 	size_t		 i;
@@ -213,7 +213,7 @@ blk_match(struct sess *sess, int fd,
 	struct stat	 st;
 	void		*map;
 	size_t		 mapsz;
-	unsigned char	 filemd[MD5_DIGEST_LENGTH];
+	unsigned char	 filemd[MD4_DIGEST_LENGTH];
 
 	/* Start by mapping our file into memory. */
 
@@ -252,9 +252,9 @@ blk_match(struct sess *sess, int fd,
 
 	/* Now write the full file hash. */
 
-	hash_file(map, st.st_size, filemd);
+	hash_slow(map, st.st_size, filemd, sess);
 
-	if ( ! io_write_buf(sess, fd, filemd, MD5_DIGEST_LENGTH)) {
+	if ( ! io_write_buf(sess, fd, filemd, MD4_DIGEST_LENGTH)) {
 		ERRX1(sess, "io_write_buf: data blocks hash");
 		goto out;
 	}
@@ -449,12 +449,15 @@ blk_merge(struct sess *sess, int fd, int ffd,
 	void		*pp;
 	ssize_t		 ssz;
 	int		 rc = 0;
-	unsigned char	 md[MD5_DIGEST_LENGTH],
-			 ourmd[MD5_DIGEST_LENGTH];
+	unsigned char	 md[MD4_DIGEST_LENGTH],
+			 ourmd[MD4_DIGEST_LENGTH];
 	off_t		 total = 0, fromcopy = 0, fromdown = 0;
-	MD5_CTX		 ctx;
+	MD4_CTX		 ctx;
 
-	MD5Init(&ctx);
+	MD4_Init(&ctx);
+
+	rawtok = htole32(sess->seed);
+	MD4_Update(&ctx, (unsigned char *)&rawtok, sizeof(int32_t));
 
 	for (;;) {
 		if ( ! io_read_int(sess, fd, &rawtok)) {
@@ -488,7 +491,7 @@ blk_merge(struct sess *sess, int fd, int ffd,
 			LOG4(sess, "%s: received %zd bytes, "
 				"now %llu total", path, ssz, total);
 
-			MD5Update(&ctx, buf, sz);
+			MD4_Update(&ctx, buf, sz);
 		} else {
 			tok = -rawtok - 1;
 			if (tok >= block->blksz) {
@@ -523,22 +526,22 @@ blk_merge(struct sess *sess, int fd, int ffd,
 			LOG4(sess, "%s: copied %zu bytes, now %llu total", 
 				path, block->blks[tok].len, total);
 
-			MD5Update(&ctx, 
+			MD4_Update(&ctx, 
 				map + block->blks[tok].offs, 
 				block->blks[tok].len);
 		}
 	}
 
-	/* Make sure our resulting MD5 hashes match. */
+	/* Make sure our resulting MD4_ hashes match. */
 
-	if ( ! io_read_buf(sess, fd, md, MD5_DIGEST_LENGTH)) {
+	if ( ! io_read_buf(sess, fd, md, MD4_DIGEST_LENGTH)) {
 		ERRX1(sess, "io_read_buf: data blocks hash");
 		goto out;
 	}
 
-	MD5Final(ourmd, &ctx);
+	MD4_Final(ourmd, &ctx);
 
-	if (memcmp(md, ourmd, MD5_DIGEST_LENGTH)) {
+	if (memcmp(md, ourmd, MD4_DIGEST_LENGTH)) {
 		ERRX(sess, "file hash does not match");
 		goto out;
 	}
