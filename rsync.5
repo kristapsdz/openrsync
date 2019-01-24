@@ -117,13 +117,17 @@ file length (long)
 file modification time (optional, time_t, integer)
 .It
 file mode (optional, mode_t, integer)
+.It
+if a symbolic link, the link target's length (integer)
+.It
+if a symbolic link, the link target (byte array)
 .El
 .Pp
 The status byte may consist of the following bits and determines which
 of the optional fields are transmitted.
 .Pp
 .Bl -tag -compact -width Ds
-.It 0x2
+.It 0x02
 Do not send the file mode: it is a repeat of the last file's mode.
 .It 0x20
 Inherit some of the prior file name.
