@@ -33,6 +33,7 @@
 /*
  * Flush out "size" bytes of the buffer, doing all of the appropriate
  * chunking of the data.
+ * FIXME: put the token write in here as well.
  * Return zero on failure, non-zero on success.
  */
 static int

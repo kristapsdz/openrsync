@@ -89,20 +89,28 @@ post_process_dir(struct sess *sess,
 	int root, const struct flist *f, int newdir)
 {
 	struct timespec	 tv[2];
+	int		 rc;
+
+	/* 
+	 * We already know it's not a symlink from pre_process_dir(), so
+	 * don't use AT_SYMLINK_NOFOLLOW.
+	 */
 
 	if (sess->opts->preserve_times) {
 		tv[0].tv_sec = time(NULL);
 		tv[0].tv_nsec = 0;
 		tv[1].tv_sec = f->st.mtime;
 		tv[1].tv_nsec = 0;
-		if (-1 == utimensat(root, f->path, tv, 0)) {
+		rc = utimensat(root, f->path, tv, 0);
+		if (-1 == rc) {
 			ERR(sess, "utimensat: %s", f->path);
 			return 0;
 		} 
 	}
 
 	if (newdir || sess->opts->preserve_perms) {
-		if (-1 == fchmodat(root, f->path, f->st.mode, 0)) {
+		rc = fchmodat(root, f->path, f->st.mode, 0);
+		if (-1 == rc) {
 			ERR(sess, "fchmodat: %s", f->path);
 			return 0;
 		}
@@ -113,33 +121,126 @@ post_process_dir(struct sess *sess,
 
 /*
  * Create (or not) the given directory entry.
+ * If something already exists in its place, then make sure that it,
+ * too, is a directory.
  * Returns zero on failure, non-zero on success.
  */
 static int
-pre_process_dir(struct sess *sess, mode_t oumask, int fdin, 
-	int fdout, int root, const struct flist *f, size_t idx, 
-	int *newdir)
+pre_process_dir(struct sess *sess, mode_t oumask, 
+	int root, const struct flist *f, int *newdir)
 {
+	struct stat	 st;
+	int	 	 rc;
 
+	assert(sess->opts->recursive);
 	if (sess->opts->dry_run)
 		return 1;
 
-	/*
-	 * We want to make the directory with default permissions (using
-	 * our old umask, which we've since unset), then adjust
-	 * permissions (assuming preserve_perms or new) afterward in
-	 * case it's u-w or something.
-	 */
-
-	if (-1 == mkdirat(root, f->path, 0777 & ~oumask)) {
-		if (EEXIST != errno) {
-			WARN1(sess, "openat: %s", f->path);
+	/* First, see if the directory already exists. */
+	
+	rc = fstatat(root, f->path, &st, AT_SYMLINK_NOFOLLOW);
+	if (-1 == rc) {
+		if (ENOENT != errno) {
+			WARN(sess, "fstatat: %s", f->path);
 			return 0;
 		}
-		LOG3(sess, "updated: %s", f->path);
-	} else {
+
+		/*
+		 * We want to make the directory with default
+		 * permissions (using our old umask, which we've since
+		 * unset), then adjust permissions (assuming
+		 * preserve_perms or new) afterward in case it's u-w or
+		 * something.
+		 */
+
+		if (-1 == mkdirat(root, f->path, 0777 & ~oumask)) {
+			WARN(sess, "mkdirat: %s", f->path);
+			return 0;
+		}
 		*newdir = 1;
 		LOG3(sess, "created: %s", f->path);
+		return 1;
+	} else if ( ! S_ISDIR(st.st_mode)) {
+		WARNX(sess, "file not directory: %s", f->path);
+		return 0;
+	}
+
+	/* FIXME: do we fchmod to have writable perms? */
+
+	LOG3(sess, "updating: %s", f->path);
+	return 1;
+}
+
+/*
+ * Process a symbolic link.
+ * This operates on the link itself, not the target.
+ * Returns zero on failure, non-zero on success.
+ */
+static int
+process_link(struct sess *sess, int root, const struct flist *f)
+{
+	int		 rc;
+	char		*b;
+	struct stat	 st;
+	struct timespec	 tv[2];
+
+	assert(sess->opts->preserve_links);
+	if (sess->opts->dry_run)
+		return 1;
+
+	/* See if the symlink already exists. */
+
+	rc = fstatat(root, f->path, &st, AT_SYMLINK_NOFOLLOW);
+	if (-1 == rc) {
+		if (-1 == symlinkat(f->link, root, f->path)) {
+			WARN(sess, "symlinkat: %s", f->path);
+			return 0;
+		}
+		LOG3(sess, "created: %s -> %s", f->path, f->link);
+		return 1;
+	} else if ( ! S_ISLNK(st.st_mode)) {
+		WARNX(sess, "file not symlink: %s", f->path);
+		return 0;
+	}
+
+	/* Get the name of the existing link. */
+
+	if (NULL == (b = symlinkat_read(sess, root, f->path))) {
+		ERRX1(sess, "symlinkat_read");
+		return 0;
+	} 
+
+	/*
+	 * If the link target is different, then unlink and redo.
+	 * FIXME: should we do a symlink and renameat?
+	 */
+
+	if (strcmp(f->link, b)) {
+		free(b);
+		LOG2(sess, "updating: %s", f->path);
+		if (-1 == unlinkat(root, f->path, 0)) {
+			WARN(sess, "unlinkat: %s", f->path);
+			return 0;
+		} 
+		if (-1 == symlinkat(f->link, root, f->path)) {
+			WARN(sess, "unlinkat: %s", f->path);
+			return 0;
+		}
+	} else
+		free(b);
+
+	/* Optionally preserve times on the symlink. */
+
+	if (sess->opts->preserve_times) {
+		tv[0].tv_sec = time(NULL);
+		tv[0].tv_nsec = 0;
+		tv[1].tv_sec = f->st.mtime;
+		tv[1].tv_nsec = 0;
+		rc = utimensat(root, f->path, tv, AT_SYMLINK_NOFOLLOW);
+		if (-1 == rc) {
+			ERR(sess, "utimensat: %s", f->path);
+			return 0;
+		} 
 	}
 
 	return 1;
@@ -169,6 +270,22 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 	struct timespec	 tv[2];
 	mode_t		 perm;
 
+	/* Dry-run short circuits. */
+
+	if (sess->opts->dry_run) {
+		if ( ! io_write_int(sess, fdout, idx)) {
+			ERRX1(sess, "io_write_int: index");
+			goto out;
+		} else if ( ! io_read_size(sess, fdin, &i)) {
+			ERRX1(sess, "io_read_size: send ack");
+			goto out;
+		} else if (idx != i) {
+			ERRX(sess, "wrong index value");
+			goto out;
+		}
+		return 1;
+	}
+
 	/* 
 	 * Not having a file is fine: it just means that we'll need to
 	 * download the full file (i.e., have zero blocks).
@@ -176,7 +293,9 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 	 * If we're recursive, then ignore the absolute indicator.
 	 */
 
-	if (-1 == (ffd = openat(root, f->path, O_RDONLY, 0))) {
+	ffd = openat(root, f->path, O_RDONLY | O_NOFOLLOW, 0);
+
+	if (-1 == ffd) {
 		if (ENOENT == errno)
 			WARN2(sess, "openat: %s", f->path);
 		else
@@ -194,11 +313,8 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 		if (-1 == fstat(ffd, &st)) {
 			WARN(sess, "fstat: %s", f->path);
 			goto out;
-		} else if (S_ISDIR(st.st_mode)) {
-			LOG3(sess, "skipping directory: %s", f->path);
-			return 1;
 		} else if ( ! S_ISREG(st.st_mode)) {
-			WARNX(sess, "not a regular file: %s", f->path);
+			WARNX(sess, "file not regular: %s", f->path);
 			goto out;
 		} 
 
@@ -209,26 +325,15 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 			LOG3(sess, "%s: skipping: up to date", f->path);
 			return 1;
 		} 
-	}
+		LOG3(sess, "updating: %s", f->path);
+	} else
+		LOG3(sess, "creating: %s", f->path);
 
 	/* We need this file's data: start the transfer. */
 
 	if ( ! io_write_int(sess, fdout, idx)) {
 		ERRX1(sess, "io_write_int: index");
 		goto out;
-	}
-
-	/* Dry-run short circuits. */
-
-	if (sess->opts->dry_run) {
-		if ( ! io_read_size(sess, fdin, &i)) {
-			ERRX1(sess, "io_read_size: send ack");
-			goto out;
-		} else if (idx != i) {
-			ERRX(sess, "wrong index value");
-			goto out;
-		}
-		return 1;
 	}
 
 	if (NULL == (p = calloc(1, sizeof(struct blkset)))) {
@@ -525,10 +630,13 @@ rsync_receiver(struct sess *sess,
 	}
 
 	for (i = 0; i < flsz; i++) {
-		c = S_ISDIR(fl[i].st.mode) ?
-			pre_process_dir(sess, oumask, fdin, fdout, 
-				dfd, &fl[i], i, &newdir[i]) :
-			process_file(sess, fdin, fdout, 
+		if (S_ISDIR(fl[i].st.mode))
+			c = pre_process_dir(sess, oumask, 
+				dfd, &fl[i], &newdir[i]);
+		else if (S_ISLNK(fl[i].st.mode))
+			c = process_link(sess, dfd, &fl[i]);
+		else
+			c = process_file(sess, fdin, fdout, 
 				dfd, &fl[i], i, csum_length);
 		if ( ! c) 
 			goto out;

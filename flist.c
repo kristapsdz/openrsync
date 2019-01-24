@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "extern.h"
 
@@ -61,6 +62,7 @@ static	const mode_t whitelist_modes[] = {
 	S_IXOTH, /* X for other */
 	S_IFREG, /* regular */
 	S_IFDIR, /* directory */
+	S_IFLNK, /* symbolic link */
 	0
 };
 
@@ -116,8 +118,11 @@ flist_free(struct flist *f, size_t sz)
 
 	if (NULL == f)
 		return;
-	for (i = 0; i < sz; i++)
+
+	for (i = 0; i < sz; i++) {
 		free(f[i].path);
+		free(f[i].link);
+	}
 	free(f);
 }
 
@@ -158,22 +163,41 @@ flist_send(struct sess *sess, int fd,
 
 		/* Now write to the wire. */
 
-		if ( ! io_write_byte(sess, fd, flag))
+		if ( ! io_write_byte(sess, fd, flag)) {
 			ERRX1(sess, "io_write_byte: flags");
-		else if ( ! io_write_int(sess, fd, fnlen))
+			return 0;
+		} else if ( ! io_write_int(sess, fd, fnlen)) {
 			ERRX1(sess, "io_write_int: filename length");
-		else if ( ! io_write_buf(sess, fd, fn, fnlen))
+			return 0;
+		} else if ( ! io_write_buf(sess, fd, fn, fnlen)) {
 			ERRX1(sess, "io_write_buf: filename");
-		else if ( ! io_write_long(sess, fd, f->st.size))
+			return 0;
+		} else if ( ! io_write_long(sess, fd, f->st.size)) {
 			ERRX1(sess, "io_write_long: file size");
-		else if ( ! io_write_int(sess, fd, f->st.mtime))
+			return 0;
+		} else if ( ! io_write_int(sess, fd, f->st.mtime)) {
 			ERRX1(sess, "io_write_int: file mtime");
-		else if ( ! io_write_int(sess, fd, f->st.mode))
+			return 0;
+		} else if ( ! io_write_int(sess, fd, f->st.mode)) {
 			ERRX1(sess, "io_write_int: file mode");
-		else
-			continue;
+			return 0; 
+		}
 
-		return 0;
+		/* Optional link information. */
+
+		if (S_ISLNK(f->st.mode)) {
+			assert(sess->opts->preserve_links);
+			fn = f->link;
+			fnlen = strlen(f->link);
+			if ( ! io_write_int(sess, fd, fnlen)) {
+				ERRX1(sess, "io_write_int: link size");
+				return 0;
+			} 
+			if ( ! io_write_buf(sess, fd, fn, fnlen)) {
+				ERRX1(sess, "io_write_int: link");
+				return 0;
+			}
+		}
 	}
 
 	if ( ! io_write_byte(sess, fd, 0)) {
@@ -296,19 +320,22 @@ flist_recv_mode(struct sess *sess, int fd,
 	 * we accept and only work with those.
 	 */
 
-	if (sess->opts->recursive) {
-		if ( ! S_ISREG(m) && ! S_ISDIR(m)) {
-			ERRX(sess, "non-regular non-directory file "
-				"in recursive mode: %s", f->path);
+	if (S_ISDIR(m)) {
+		if ( ! sess->opts->recursive) {
+			ERRX(sess, "directory: %s", f->path);
 			return 0;
 		}
-	} else {
-		if ( ! S_ISREG(m)) {
-			ERRX(sess, "non-regular file in "
-				"non-recursive mode: %s", f->path);
+	} else if (S_ISLNK(m)) {
+		if ( ! sess->opts->preserve_links) {
+			ERRX(sess, "symlink file: %s", f->path);
 			return 0;
-		} 
+		}
+	} else if ( ! S_ISREG(m)) {
+		ERRX(sess, "non-regular file: %s", f->path);
+		return 0;
 	}
+
+	/* Scrub the mode. */
 
 	f->st.mode = 0;
 	for (i = 0; 0 != whitelist_modes[i]; i++) {
@@ -334,7 +361,7 @@ flist_recv(struct sess *sess, int fd, size_t *sz)
 	struct flist	*fl = NULL;
 	struct flist	*ff;
 	const struct flist *fflast;
-	size_t		 flsz = 0, flmax = 0;
+	size_t		 flsz = 0, flmax = 0, lsz;
 	uint8_t		 flag;
 	void		*pp;
 	char		 lastname[MAXPATHLEN];
@@ -401,12 +428,38 @@ flist_recv(struct sess *sess, int fd, size_t *sz)
 		}  else
 			ff->st.mtime = fflast->st.mtime;
 
-		/* Read the file mode. */
+		/* 
+		 * Read the file mode.
+		 * This will make sure that, if we return with success,
+		 * the file (directory, link, regular) is acceptable.
+		 */
 
 		if ( ! flist_recv_mode(sess, fd, ff, flag, fflast)) {
 			ERRX(sess, "flist_recv_mode");
 			goto out;
 		} 
+
+		/* Optionally read the link information. */
+
+		if (S_ISLNK(ff->st.mode)) {
+			assert(sess->opts->preserve_links);
+			if ( ! io_read_size(sess, fd, &lsz)) {
+				ERRX1(sess, "io_read_size: link size");
+				goto out;
+			} else if (0 == lsz) {
+				ERRX(sess, "empty link name");
+				goto out;
+			}
+			ff->link = calloc(lsz + 1, 1);
+			if (NULL == ff->link) {
+				ERR(sess, "calloc");
+				goto out;
+			}
+			if ( ! io_read_buf(sess, fd, ff->link, lsz)) {
+				ERRX1(sess, "io_read_buf: link");
+				goto out;
+			}
+		}
 
 		LOG3(sess, "received file metadata: %s "
 			"(size %jd, mtime %jd, mode %o)",
@@ -415,6 +468,7 @@ flist_recv(struct sess *sess, int fd, size_t *sz)
 	}
 
 	if (0 == flsz) {
+		/* FIXME: shouldn't be an error. */
 		ERRX(sess, "zero-length file list");
 		goto out;
 	}
@@ -630,6 +684,7 @@ flist_gen_recursive(struct sess *sess,
 		fl = NULL;
 		*sz = 0;
 	} else if (0 == *sz) {
+		/* FIXME: shouldn't be an error. */
 		ERRX(sess, "zero-length file list");
 		flist_free(fl, *sz);
 		fl = NULL;
@@ -639,9 +694,6 @@ flist_gen_recursive(struct sess *sess,
 	return fl;
 }
 
-/*
- * The non-recursive version is simply going to 
- */
 static struct flist *
 flist_gen_nonrecursive(struct sess *sess, 
 	size_t argc, char **argv, size_t *sz)
@@ -672,9 +724,15 @@ flist_gen_nonrecursive(struct sess *sess,
 		} else if (S_ISDIR(st.st_mode)) {
 			WARNX(sess, "skipping directory: %s", argv[i]);
 			continue;
+		} else if (S_ISLNK(st.st_mode)) {
+			if ( ! sess->opts->preserve_links) {
+				WARNX(sess, "skipping symbolic "
+					"link: %s", argv[i]);
+				continue;
+			}
 		} else if ( ! S_ISREG(st.st_mode)) {
 			WARNX(sess, "skipping non-regular: %s", argv[i]);
-			goto out;
+			continue;
 		}
 
 		f = &fl[(*sz)++];
@@ -702,7 +760,19 @@ flist_gen_nonrecursive(struct sess *sess,
 		 */
 
 		flist_copy_stat(f, &st);
+
+		/* Optionally copy link information. */
+
+		if (S_ISLNK(st.st_mode)) {
+			f->link = symlink_read(sess, f->path);
+			if (NULL == f->link) {
+				ERRX1(sess, "symlink_read");
+				goto out;
+			}
+		}
 	}
+
+	/* FIXME: shouldn't be an error. */
 
 	if (0 == *sz) {
 		ERRX1(sess, "zero-length file list");

@@ -80,6 +80,7 @@ struct	flist {
 	char		*path; /* path relative to root */
 	const char	*wpath; /* "working" path for receiver */
 	struct flstat	 st; /* file information */
+	char		*link; /* symlink target or NULL */
 };
 
 /*
@@ -94,6 +95,7 @@ struct	opts {
 	int	 dry_run; /* -n */
 	int	 preserve_times; /* -t */
 	int	 preserve_perms; /* -p */
+	int	 preserve_links; /* -l */
 };
 
 /*
@@ -230,6 +232,9 @@ void		  hash_slow(const void *, size_t,
 			unsigned char *, const struct sess *);
 
 int		  mkpath(struct sess *, char *);
+
+char		 *symlink_read(struct sess *, const char *);
+char		 *symlinkat_read(struct sess *, int, const char *);
 
 __END_DECLS
 

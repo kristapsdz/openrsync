@@ -12,7 +12,8 @@ OBJS	 = blocks.o \
 	   receiver.o \
 	   sender.o \
 	   server.o \
-	   socket.o
+	   socket.o \
+	   symlinks.o
 ALLOBJS	 = $(OBJS) \
 	   main.o
 AFLS	 = afl/test-blk_recv \
