@@ -625,8 +625,6 @@ rsync_receiver(struct sess *sess,
 	}
 
 	for (i = 0; i < flsz; i++) {
-		LOG3(sess, "receiver examining %zu: %s", 
-			i, fl[i].path);
 		if (S_ISDIR(fl[i].st.mode))
 			c = pre_process_dir(sess, oumask, 
 				dfd, &fl[i], &newdir[i]);
