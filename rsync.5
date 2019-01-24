@@ -101,9 +101,12 @@ receive random seed (integer)
 .El
 .Pp
 Following this, the client multiplexes when reading from the server.
-(Transmissions sent from client to server are not multiplexed.)
-If the client is in sender mode, it then sends data on each file to be
-synchronised as follows.
+Transmissions sent from client to server are not multiplexed.
+.Pp
+.Em Sender mode
+.Pp
+When the client is in sender mode, it begins by sending data on each
+file as follows.
 .Pp
 .Bl -enum -compact
 .It
@@ -221,6 +224,12 @@ services.
 whole-file long checksum (16 bytes)
 .El
 .Pp
+Finally, the sender writes a constant -1 integer to signal the end of all
+data.
+No more data is sent subsequent to this message.
+.Pp
+.Em Receiver mode
+.Pp
 If in receiver mode, the inverse (write instead of read, read instead of
 write) is performed.
 The only difference is that the list of files (starting with the status
@@ -235,8 +244,8 @@ status byte (integer)
 filename length (integer)...
 .El
 .Pp
-Also, after the terminal phase change, the receiver reads the following
-statistics:
+After the second phase has completed and prior to writing the
+end-of-data signal, the client receiver reads statistics.
 .Pp
 .Bl -enum -compact
 .It
