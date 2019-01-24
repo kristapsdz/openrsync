@@ -605,16 +605,23 @@ flist_gen_recursive_entry(struct sess *sess, char *root,
 			WARN(sess, "could not stat: %s",
 				ent->fts_path);
 			continue;
-		} else if (FTS_SL == ent->fts_info) {
-			WARNX(sess, "skipping symbolic link: "
-				"%s", ent->fts_path);
-			continue;
-		} else if (FTS_SLNONE == ent->fts_info) {
-			WARNX(sess, "skipping bad symbolic link: "
-				"%s", ent->fts_path);
-			continue;
 		} else if (FTS_DP == ent->fts_info)
 			continue;
+
+		/* Check that the mode is alright. */
+
+		assert(NULL != ent->fts_statp);
+		if (S_ISLNK(ent->fts_statp->st_mode)) {
+			if ( ! sess->opts->preserve_links) {
+				WARNX(sess, "skipping symbolic "
+					"link: %s", ent->fts_path);
+				continue;
+			}
+		} else if ( ! S_ISREG(ent->fts_statp->st_mode)) {
+			WARNX(sess, "skipping non-regular "
+				"file: %s", ent->fts_path);
+			continue;
+		}
 
 		if (*sz + 1 > *max) {
 			pp = recallocarray(*fl, *max, 
@@ -634,6 +641,7 @@ flist_gen_recursive_entry(struct sess *sess, char *root,
 		if ('\0' == ent->fts_path[stripdir]) {
 			if (asprintf(&f->path, "%s.", ent->fts_path) < 0) {
 				ERR(sess, "asprintf");
+				f->path = NULL;
 				goto out;
 			}
 		} else {
@@ -644,6 +652,18 @@ flist_gen_recursive_entry(struct sess *sess, char *root,
 		}
 		f->wpath = f->path + stripdir;
 		flist_copy_stat(f, ent->fts_statp);
+
+		/* Optionally copy link information. */
+
+		if (S_ISLNK(st.st_mode)) {
+			f->link = symlink_read(sess, f->path);
+			if (NULL == f->link) {
+				ERRX1(sess, "symlink_read");
+				goto out;
+			}
+		}
+
+		/* Reset errno for next fts_read() call. */
 		errno = 0;
 	}
 	if (errno) {
@@ -721,7 +741,16 @@ flist_gen_nonrecursive(struct sess *sess,
 		if (-1 == lstat(argv[i], &st)) {
 			ERR(sess, "fstat: %s", argv[i]);
 			goto out;
-		} else if (S_ISDIR(st.st_mode)) {
+		}
+
+		/* 
+		 * File type checks.
+		 * In non-recursive mode, we don't accept directories.
+		 * We also skip symbolic links without -l.
+		 * Beyond that, we only accept regular files.
+		 */
+
+		if (S_ISDIR(st.st_mode)) {
 			WARNX(sess, "skipping directory: %s", argv[i]);
 			continue;
 		} else if (S_ISLNK(st.st_mode)) {
@@ -731,7 +760,8 @@ flist_gen_nonrecursive(struct sess *sess,
 				continue;
 			}
 		} else if ( ! S_ISREG(st.st_mode)) {
-			WARNX(sess, "skipping non-regular: %s", argv[i]);
+			WARNX(sess, "skipping non-"
+				"regular file: %s", argv[i]);
 			continue;
 		}
 
