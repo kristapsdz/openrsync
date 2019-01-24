@@ -87,6 +87,13 @@ post_process_dir(struct sess *sess,
 	struct timespec	 tv[2];
 	int		 rc;
 
+	/* We already warned about the directory in pre_process_dir(). */
+
+	if ( ! sess->opts->recursive)
+		return 1;
+	else if (sess->opts->dry_run)
+		return 1;
+
 	/* XXX: re-check that this is a directory? */
 
 	if (sess->opts->preserve_times) {
@@ -128,8 +135,10 @@ pre_process_dir(struct sess *sess, mode_t oumask,
 	struct stat	 st;
 	int	 	 rc;
 
-	assert(sess->opts->recursive);
-	if (sess->opts->dry_run)
+	if ( ! sess->opts->recursive) {
+		WARNX(sess, "ignoring directory: %s", f->path);
+		return 1;
+	} else if (sess->opts->dry_run)
 		return 1;
 
 	/* First, see if the directory already exists. */
@@ -183,8 +192,10 @@ process_link(struct sess *sess, int root, const struct flist *f)
 	struct stat	 st;
 	struct timespec	 tv[2];
 
-	assert(sess->opts->preserve_links);
-	if (sess->opts->dry_run)
+	if ( ! sess->opts->preserve_links) {
+		WARNX(sess, "ignoring symlink: %s", f->path);
+		return 1;
+	} else if (sess->opts->dry_run)
 		return 1;
 
 	/* See if the symlink already exists. */
@@ -614,14 +625,18 @@ rsync_receiver(struct sess *sess,
 	}
 
 	for (i = 0; i < flsz; i++) {
+		LOG3(sess, "receiver examining %zu: %s", 
+			i, fl[i].path);
 		if (S_ISDIR(fl[i].st.mode))
 			c = pre_process_dir(sess, oumask, 
 				dfd, &fl[i], &newdir[i]);
 		else if (S_ISLNK(fl[i].st.mode))
 			c = process_link(sess, dfd, &fl[i]);
-		else
+		else if (S_ISREG(fl[i].st.mode))
 			c = process_file(sess, fdin, fdout, 
 				dfd, &fl[i], i, csum_length);
+		else
+			c = 1;
 		if ( ! c) 
 			goto out;
 	}
