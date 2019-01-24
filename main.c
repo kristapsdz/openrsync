@@ -16,6 +16,7 @@
  */
 #include <sys/stat.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 
 #include <assert.h>
 #include <err.h>
@@ -292,7 +293,7 @@ main(int argc, char *argv[])
 {
 	struct opts	 opts;
 	pid_t	 	 child;
-	int	 	 fds[2], flags, c;
+	int	 	 fds[2], flags, c, st;
 	struct fargs	*fargs;
 	struct option	 lopts[] = {
 		{ "server",	no_argument,	&opts.server,	1 },
@@ -429,7 +430,11 @@ main(int argc, char *argv[])
 	fargs_free(fargs);
 	close(fds[0]);
 
-	/* FIXME: waitpid. */
+	if (-1 == waitpid(child, &st, 0))
+		err(EXIT_FAILURE, "waitpid");
+
+	if ( ! (WIFEXITED(st) && EXIT_SUCCESS == WEXITSTATUS(st)))
+		c = 0;
 
 	return c ? EXIT_SUCCESS : EXIT_FAILURE;
 usage:
