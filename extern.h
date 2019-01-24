@@ -230,6 +230,8 @@ void		  blkset_free(struct blkset *);
 uint32_t	  hash_fast(const void *, size_t);
 void		  hash_slow(const void *, size_t, 
 			unsigned char *, const struct sess *);
+void		  hash_file(const void *, size_t, 
+			unsigned char *, const struct sess *);
 
 int		  mkpath(struct sess *, char *);
 
