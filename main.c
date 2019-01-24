@@ -433,7 +433,7 @@ main(int argc, char *argv[])
 
 	return c ? EXIT_SUCCESS : EXIT_FAILURE;
 usage:
-	fprintf(stderr, "usage: %s [-nprtv] src ... dst\n", 
+	fprintf(stderr, "usage: %s [-lnprtv] src ... dst\n", 
 		getprogname());
 	return EXIT_FAILURE;
 }
