@@ -32,7 +32,7 @@ The latter may be invoked on-demand over
 [ssh(1)](https://man.openbsd.org/ssh.1) or as a persistent network
 daemon.
 If executed over [ssh(1)](https://man.openbsd.org/ssh.1), the server
-openrsync is distinguished from a client with the **--server** flag.
+openrsync is distinguished from a client by the **--server** flag.
 
 Once the client or server openrsync starts, it examines the command-line
 arguments to determine whether it's in *receiver* or *sender* mode.
@@ -76,6 +76,18 @@ The client and the server subsequently communicate over
 If on a remote daemon, the client does *not* fork, but instead connects
 to the standalone server with a network
 [socket(2)](https://man.openbsd.org/socket.2).
+
+The server's command-line, whether passed to an openrsync spawned on-demand
+over an [ssh(1)](https://man.openbsd.org/ssh.1) session or passed to the daemon, 
+differs from the client's.
+
+```
+openrsync --server [--sender] . files...
+```
+
+The files given are either the single destination directory when in receiver
+mode, or the list of sources when in sender mode.
+The standalone full-stop is a mystery to me.
 
 Locality detection and routing to client and server run-times are
 handled in
