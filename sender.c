@@ -157,6 +157,10 @@ rsync_sender(struct sess *sess, int fdin,
 			ERRX(sess, "blocks requested for "
 				"directory file: %s", fl[idx].path);
 			goto out;
+		} else if (S_ISLNK(fl[idx].st.mode)) {
+			ERRX(sess, "blocks requested for "
+				"symbolic link: %s", fl[idx].path);
+			goto out;
 		}
 
 		/* Dry-run doesn't do anything. */
@@ -198,6 +202,13 @@ rsync_sender(struct sess *sess, int fdin,
 	}
 
 	stats(sess, fdout);
+
+	/* Final "goodbye" message. */
+
+	if ( ! io_read_int(sess, fdin, &idx)) {
+		ERRX1(sess, "io_read_int: update complete");
+		goto out;
+	}
 
 	LOG2(sess, "sender finished updating");
 	rc = 1;
