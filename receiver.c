@@ -37,14 +37,10 @@ static void
 init_blkset(struct blkset *p, off_t sz)
 {
 
-	p->size = sz;
-
 	/* For now, hard-code the block size. */
 
+	p->size = sz;
 	p->len = MAX_CHUNK;
-
-	/* Set our initial block size and remainder. */
-
 	if (0 == (p->blksz = sz / p->len))
 		p->rem = sz;
 	else 
@@ -91,10 +87,7 @@ post_process_dir(struct sess *sess,
 	struct timespec	 tv[2];
 	int		 rc;
 
-	/* 
-	 * We already know it's not a symlink from pre_process_dir(), so
-	 * don't use AT_SYMLINK_NOFOLLOW.
-	 */
+	/* XXX: re-check that this is a directory? */
 
 	if (sess->opts->preserve_times) {
 		tv[0].tv_sec = time(NULL);
@@ -179,7 +172,7 @@ pre_process_dir(struct sess *sess, mode_t oumask,
 static int
 process_link(struct sess *sess, int root, const struct flist *f)
 {
-	int		 rc;
+	int		 rc, newlink = 0;
 	char		*b;
 	struct stat	 st;
 	struct timespec	 tv[2];
@@ -197,39 +190,39 @@ process_link(struct sess *sess, int root, const struct flist *f)
 			return 0;
 		}
 		LOG3(sess, "created: %s -> %s", f->path, f->link);
-		return 1;
+		newlink = 1;
 	} else if ( ! S_ISLNK(st.st_mode)) {
 		WARNX(sess, "file not symlink: %s", f->path);
 		return 0;
-	}
+	} else {
+		/*
+		 * If the symbolic link already exists, then make sure
+		 * that it points to the correct place.
+		 * If not, fix it.
+		 */
 
-	/* Get the name of the existing link. */
-
-	if (NULL == (b = symlinkat_read(sess, root, f->path))) {
-		ERRX1(sess, "symlinkat_read");
-		return 0;
-	} 
-
-	/*
-	 * If the link target is different, then unlink and redo.
-	 * FIXME: should we do a symlink and renameat?
-	 */
-
-	if (strcmp(f->link, b)) {
-		free(b);
-		LOG2(sess, "updating: %s", f->path);
-		if (-1 == unlinkat(root, f->path, 0)) {
-			WARN(sess, "unlinkat: %s", f->path);
+		b = symlinkat_read(sess, root, f->path);
+		if (NULL == b) {
+			ERRX1(sess, "symlinkat_read");
 			return 0;
 		} 
-		if (-1 == symlinkat(f->link, root, f->path)) {
-			WARN(sess, "unlinkat: %s", f->path);
-			return 0;
-		}
-	} else
-		free(b);
 
-	/* Optionally preserve times on the symlink. */
+		if (strcmp(f->link, b)) {
+			free(b);
+			LOG2(sess, "updating: %s", f->path);
+			if (-1 == unlinkat(root, f->path, 0)) {
+				WARN(sess, "unlinkat: %s", f->path);
+				return 0;
+			} 
+			if (-1 == symlinkat(f->link, root, f->path)) {
+				WARN(sess, "unlinkat: %s", f->path);
+				return 0;
+			}
+		} else
+			free(b);
+	}
+
+	/* Optionally preserve times/perms on the symlink. */
 
 	if (sess->opts->preserve_times) {
 		tv[0].tv_sec = time(NULL);
@@ -241,6 +234,15 @@ process_link(struct sess *sess, int root, const struct flist *f)
 			ERR(sess, "utimensat: %s", f->path);
 			return 0;
 		} 
+	}
+
+	if (newlink || sess->opts->preserve_perms) {
+		rc = fchmodat(root, f->path, 
+			f->st.mode, AT_SYMLINK_NOFOLLOW);
+		if (-1 == rc) {
+			ERR(sess, "fchmodat: %s", f->path);
+			return 0;
+		}
 	}
 
 	return 1;
