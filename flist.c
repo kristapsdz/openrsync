@@ -69,7 +69,6 @@ static	const mode_t whitelist_modes[] = {
 /*
  * Straightforward way to sort a filename list.
  * This allows us to easily deduplicate.
- * FIXME: we need to canonicalise paths before doing this.
  */
 static int
 flist_cmp(const void *p1, const void *p2)
@@ -81,20 +80,71 @@ flist_cmp(const void *p1, const void *p2)
 
 /*
  * Sort and deduplicate our file list.
+ * Returns zero on failure, non-zero on success.
  */
-static void
-flist_fixup(struct sess *sess, struct flist *fl, size_t *sz)
+static int
+flist_fixup(struct sess *sess, struct flist **fl, size_t *sz)
 {
-	size_t	 i;
+	size_t	 	 i, j;
+	struct flist	*new;
+	struct flist	*f, *fnext;
 
-	qsort(fl, *sz, sizeof(struct flist), flist_cmp);
+	qsort(*fl, *sz, sizeof(struct flist), flist_cmp);
 
-	for (i = 0; i < *sz - 1; i++) {
-		if (strcmp(fl[i].path, fl[i + 1].path))
-			continue;
-		WARNX(sess, "duplicate path: %s", fl[i + 1].path);
-		/* TODO. */
+	/* Create a new buffer, "new", and copy. */
+
+	new = calloc(*sz, sizeof(struct flist));
+	if (NULL == new) {
+		ERR(sess, "calloc");
+		return 0;
 	}
+
+	for (i = j = 0; i < *sz - 1; i++) {
+		f = &(*fl)[i];
+		fnext = &(*fl)[i + 1];
+
+		if (strcmp(f->wpath, fnext->wpath)) {
+			new[j++] = *f;
+			continue;
+		}
+
+		/*
+		 * Our working (destination) paths are the same.
+		 * If the actual file is the same (as given on the
+		 * command-line), then we can just discard the first.
+		 * Otherwise, we need to bail out: it means we have two
+		 * different files with the relative path on the
+		 * destination side.
+		 */
+
+		if (0 == strcmp(f->path, fnext->path)) {
+			new[j++] = *f;
+			i++;
+			WARNX(sess, "duplicate path: %s (%s)",
+				f->wpath, f->path);
+			free(fnext->path);
+			free(fnext->link);
+			fnext->path = fnext->link = NULL;
+			continue;
+		} 
+
+		ERRX(sess, "duplicate working path for "
+			"possibly different file: %s: %s, %s",
+			f->wpath, f->path, fnext->path);
+		free(new);
+		return 0;
+	}
+
+	/* Don't forget the last entry. */
+
+	if (i == *sz - 1)
+		new[j++] = (*fl)[i];
+
+	free(*fl);
+	*fl = new;
+	*sz = j;
+
+	return 1;
 }
 
 /*
@@ -475,7 +525,6 @@ flist_recv(struct sess *sess, int fd, size_t *sz)
 
 	*sz = flsz;
 	LOG2(sess, "received file metadata list: %zu", *sz);
-	flist_fixup(sess, fl, sz);
 	return fl;
 out:
 	flist_free(fl, flsz);
@@ -565,7 +614,7 @@ flist_gen_recursive_entry(struct sess *sess, char *root,
 	 * We'll make sense of it in flist_send.
 	 */
 
-	if (NULL == (fts = fts_open(cargv, FTS_LOGICAL, NULL))) {
+	if (NULL == (fts = fts_open(cargv, FTS_PHYSICAL, NULL))) {
 		ERR(sess, "fts_open");
 		return 0;
 	}
@@ -617,7 +666,10 @@ flist_gen_recursive_entry(struct sess *sess, char *root,
 					"link: %s", ent->fts_path);
 				continue;
 			}
-		} else if ( ! S_ISREG(ent->fts_statp->st_mode)) {
+		} 
+		
+		if ( ! S_ISDIR(ent->fts_statp->st_mode) &&
+		     ! S_ISREG(ent->fts_statp->st_mode)) {
 			WARNX(sess, "skipping non-regular "
 				"file: %s", ent->fts_path);
 			continue;
@@ -832,7 +884,12 @@ flist_gen(struct sess *sess, size_t argc, char **argv, size_t *sz)
 		flist_gen_nonrecursive(sess, argc, argv, sz);
 
 	if (NULL != f)
-		flist_fixup(sess, f, sz);
+		if ( ! flist_fixup(sess, &f, sz)) {
+			ERRX1(sess, "flist_fixup");
+			flist_free(f, *sz);
+			f = NULL;
+			*sz = 0;
+		}
 
 	return f;
 }
