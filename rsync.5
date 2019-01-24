@@ -46,11 +46,14 @@ read as a 32-bit integer.
 For values greater, the value is transmitted first as a maximum integer,
 then a 64-bit signed integer.
 .Pp
-There are two types of checksums: long and short (slow and fast).
+There are three types of checksums: long (slow), short (fast), and
+whole-file.
 The fast checksum is a derivative of Adler-32.
-The slow checksum is MD4.
-For long checksums, the sum is made over the checksum seed first
-(serialised in little-endian format), then the data.
+The slow checksum is MD4,
+made over the checksum seed first (serialised in little-endian format),
+then the data.
+The whole-file applies MD4 to the file first, then the checksum seed at
+the end (also serialised in little-endian format).
 .Ss Multiplexing
 Most
 .Nm
