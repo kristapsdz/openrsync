@@ -15,7 +15,7 @@ for porting right now, but I was able to copy over
 as requirement, and mask the OpenBSD-specific functions on both Linux
 and FreeBSD without any problems.
 
-The acutal problem, however, is security in matching OpenBSD's
+The actual problem, however, is security in matching OpenBSD's
 [pledge](https://man.openbsd.org/pledge.2) and
 [unveil](https://man.openbsd.org/unveil.2).  This is partly possible
 with FreeBSD's capsicum, but Linux is a mess.
