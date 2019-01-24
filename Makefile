@@ -12,6 +12,7 @@ OBJS	 = blocks.o \
 	   receiver.o \
 	   sender.o \
 	   server.o \
+	   session.o \
 	   socket.o \
 	   symlinks.o
 ALLOBJS	 = $(OBJS) \

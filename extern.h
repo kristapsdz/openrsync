@@ -238,6 +238,9 @@ int		  mkpath(struct sess *, char *);
 char		 *symlink_read(struct sess *, const char *);
 char		 *symlinkat_read(struct sess *, int, const char *);
 
+int		  sess_stats_send(struct sess *, int);
+int		  sess_stats_recv(struct sess *, int);
+
 __END_DECLS
 
 #endif /*!EXTERN_H*/

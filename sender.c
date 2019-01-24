@@ -25,31 +25,6 @@
 #include "extern.h"
 
 /*
- * FIXME.
- */
-static int
-stats(struct sess *sess, int fdout)
-{
-
-	if ( ! sess->opts->server)
-		return 1;
-
-	if ( ! io_write_int(sess, fdout, 10)) {
-		ERRX1(sess, "io_write_int: total read");
-		return 0;
-	} else if ( ! io_write_int(sess, fdout, 20)) {
-		ERRX1(sess, "io_write_int: total write");
-		return 0;
-	} else if ( ! io_write_int(sess, fdout, 30)) {
-		ERRX1(sess, "io_write_int: total size");
-		return 0;
-	} 
-
-	LOG2(sess, "stats written");
-	return 1;
-}
-
-/*
  * A client sender manages the read-only source files and sends data to
  * the receiver as requested.
  * First it sends its list of files, then it waits for the server to
@@ -201,7 +176,10 @@ rsync_sender(struct sess *sess, int fdin,
 		}
 	}
 
-	stats(sess, fdout);
+	if (sess->opts->server && ! sess_stats_send(sess, fdout)) {
+		ERRX1(sess, "sess_stats_end");
+		goto out;
+	}
 
 	/* Final "goodbye" message. */
 
