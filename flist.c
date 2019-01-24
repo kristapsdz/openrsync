@@ -46,8 +46,7 @@
 #define FLIST_TIME_SAME  0x0080 /* time is repeat */
 
 /*
- * Straightforward way to sort a filename list.
- * This allows us to easily deduplicate.
+ * Requied way to sort a filename list.
  */
 static int
 flist_cmp(const void *p1, const void *p2)
@@ -58,17 +57,15 @@ flist_cmp(const void *p1, const void *p2)
 }
 
 /*
- * Sort then deduplicate our file list.
+ * Deduplicate our file list.
  * Returns zero on failure, non-zero on success.
  */
 static int
-flist_fixup(struct sess *sess, struct flist **fl, size_t *sz)
+flist_dedupe(struct sess *sess, struct flist **fl, size_t *sz)
 {
 	size_t	 	 i, j;
 	struct flist	*new;
 	struct flist	*f, *fnext;
-
-	qsort(*fl, *sz, sizeof(struct flist), flist_cmp);
 
 	/* Create a new buffer, "new", and copy. */
 
@@ -240,9 +237,10 @@ flist_send(struct sess *sess, int fd,
 }
 
 /*
- * Read the filename.
+ * Read the filename of a file list.
  * This is the most expensive part of the file list transfer, so a lot
  * of attention has gone into transmitting as little as possible.
+ * Micro-optimisation, but whatever.
  * Fills in "f" with the full path on success.
  * Returns zero on failure, non-zero on success.
  */
@@ -325,7 +323,78 @@ flist_recv_filename(struct sess *sess, int fd,
 }
 
 /*
- * Receive a file list of length "sz" from the wire.
+ * Reallocate a file list in chunks of FLIST_CHUNK_SIZE;
+ * Returns zero on failure, non-zero on success.
+ */
+static int
+flist_realloc(struct sess *sess, 
+	struct flist **fl, size_t *sz, size_t *max)
+{
+	void	*pp;
+
+	if (*sz + 1 <= *max) 
+		return 1;
+
+	pp = recallocarray(*fl, *max, 
+		*max + FLIST_CHUNK_SIZE, sizeof(struct flist));
+	if (NULL == pp) {
+		ERR(sess, "recallocarray");
+		return 0;
+	}
+	*fl = pp;
+	*max += FLIST_CHUNK_SIZE;
+	(*sz)++;
+	return 1;
+}
+
+/*
+ * Copy a regular or symbolic link file "path" into "f".
+ * This handles the correct path creation and symbolic linking.
+ * Returns zero on failure, non-zero on success.
+ */
+static int
+flist_append(struct sess *sess, struct flist *f, 
+	struct stat *st, const char *path)
+{
+
+	/* 
+	 * Copy the full path for local addressing and transmit
+	 * only the filename part for the receiver.
+	 */
+
+	if (NULL == (f->path = strdup(path))) {
+		ERR(sess, "strdup");
+		return 0;
+	}
+
+	if (NULL == (f->wpath = strrchr(f->path, '/')))
+		f->wpath = f->path;
+	else
+		f->wpath++;
+
+	/* 
+	 * On the receiving end, we'll strip out all bits on the
+	 * mode except for the file permissions.
+	 * No need to warn about it here.
+	 */
+
+	flist_copy_stat(f, st);
+
+	/* Optionally copy link information. */
+
+	if (S_ISLNK(st->st_mode)) {
+		f->link = symlink_read(sess, f->path);
+		if (NULL == f->link) {
+			ERRX1(sess, "symlink_read");
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+/*
+ * Receive a file list, filling in length "sz", from the wire.
  * Return the file list or NULL on failure ("sz" will be zero).
  */
 struct flist *
@@ -333,17 +402,15 @@ flist_recv(struct sess *sess, int fd, size_t *sz)
 {
 	struct flist	*fl = NULL;
 	struct flist	*ff;
-	const struct flist *fflast;
+	const struct flist *fflast = NULL;
 	size_t		 flsz = 0, flmax = 0, lsz;
 	uint8_t		 flag;
-	void		*pp;
 	char		 lastname[MAXPATHLEN];
 	int64_t		 lval; /* temporary values... */
 	int32_t		 ival;
 
 	*sz = 0;
 	lastname[0] = '\0';
-	fflast = NULL;
 
 	for (;;) {
 		if ( ! io_read_byte(sess, fd, &flag)) {
@@ -354,21 +421,15 @@ flist_recv(struct sess *sess, int fd, size_t *sz)
 
 		/* Allocate in chunks instead of one by one. */
 
-		if (flsz + 1 > flmax) {
-			pp = recallocarray(fl, flmax, 
-				flmax + FLIST_CHUNK_SIZE, 
-				 sizeof(struct flist));
-			if (NULL == pp) {
-				ERR(sess, "recallocarray");
-				goto out;
-			}
-			fl = pp;
-			flmax += FLIST_CHUNK_SIZE;
+		if ( ! flist_realloc(sess, &fl, &flsz, &flmax)) {
+			ERRX1(sess, "flist_realloc");
+			goto out;
 		}
-		flsz++;
 
 		ff = &fl[flsz - 1];
 		fflast = flsz > 1 ? &fl[flsz - 2] : NULL;
+
+		/* Filename first. */
 
 		if ( ! flist_recv_filename
 		    (sess, fd, ff, flag, lastname)) {
@@ -471,7 +532,6 @@ flist_gen_recursive_entry(struct sess *sess, char *root,
 	FTSENT		*ent;
 	struct flist	*f;
 	size_t		 flsz = 0, stripdir;
-	void		*pp;
 	struct stat	 st;
 
 	cargv[0] = root;
@@ -486,34 +546,35 @@ flist_gen_recursive_entry(struct sess *sess, char *root,
 		ERR(sess, "lstat: %s", root);
 		return 0;
 	} else if (S_ISREG(st.st_mode)) {
-		if (*sz + 1 > *max) {
-			pp = recallocarray(*fl, *max, 
-				*max + FLIST_CHUNK_SIZE, 
-				sizeof(struct flist));
-			if (NULL == pp) {
-				ERR(sess, "recallocarray");
-				return 0;
-			}
-			*fl = pp;
-			*max += FLIST_CHUNK_SIZE;
-		}
-		f = &(*fl)[(*sz)++];
-		assert(NULL != f);
-		if (NULL == (f->path = strdup(root))) {
-			ERR(sess, "strdup");
+		if ( ! flist_realloc(sess, fl, sz, max)) {
+			ERRX1(sess, "flist_realloc");
 			return 0;
 		}
-		if (NULL == (f->wpath = strrchr(f->path, '/')))
-			f->wpath = f->path;
-		else
-			f->wpath++;
-
-		flist_copy_stat(f, &st);
+		f = &(*fl)[(*sz) - 1];
+		assert(NULL != f);
+		if ( ! flist_append(sess, f, &st, root)) {
+			ERRX1(sess, "flist_append");
+			return 0;
+		}
+		return 1;
+	} else if (S_ISLNK(st.st_mode)) {
+		if ( ! sess->opts->preserve_links) {
+			WARNX(sess, "skipping symlink: %s", root);
+			return 1;
+		} else if ( ! flist_realloc(sess, fl, sz, max)) {
+			ERRX1(sess, "flist_realloc");
+			return 0;
+		}
+		f = &(*fl)[(*sz) - 1];
+		assert(NULL != f);
+		if ( ! flist_append(sess, f, &st, root)) {
+			ERRX1(sess, "flist_append");
+			return 0;
+		}
 		return 1;
 	} else if ( ! S_ISDIR(st.st_mode)) {
-		/* FIXME: handle symlinks. */
-		WARNX(sess, "neither directory nor file: %s", root);
-		return 0;
+		WARNX(sess, "skipping special: %s", root);
+		return 1;
 	}
 
 	/*
@@ -592,29 +653,25 @@ flist_gen_recursive_entry(struct sess *sess, char *root,
 		assert(NULL != ent->fts_statp);
 		if (S_ISLNK(ent->fts_statp->st_mode)) {
 			if ( ! sess->opts->preserve_links) {
-				WARNX(sess, "skipping symbolic "
-					"link: %s", ent->fts_path);
+				WARNX(sess, "skipping symlink: %s",
+					ent->fts_path);
 				continue;
 			}
-		} else if ( ! S_ISDIR(ent->fts_statp->st_mode) &&
-		            ! S_ISREG(ent->fts_statp->st_mode)) {
-			WARNX(sess, "skipping non-regular "
-				"file: %s", ent->fts_path);
+		} 
+
+		if ( ! S_ISDIR(ent->fts_statp->st_mode) &&
+		     ! S_ISLNK(ent->fts_statp->st_mode) &&
+	             ! S_ISREG(ent->fts_statp->st_mode)) {
+			WARNX(sess, "skipping special: %s",
+				ent->fts_path);
 			continue;
 		}
 
-		if (*sz + 1 > *max) {
-			pp = recallocarray(*fl, *max, 
-				*max + FLIST_CHUNK_SIZE, 
-				sizeof(struct flist));
-			if (NULL == pp) {
-				ERR(sess, "recallocarray");
-				goto out;
-			}
-			*fl = pp;
-			*max += FLIST_CHUNK_SIZE;
+		if ( ! flist_realloc(sess, fl, sz, max)) {
+			ERRX1(sess, "flist_realloc");
+			goto out;
 		}
-		(*sz)++;
+
 		flsz++;
 		f = &(*fl)[*sz - 1];
 
@@ -735,56 +792,25 @@ flist_gen_nonrecursive(struct sess *sess,
 			continue;
 		} else if (S_ISLNK(st.st_mode)) {
 			if ( ! sess->opts->preserve_links) {
-				WARNX(sess, "skipping symbolic "
-					"link: %s", argv[i]);
+				WARNX(sess, "skipping "
+					"symlink: %s", argv[i]);
 				continue;
 			}
 		} else if ( ! S_ISREG(st.st_mode)) {
-			WARNX(sess, "skipping non-"
-				"regular file: %s", argv[i]);
+			WARNX(sess, "skipping special: %s", argv[i]);
 			continue;
 		}
 
 		f = &fl[(*sz)++];
 		assert(NULL != f);
-
-		/* 
-		 * Copy the full path for local addressing and transmit
-		 * only the filename part for the receiver.
-		 */
-
-		if (NULL == (f->path = strdup(argv[i]))) {
-			ERR(sess, "strdup");
+		if ( ! flist_append(sess, f, &st, argv[i])) {
+			ERRX1(sess, "flist_append");
 			goto out;
-		}
-
-		if (NULL == (f->wpath = strrchr(f->path, '/')))
-			f->wpath = f->path;
-		else
-			f->wpath++;
-
-		/* 
-		 * On the receiving end, we'll strip out all bits on the
-		 * mode except for the file permissions.
-		 * No need to warn about it here.
-		 */
-
-		flist_copy_stat(f, &st);
-
-		/* Optionally copy link information. */
-
-		if (S_ISLNK(st.st_mode)) {
-			f->link = symlink_read(sess, f->path);
-			if (NULL == f->link) {
-				ERRX1(sess, "symlink_read");
-				goto out;
-			}
 		}
 	}
 
-	/* FIXME: shouldn't be an error. */
-
 	if (0 == *sz) {
+		/* FIXME: shouldn't be an error. */
 		ERRX1(sess, "zero-length file list");
 		goto out;
 	}
@@ -821,13 +847,15 @@ flist_gen(struct sess *sess, size_t argc, char **argv, size_t *sz)
 
 	/* Run the fixup. */
 
-	if (NULL != f)
-		if ( ! flist_fixup(sess, &f, sz)) {
-			ERRX1(sess, "flist_fixup");
+	if (NULL != f) {
+		qsort(f, *sz, sizeof(struct flist), flist_cmp);
+		if ( ! flist_dedupe(sess, &f, sz)) {
+			ERRX1(sess, "flist_dedupe");
 			flist_free(f, *sz);
 			f = NULL;
 			*sz = 0;
 		}
+	}
 
 	return f;
 }
