@@ -307,10 +307,16 @@ main(int argc, char *argv[])
 
 	memset(&opts, 0, sizeof(struct opts));
 
-	while (-1 != (c = getopt_long(argc, argv, "e:nprtv", lopts, NULL)))
+	for (;;) {
+		c = getopt_long(argc, argv, "e:lnprtv", lopts, NULL);
+		if (-1 == c)
+			break;
 		switch (c) {
 		case 'e':
 			/* Ignore. */
+			break;
+		case 'l':
+			opts.preserve_links = 1;
 			break;
 		case 'n':
 			opts.dry_run = 1;
@@ -332,6 +338,7 @@ main(int argc, char *argv[])
 		default:
 			goto usage;
 		}
+	}
 
 	argc -= optind;
 	argv += optind;
