@@ -60,10 +60,28 @@ hash_fast(const void *buf, size_t len)
 }
 
 /*
- * Slow MD4-based hash with leading seed.
+ * Slow MD4-based hash with trailing seed.
  */
 void
 hash_slow(const void *buf, size_t len, 
+	unsigned char *md, const struct sess *sess)
+{
+	MD4_CTX		 ctx;
+	int32_t		 seed = htole32(sess->seed);
+
+	MD4_Init(&ctx);
+	MD4_Update(&ctx, buf, len);
+	MD4_Update(&ctx, (unsigned char *)&seed, sizeof(int32_t));
+	MD4_Final(md, &ctx);
+}
+
+/*
+ * Hash an entire file.
+ * This is similar to hash_slow() except the seed is hashed at the end
+ * of the sequence, not the beginning.
+ */
+void
+hash_file(const void *buf, size_t len, 
 	unsigned char *md, const struct sess *sess)
 {
 	MD4_CTX		 ctx;

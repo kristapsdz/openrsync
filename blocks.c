@@ -132,7 +132,8 @@ static int
 blk_match_part(struct sess *sess, const char *path, int fd, 
 	const void *buf, off_t size, const struct blkset *blks)
 {
-	off_t	 	 offs, last, end, fromcopy = 0, fromdown = 0;
+	off_t	 	 offs, last, end, fromcopy = 0, fromdown = 0,
+			 total = 0;
 	struct blk	*blk;
 
 	/* 
@@ -151,6 +152,7 @@ blk_match_part(struct sess *sess, const char *path, int fd,
 			continue;
 
 		fromdown += offs - last;
+		total += offs - last;
 		LOG4(sess, "%s: flushed %jd B before %zu B block "
 			"(%zu)", path, (intmax_t)(offs - last), 
 			blk->len, blk->idx);
@@ -166,21 +168,26 @@ blk_match_part(struct sess *sess, const char *path, int fd,
 		}
 
 		fromcopy += blk->len;
+		total += blk->len;
 		offs += blk->len - 1;
 		last = offs + 1;
 	}
 
+	/* Emit remaining data and send terminator. */
+
+	total += size - last;
+	fromdown += size - last;
+
 	LOG4(sess, "%s: flushed remaining %jd B", 
 		path, (intmax_t)(size - last));
-	LOG3(sess, "%s: %.2f%% upload", path, 
-		100.0 * fromdown / (fromcopy + fromdown));
-
-	/* Emit remaining data and send terminator. */
 
 	if ( ! blk_flush(sess, fd, buf + last, size - last))
 		ERRX1(sess, "blk_flush");
 	else if ( ! io_write_int(sess, fd, 0))
 		ERRX1(sess, "io_write_int: data block size");
+
+	LOG3(sess, "%s: %.2f%% upload", 
+		path, 100.0 * fromdown / total);
 
 	return 1;
 }
@@ -258,7 +265,7 @@ blk_match(struct sess *sess, int fd,
 
 	/* Now write the full file hash. */
 
-	hash_slow(map, st.st_size, filemd, sess);
+	hash_file(map, st.st_size, filemd, sess);
 
 	if ( ! io_write_buf(sess, fd, filemd, MD4_DIGEST_LENGTH)) {
 		ERRX1(sess, "io_write_buf: data blocks hash");
