@@ -27,8 +27,7 @@ requests**: I will simply close out the issue.
 Each openrsync session is divided into a *server* and *client* service.
 
 The client openrsync is executed by the user.
-The server openrsync is executed on a remote host.
-The latter may be invoked on-demand over
+The server openrsync is executed on a remote host either on-demand over
 [ssh(1)](https://man.openbsd.org/ssh.1) or as a persistent network
 daemon.
 If executed over [ssh(1)](https://man.openbsd.org/ssh.1), the server
