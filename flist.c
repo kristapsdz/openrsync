@@ -332,8 +332,10 @@ flist_realloc(struct sess *sess,
 {
 	void	*pp;
 
-	if (*sz + 1 <= *max) 
+	if (*sz + 1 <= *max)  {
+		(*sz)++;
 		return 1;
+	}
 
 	pp = recallocarray(*fl, *max, 
 		*max + FLIST_CHUNK_SIZE, sizeof(struct flist));
