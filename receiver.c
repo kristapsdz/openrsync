@@ -166,6 +166,9 @@ pre_process_dir(struct sess *sess, mode_t oumask,
 
 /*
  * Process a symbolic link.
+ * New links are given the source's permissions and the current time.
+ * Updated links retain permissions and have times automatically updated
+ * unless preserve_times and/or preserve_perms are set.
  * This operates on the link itself, not the target.
  * Returns zero on failure, non-zero on success.
  */
@@ -189,7 +192,8 @@ process_link(struct sess *sess, int root, const struct flist *f)
 			WARN(sess, "symlinkat: %s", f->path);
 			return 0;
 		}
-		LOG3(sess, "created: %s -> %s", f->path, f->link);
+		LOG3(sess, "created: %s -> %s (%o)", 
+			f->path, f->link, f->st.mode);
 		newlink = 1;
 	} else if ( ! S_ISLNK(st.st_mode)) {
 		WARNX(sess, "file not symlink: %s", f->path);
@@ -423,7 +427,7 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 		goto out;
 	}
 
-	LOG3(sess, "%s: temporary: %s", f->path, tmpfile);
+	LOG3(sess, "%s: temporary: %s (%o)", f->path, tmpfile, perm);
 
 	/* Now transmit the metadata for set and blocks. */
 
@@ -649,6 +653,8 @@ rsync_receiver(struct sess *sess,
 	if (sess->opts->preserve_times ||
 	    sess->opts->preserve_perms)
 		for (i = 0; i < flsz; i++) {
+			if ( ! S_ISDIR(fl[i].st.mode))
+				continue;
 			c = post_process_dir(sess, 
 				dfd, &fl[i], newdir[i]);
 			if ( ! c)
