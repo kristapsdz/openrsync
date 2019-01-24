@@ -208,6 +208,9 @@ rsync_sender(struct sess *sess, int fdin,
 	if ( ! io_read_int(sess, fdin, &idx)) {
 		ERRX1(sess, "io_read_int: update complete");
 		goto out;
+	} else if (-1 != idx) {
+		ERRX(sess, "read incorrect update complete ack");
+		goto out;
 	}
 
 	LOG2(sess, "sender finished updating");
