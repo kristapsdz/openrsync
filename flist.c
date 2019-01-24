@@ -46,27 +46,6 @@
 #define FLIST_TIME_SAME  0x0080 /* time is repeat */
 
 /*
- * This is a list of all of the mode bits that we accept.
- * Specifically, we only allow for permissions: no sticky bits, no
- * setuid or setgid, no special bits.
- */
-static	const mode_t whitelist_modes[] = {
-	S_IRUSR, /* R for owner */
-	S_IWUSR, /* W for owner */
-	S_IXUSR, /* X for owner */
-	S_IRGRP, /* R for group */
-	S_IWGRP, /* W for group */
-	S_IXGRP, /* X for group */
-	S_IROTH, /* R for other */
-	S_IWOTH, /* W for other */
-	S_IXOTH, /* X for other */
-	S_IFREG, /* regular */
-	S_IFDIR, /* directory */
-	S_IFLNK, /* symbolic link */
-	0
-};
-
-/*
  * Straightforward way to sort a filename list.
  * This allows us to easily deduplicate.
  */
@@ -79,7 +58,7 @@ flist_cmp(const void *p1, const void *p2)
 }
 
 /*
- * Sort and deduplicate our file list.
+ * Sort then deduplicate our file list.
  * Returns zero on failure, non-zero on success.
  */
 static int
@@ -139,6 +118,8 @@ flist_fixup(struct sess *sess, struct flist **fl, size_t *sz)
 
 	if (i == *sz - 1)
 		new[j++] = (*fl)[i];
+
+	/* Reassign to the deduplicated array. */
 
 	free(*fl);
 	*fl = new;
@@ -235,8 +216,8 @@ flist_send(struct sess *sess, int fd,
 
 		/* Optional link information. */
 
-		if (S_ISLNK(f->st.mode)) {
-			assert(sess->opts->preserve_links);
+		if (S_ISLNK(f->st.mode) &&
+		    sess->opts->preserve_links) {
 			fn = f->link;
 			fnlen = strlen(f->link);
 			if ( ! io_write_int(sess, fd, fnlen)) {
@@ -308,6 +289,7 @@ flist_recv_filename(struct sess *sess, int fd,
 	}
 
 	/* Allocate our full filename length. */
+	/* FIXME: maximum pathname length. */
 
 	fpathlen = pathlen + partial;
 	if (0 == fpathlen) {
@@ -339,65 +321,6 @@ flist_recv_filename(struct sess *sess, int fd,
 
 	strlcpy(last, f->path, MAXPATHLEN);
 	f->wpath = f->path;
-	return 1;
-}
-
-static int
-flist_recv_mode(struct sess *sess, int fd, 
-	struct flist *f, uint8_t flag, const struct flist *flast)
-{
-	int32_t	 ival;
-	size_t	 i;
-	mode_t	 m;
-
-	/* Read the file mode. */
-
-	if ( ! (FLIST_MODE_SAME & flag)) {
-		if ( ! io_read_int(sess, fd, &ival)) {
-			ERRX1(sess, "io_read_int: file mode");
-			return 0;
-		}
-		m = ival;
-	} else if (NULL == flast) {
-		ERRX(sess, "same mode without last entry");
-		return 0;
-	} else
-		m = flast->st.mode;
-
-	/*
-	 * We can have all sorts of weird modes: instead of trying to
-	 * strip them all out here, we instead white-list the modes that
-	 * we accept and only work with those.
-	 */
-
-	if (S_ISDIR(m)) {
-		if ( ! sess->opts->recursive) {
-			ERRX(sess, "directory: %s", f->path);
-			return 0;
-		}
-	} else if (S_ISLNK(m)) {
-		if ( ! sess->opts->preserve_links) {
-			ERRX(sess, "symlink file: %s", f->path);
-			return 0;
-		}
-	} else if ( ! S_ISREG(m)) {
-		ERRX(sess, "non-regular file: %s", f->path);
-		return 0;
-	}
-
-	/* Scrub the mode. */
-
-	f->st.mode = 0;
-	for (i = 0; 0 != whitelist_modes[i]; i++) {
-		if ( ! (whitelist_modes[i] & m))
-			continue;
-		m &= ~whitelist_modes[i];
-		f->st.mode |= whitelist_modes[i];
-	}
-	if (m)
-		WARNX(sess, "some file modes not "
-			"whitelisted: %8o: %s", m, f->path);
-
 	return 1;
 }
 
@@ -478,21 +401,24 @@ flist_recv(struct sess *sess, int fd, size_t *sz)
 		}  else
 			ff->st.mtime = fflast->st.mtime;
 
-		/* 
-		 * Read the file mode.
-		 * This will make sure that, if we return with success,
-		 * the file (directory, link, regular) is acceptable.
-		 */
+		/* Read the file mode. */
 
-		if ( ! flist_recv_mode(sess, fd, ff, flag, fflast)) {
-			ERRX(sess, "flist_recv_mode");
+		if ( ! (FLIST_MODE_SAME & flag)) {
+			if ( ! io_read_int(sess, fd, &ival)) {
+				ERRX1(sess, "io_read_int: file mode");
+				goto out;
+			}
+			ff->st.mode = ival;
+		} else if (NULL == fflast) {
+			ERRX(sess, "same mode without last entry");
 			goto out;
-		} 
+		} else
+			ff->st.mode = fflast->st.mode;
 
 		/* Optionally read the link information. */
 
-		if (S_ISLNK(ff->st.mode)) {
-			assert(sess->opts->preserve_links);
+		if (S_ISLNK(ff->st.mode) &&
+		    sess->opts->preserve_links) {
 			if ( ! io_read_size(sess, fd, &lsz)) {
 				ERRX1(sess, "io_read_size: link size");
 				goto out;
@@ -524,6 +450,10 @@ flist_recv(struct sess *sess, int fd, size_t *sz)
 	}
 
 	*sz = flsz;
+	
+	/* Remember to order the received list! */
+
+	qsort(fl, *sz, sizeof(struct flist), flist_cmp);
 	LOG2(sess, "received file metadata list: %zu", *sz);
 	return fl;
 out:
@@ -550,7 +480,6 @@ flist_gen_recursive_entry(struct sess *sess, char *root,
 	/* 
 	 * If we're a file, then revert to the same actions we use for
 	 * the non-recursive scan.
-	 * FIXME: abstract this part.
 	 */
 
 	if (-1 == lstat(root, &st)) {
@@ -582,6 +511,7 @@ flist_gen_recursive_entry(struct sess *sess, char *root,
 		flist_copy_stat(f, &st);
 		return 1;
 	} else if ( ! S_ISDIR(st.st_mode)) {
+		/* FIXME: handle symlinks. */
 		WARNX(sess, "neither directory nor file: %s", root);
 		return 0;
 	}
@@ -666,10 +596,8 @@ flist_gen_recursive_entry(struct sess *sess, char *root,
 					"link: %s", ent->fts_path);
 				continue;
 			}
-		} 
-		
-		if ( ! S_ISDIR(ent->fts_statp->st_mode) &&
-		     ! S_ISREG(ent->fts_statp->st_mode)) {
+		} else if ( ! S_ISDIR(ent->fts_statp->st_mode) &&
+		            ! S_ISREG(ent->fts_statp->st_mode)) {
 			WARNX(sess, "skipping non-regular "
 				"file: %s", ent->fts_path);
 			continue;
@@ -873,6 +801,14 @@ out:
 	return fl;
 }
 
+/*
+ * Generate a list of file metadata (flist) from our arguments.
+ * In non-recursive mode (the default), we use only the files we're
+ * given.
+ * In recursive mode, we recursively generate a list of all files.
+ * After generation, the list is sorted and deduplicated.
+ * Returns the list or NULL on failure (sz set to zero).
+ */
 struct flist *
 flist_gen(struct sess *sess, size_t argc, char **argv, size_t *sz)
 {
@@ -882,6 +818,8 @@ flist_gen(struct sess *sess, size_t argc, char **argv, size_t *sz)
 	f = sess->opts->recursive ?
 		flist_gen_recursive(sess, argc, argv, sz) :
 		flist_gen_nonrecursive(sess, argc, argv, sz);
+
+	/* Run the fixup. */
 
 	if (NULL != f)
 		if ( ! flist_fixup(sess, &f, sz)) {
