@@ -130,11 +130,15 @@ rsync_sender(struct sess *sess, int fdin,
 			goto out;
 		} else if (S_ISDIR(fl[idx].st.mode)) {
 			ERRX(sess, "blocks requested for "
-				"directory file: %s", fl[idx].path);
+				"directory: %s", fl[idx].path);
 			goto out;
 		} else if (S_ISLNK(fl[idx].st.mode)) {
 			ERRX(sess, "blocks requested for "
-				"symbolic link: %s", fl[idx].path);
+				"symlink: %s", fl[idx].path);
+			goto out;
+		} else if ( ! S_ISREG(fl[idx].st.mode)) {
+			ERRX(sess, "blocks requested for "
+				"special: %s", fl[idx].path);
 			goto out;
 		}
 
