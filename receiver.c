@@ -99,6 +99,7 @@ post_process_dir(struct sess *sess,
 			ERR(sess, "utimensat: %s", f->path);
 			return 0;
 		} 
+		LOG4(sess, "%s: updated date", f->path);
 	}
 
 	if (newdir || sess->opts->preserve_perms) {
@@ -107,6 +108,8 @@ post_process_dir(struct sess *sess,
 			ERR(sess, "fchmodat: %s", f->path);
 			return 0;
 		}
+		LOG4(sess, "%s: updated mode: %o", 
+			f->path, f->st.mode);
 	}
 
 	return 1;
@@ -192,8 +195,7 @@ process_link(struct sess *sess, int root, const struct flist *f)
 			WARN(sess, "symlinkat: %s", f->path);
 			return 0;
 		}
-		LOG3(sess, "created: %s -> %s (%o)", 
-			f->path, f->link, f->st.mode);
+		LOG3(sess, "created: %s -> %s", f->path, f->link);
 		newlink = 1;
 	} else if ( ! S_ISLNK(st.st_mode)) {
 		WARNX(sess, "file not symlink: %s", f->path);
@@ -213,7 +215,8 @@ process_link(struct sess *sess, int root, const struct flist *f)
 
 		if (strcmp(f->link, b)) {
 			free(b);
-			LOG2(sess, "updating: %s", f->path);
+			LOG3(sess, "updating: %s -> %s", 
+				f->path, f->link);
 			if (-1 == unlinkat(root, f->path, 0)) {
 				WARN(sess, "unlinkat: %s", f->path);
 				return 0;
@@ -222,8 +225,11 @@ process_link(struct sess *sess, int root, const struct flist *f)
 				WARN(sess, "unlinkat: %s", f->path);
 				return 0;
 			}
-		} else
+		} else {
 			free(b);
+			LOG3(sess, "symlink is current: %s -> %s", 
+				f->path, f->link);
+		}
 	}
 
 	/* Optionally preserve times/perms on the symlink. */
@@ -238,6 +244,7 @@ process_link(struct sess *sess, int root, const struct flist *f)
 			ERR(sess, "utimensat: %s", f->path);
 			return 0;
 		} 
+		LOG4(sess, "%s: updated date", f->path);
 	}
 
 	if (newlink || sess->opts->preserve_perms) {
@@ -247,6 +254,8 @@ process_link(struct sess *sess, int root, const struct flist *f)
 			ERR(sess, "fchmodat: %s", f->path);
 			return 0;
 		}
+		LOG4(sess, "%s: updated mode: %o", 
+			f->path, f->st.mode);
 	}
 
 	return 1;
@@ -387,7 +396,6 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 	 * Open our writable temporary file.
 	 * To make this reasonably unique, make the file into a dot-file
 	 * and give it a random suffix.
-	 * Use the mode on our remote system.
 	 */
 
 	hash = arc4random();
@@ -409,10 +417,8 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 			goto out;
 		} 
 	}
-	/* 
-	 * If we have -p, then copy over the file's mode only if we're
-	 * updating an existing file, not making one anew.
-	 */
+
+	/* Copy the source's mode when creating anew or with -p. */
 
 	if (-1 == ffd) 
 		perm = f->st.mode;
@@ -427,7 +433,8 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 		goto out;
 	}
 
-	LOG3(sess, "%s: temporary: %s (%o)", f->path, tmpfile, perm);
+	LOG3(sess, "%s: temporary: %s (mode %o)", 
+		f->path, tmpfile, perm);
 
 	/* Now transmit the metadata for set and blocks. */
 
@@ -461,6 +468,7 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 			ERR(sess, "futimens: %s", tmpfile);
 			goto out;
 		}
+		LOG4(sess, "%s: updated date", f->path);
 	}
 
 	/* Finally, rename the temporary to the real file. */
