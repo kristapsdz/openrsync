@@ -135,12 +135,12 @@ as requirement, and mask the OpenBSD-specific functions on both Linux
 and FreeBSD without any problems.
 
 The actual work of porting, however, is matching the security features
-provided by OpenBSD's [pledge](https://man.openbsd.org/pledge.2) and
-[unveil](https://man.openbsd.org/unveil.2).
-These are **critical** elements to the functionality of the system.
+provided by OpenBSD's [pledge(2)](https://man.openbsd.org/pledge.2) and
+[unveil(2)](https://man.openbsd.org/unveil.2).
+These are critical elements to the functionality of the system.
 Without them, your system accepts arbitrary data from the public
 network.
 
 This is possible (I think?) with FreeBSD's
-[Capsicum](https://man.freebsd.org/capsicum(4), but Linux's security
+[Capsicum](https://man.freebsd.org/capsicum(4)), but Linux's security
 facilities are a mess, and will take an expert hand to properly secure.
