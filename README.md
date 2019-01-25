@@ -17,6 +17,8 @@ and
 [rsyncd.5](https://github.com/kristapsdz/openrsync/blob/master/rsyncd.5)
 for protocol details or utility documentation in
 [openrsync.1](https://github.com/kristapsdz/openrsync/blob/master/openrsync.1).
+If you'd like to write your own rsync implementation, the protocol
+manpages should have all the information required.
 
 This repository is a read-only mirror of a private CVS repository.  I
 use it for issues and pull requests.  **Please do not make feature
@@ -24,26 +26,35 @@ requests**: I will simply close out the issue.
 
 # Architecture
 
-Each openrsync session is divided into a *server* and *client* service.
+Each openrsync session is divided into a running *server* and *client*
+process.
+The client openrsync process is executed by the user.
 
-The client openrsync is executed by the user.
+```
+% openrsync -rlpt host:path/to/source dest
+```
+
 The server openrsync is executed on a remote host either on-demand over
 [ssh(1)](https://man.openbsd.org/ssh.1) or as a persistent network
 daemon.
 If executed over [ssh(1)](https://man.openbsd.org/ssh.1), the server
-openrsync is distinguished from a client by the **--server** flag.
+openrsync is distinguished from a client (user-started) openrsync by the
+**--server** flag.
 
-Once the client or server openrsync starts, it examines the command-line
-arguments to determine whether it's in *receiver* or *sender* mode.
+Once the client or server openrsync process starts, it examines the
+command-line arguments to determine whether it's in *receiver* or
+*sender* mode.
 (The daemon is sent the command-line arguments in a protocol-specific
-way.)
+way described in
+[rsyncd.5](https://github.com/kristapsdz/openrsync/blob/master/rsyncd.5),
+but otherwise does the same thing.)
 The receiver is the destination for files; the sender is the origin.
 There is always one receiver and one sender.
 
-The server is explicitly instructed that it is a sender with the
+The server process is explicitly instructed that it is a sender with the
 **--sender** command-line flag, otherwise it is a receiver.
-The client implicitly determines its status by looking at the files
-passed on the command line for whether they are local or remote.
+The client process implicitly determines its status by looking at the
+files passed on the command line for whether they are local or remote.
 
 ```
 openrsync path/to/source host:destination
@@ -112,6 +123,17 @@ The receiver side is managed in
 [receiver.c](https://github.com/kristapsdz/openrsync/blob/master/receiver.c)
 and the sender in
 [sender.c](https://github.com/kristapsdz/openrsync/blob/master/sender.c).
+
+## Differences from rsync
+
+The design of rsync involves another mode running alongside the
+receiver: the generator.
+This is implemented as another process
+[fork(2)](https://man.openbsd.org/fork.2)ed from the receiver, and
+communicating with the receiver and sender.
+
+The purpose of the generator seems to be responding to file write
+requests.  In openrsync, this is accomplished by the receiver itself.
 
 # Security
 
