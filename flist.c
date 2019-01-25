@@ -950,6 +950,9 @@ flist_del(struct sess *sess, int root,
 	ssize_t	 j;
 	int	 fl;
 
+	assert(sess->opts->del);
+	assert(sess->opts->recursive);
+
 	for (i = 0; i < wantsz; i++) {
 		if ( ! S_ISDIR(want[i].st.mode))
 			continue;
@@ -960,6 +963,8 @@ flist_del(struct sess *sess, int root,
 		 * We now have a top-level directory.
 		 * Scan backward over the files we already have to see
 		 * which ones share the same root.
+		 * Backwards so that we can catch the files in
+		 * directories first.
 		 * For each file that shares the same root, see if it
 		 * exists in the list of files to be transferred.
 		 * If not, delete it.
