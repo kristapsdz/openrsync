@@ -936,6 +936,8 @@ out:
  * Given the files that the system has ("have") and what we're going to
  * update ("want"), delete all files and directories in "have" not found
  * in "want".
+ * We only do this within directories that we're going to update, which
+ * might include the root of the destination.
  * If dry_run is specified, simply write what would be done.
  * Return zero on failure, non-zero on success.
  */
@@ -944,28 +946,70 @@ flist_del(struct sess *sess, int root,
 	const struct flist *have, size_t havesz, 
 	const struct flist *want, size_t wantsz)
 {
-	size_t	 j;
-	ssize_t	 i;
+	size_t	 i, k, offs;
+	ssize_t	 j;
 	int	 fl;
 
-	/*
-	 * This is run in reverse order to catch files before
-	 * directories.
-	 */
+	for (i = 0; i < wantsz; i++) {
+		if ( ! S_ISDIR(want[i].st.mode))
+			continue;
+		if (NULL != strchr(want[i].wpath, '/'))
+			continue;
 
-	for (i = (ssize_t)havesz - 1; i >= 0; i--) {
-		for (j = 0; j < wantsz; j++)
-			if (0 == strcmp(have[i].wpath, want[j].wpath))
+		/* 
+		 * We now have a top-level directory.
+		 * Scan backward over the files we already have to see
+		 * which ones share the same root.
+		 * For each file that shares the same root, see if it
+		 * exists in the list of files to be transferred.
+		 * If not, delete it.
+		 * If we're doing a root-transfer (encoded as "."), then
+		 * consider all files to be in the root.
+		 */
+
+		offs = strcmp(want[i].wpath, ".") ?
+			strlen(want[i].wpath) : 0;
+
+		for (j = havesz - 1; j >= 0; j--) {
+			if (offs > 0) {
+				if (strncmp(have[j].wpath, 
+				    want[i].wpath, offs))
+					continue;
+				if ('/' != have[j].wpath[offs])
+					continue;
+			}
+
+			/* 
+			 * We have the same root.
+			 * See if this file exists in the files that are
+			 * going to be transferred.
+			 */
+
+			for (k = 0; k < wantsz; k++) {
+				if (strcmp(want[k].wpath, have[j].wpath))
+					continue;
 				break;
-		if (j < wantsz)
-			continue;
-		fl = S_ISDIR(have[i].st.mode) ? AT_REMOVEDIR : 0;
-		LOG1(sess, "deleting: %s", have[i].wpath);
-		if (sess->opts->dry_run)
-			continue;
-		if (-1 == unlinkat(root, have[i].wpath, fl)) {
-			ERR(sess, "unlinkat: %s", have[i].wpath);
-			return 0;
+			}
+
+			/* 
+			 * Did we find the file?
+			 * If not, then we should delete it.
+			 */
+
+			if (k < wantsz)
+				continue;
+
+			LOG1(sess, "deleting: %s", have[j].wpath);
+
+			if (sess->opts->dry_run)
+				continue;
+
+			fl = S_ISDIR(have[j].st.mode) ? AT_REMOVEDIR : 0;
+			if (-1 == unlinkat(root, have[j].wpath, fl) &&
+			    ENOENT != errno) {
+				ERR(sess, "unlinkat: %s", have[j].wpath);
+				return 0;
+			}
 		}
 	}
 
