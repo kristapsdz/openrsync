@@ -183,6 +183,14 @@ Do not send the file modification time: it is a repeat of the last
 file's.
 .El
 .Pp
+If the status byte is zero, the file-list has terminated.
+The sender then sends a constant value whose purpose is unknown.
+.Pp
+.Bl -enum -compact
+.It
+constant zero (integer)
+.El
+.Pp
 Following that, it then receives data from the server regarding the
 server's copy of the same files at the destination.
 This data is not ordered in any way.
@@ -270,26 +278,27 @@ No more data is sent subsequent to this message.
 .Pp
 If in receiver mode, the inverse (write instead of read, read instead of
 write) is performed.
-The only difference is that the list of files (starting with the status
-byte) is preceded by another value whose purpose is unknown:
+The only difference is that after receiving the list of files (starting
+with the status byte) and constant zero, the receiver must read another
+unknown value:
 .Pp
 .Bl -enum -compact
 .It
 zero value (integer)
-.It
-status byte (integer)
-.It
-filename length (integer)...
 .El
 .Pp
 After receiving the file list (see
-.Sx File list ) ,
-the receiver must sort the file names lexicographically.
+.Sx File list )
+and this mystery integer, the receiver must sort the file names
+lexicographically.
 The file list may contain inappropriate files, such as those containing
 links when
 .Fl l
 has not been specified.
 These may be ignored at the receiver's discretion.
+.Pp
+If there are no files in the file list at this time, the receiver must
+exit prior to sending per-file data.
 .Pp
 After the second phase has completed and prior to writing the
 end-of-data signal, the client receiver reads statistics.
@@ -342,6 +351,9 @@ when running in server mode.
 .It
 prior to the sender reading the file index (or phase change), the sender
 in server mode must read an integer that must be zero
+.It
+prior to this, the sender in server mode must exit if there are no files
+in the file list
 .It
 prior to receiving the file list, the receiver in server mode does not
 send the constant zero integer

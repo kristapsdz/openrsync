@@ -59,7 +59,7 @@ rsync_sender(struct sess *sess, int fdin,
 		goto out;
 	}
 
-	/* Now send them to the receiver server. */
+	/* Now send the file list and our mystery number. */
 
 	if ( ! flist_send(sess, fdout, fl, flsz)) {
 		ERRX1(sess, "flist_send");
