@@ -42,7 +42,7 @@ blk_flush(struct sess *sess, int fd, const void *b, off_t size)
 	off_t	i = 0, sz;
 
 	while (i < size) {
-		sz = MAX_CHUNK < (size - i) ? 
+		sz = MAX_CHUNK < (size - i) ?
 			MAX_CHUNK : (size - i);
 		if ( ! io_write_int(sess, fd, sz)) {
 			ERRX1(sess, "io_write_int: data block size");
@@ -63,7 +63,7 @@ blk_flush(struct sess *sess, int fd, const void *b, off_t size)
  * Returns the blk or NULL if no matching block was found.
  */
 static struct blk *
-blk_find(struct sess *sess, const void *buf, off_t size, 
+blk_find(struct sess *sess, const void *buf, off_t size,
 	off_t offs, const struct blkset *blks, const char *path)
 {
 	unsigned char	 md[MD4_DIGEST_LENGTH];
@@ -72,7 +72,7 @@ blk_find(struct sess *sess, const void *buf, off_t size,
 	size_t		 i;
 	int		 have_md = 0;
 
-	/* 
+	/*
 	 * First, compute our fast hash.
 	 * FIXME: yes, this can be a rolling computation, but I'm
 	 * deliberately making it simple first.
@@ -84,13 +84,13 @@ blk_find(struct sess *sess, const void *buf, off_t size,
 	fhash = hash_fast(buf + offs, (size_t)osz);
 	have_md = 0;
 
-	/* 
+	/*
 	 * Now look for the fast hash.
 	 * If it's found, move on to the slow hash.
 	 */
 
 	for (i = 0; i < blks->blksz; i++) {
-		if (fhash != blks->blks[i].chksum_short) 
+		if (fhash != blks->blks[i].chksum_short)
 			continue;
 		if ((size_t)osz != blks->blks[i].len)
 			continue;
@@ -98,7 +98,7 @@ blk_find(struct sess *sess, const void *buf, off_t size,
 		LOG4(sess, "%s: found matching fast match: "
 			"position %jd, block %zu "
 			"(position %jd, size %zu)", path,
-			(intmax_t)offs, blks->blks[i].idx, 
+			(intmax_t)offs, blks->blks[i].idx,
 			(intmax_t)blks->blks[i].offs,
 			blks->blks[i].len);
 
@@ -129,14 +129,14 @@ blk_find(struct sess *sess, const void *buf, off_t size,
  * Return zero on failure, non-zero on success.
  */
 static int
-blk_match_part(struct sess *sess, const char *path, int fd, 
+blk_match_part(struct sess *sess, const char *path, int fd,
 	const void *buf, off_t size, const struct blkset *blks)
 {
 	off_t	 	 offs, last, end, fromcopy = 0, fromdown = 0,
 			 total = 0;
 	struct blk	*blk;
 
-	/* 
+	/*
 	 * Stop searching at the length of the file minus the size of
 	 * the last block.
 	 * The reason for this being that we don't need to do an
@@ -154,7 +154,7 @@ blk_match_part(struct sess *sess, const char *path, int fd,
 		fromdown += offs - last;
 		total += offs - last;
 		LOG4(sess, "%s: flushed %jd B before %zu B block "
-			"(%zu)", path, (intmax_t)(offs - last), 
+			"(%zu)", path, (intmax_t)(offs - last),
 			blk->len, blk->idx);
 
 		/* Flush what we have and follow with our tag. */
@@ -178,7 +178,7 @@ blk_match_part(struct sess *sess, const char *path, int fd,
 	total += size - last;
 	fromdown += size - last;
 
-	LOG4(sess, "%s: flushed remaining %jd B", 
+	LOG4(sess, "%s: flushed remaining %jd B",
 		path, (intmax_t)(size - last));
 
 	if ( ! blk_flush(sess, fd, buf + last, size - last))
@@ -186,7 +186,7 @@ blk_match_part(struct sess *sess, const char *path, int fd,
 	else if ( ! io_write_int(sess, fd, 0))
 		ERRX1(sess, "io_write_int: data block size");
 
-	LOG3(sess, "%s: %.2f%% upload", 
+	LOG3(sess, "%s: %.2f%% upload",
 		path, 100.0 * fromdown / total);
 
 	return 1;
@@ -218,7 +218,7 @@ blk_match_full(struct sess *sess, int fd, const void *buf, off_t size)
  * Return zero on failure, non-zero on success.
  */
 int
-blk_match(struct sess *sess, int fd, 
+blk_match(struct sess *sess, int fd,
 	const struct blkset *blks, const char *path)
 {
 	int	 	 nfd, rc = 0;
@@ -255,11 +255,11 @@ blk_match(struct sess *sess, int fd,
 	if (st.st_size && blks->blksz) {
 		blk_match_part(sess, path, fd, map, st.st_size, blks);
 		LOG3(sess, "%s: sent chunked %zu blocks of "
-			"%zu B (%zu B remainder)", path, blks->blksz, 
+			"%zu B (%zu B remainder)", path, blks->blksz,
 			blks->len, blks->rem);
 	} else {
 		blk_match_full(sess, fd, map, st.st_size);
-		LOG3(sess, "%s: sent un-chunked %jd B", 
+		LOG3(sess, "%s: sent un-chunked %jd B",
 			path, (intmax_t)st.st_size);
 	}
 
@@ -296,7 +296,7 @@ blkset_free(struct blkset *p)
  * Returns zero on failure, non-zero on success.
  */
 int
-blk_recv_ack(struct sess *sess, 
+blk_recv_ack(struct sess *sess,
 	int fd, const struct blkset *blocks, int32_t idx)
 {
 
@@ -358,7 +358,7 @@ blk_recv(struct sess *sess, int fd, const char *path)
 	}
 
 	LOG3(sess, "%s: read block prologue: %zu blocks of "
-		"%zu B, %zu B remainder, %zu B checksum", path, 
+		"%zu B, %zu B remainder, %zu B checksum", path,
 		s->blksz, s->len, s->rem, s->csum);
 
 	if (s->blksz) {
@@ -380,7 +380,7 @@ blk_recv(struct sess *sess, int fd, const char *path)
 		b->chksum_short = i;
 
 		assert(s->csum <= sizeof(b->chksum_long));
-		if ( ! io_read_buf(sess, 
+		if ( ! io_read_buf(sess,
 		    fd, b->chksum_long, s->csum)) {
 			ERRX1(sess, "io_read_buf: slow checksum");
 			goto out;
@@ -397,7 +397,7 @@ blk_recv(struct sess *sess, int fd, const char *path)
 		offs += b->len;
 
 		LOG4(sess, "%s: read block %zu, length %zu B, "
-			"checksum=0x%08x", path, b->idx, b->len, 
+			"checksum=0x%08x", path, b->idx, b->len,
 			b->chksum_short);
 	}
 
@@ -415,7 +415,7 @@ out:
  * Return zero on failure, non-zero on success.
  */
 int
-blk_send_ack(struct sess *sess, int fd, 
+blk_send_ack(struct sess *sess, int fd,
 	const struct blkset *blocks, size_t idx)
 {
 	size_t		 rem, len, blksz, nidx, csum;
@@ -453,7 +453,7 @@ blk_send_ack(struct sess *sess, int fd,
  */
 int
 blk_merge(struct sess *sess, int fd, int ffd,
-	const struct blkset *block, int outfd, const char *path, 
+	const struct blkset *block, int outfd, const char *path,
 	const void *map, size_t mapsz)
 {
 	size_t		 sz, tok;
@@ -476,7 +476,7 @@ blk_merge(struct sess *sess, int fd, int ffd,
 		if ( ! io_read_int(sess, fd, &rawtok)) {
 			ERRX1(sess, "io_read_int: data block size");
 			goto out;
-		} else if (0 == rawtok) 
+		} else if (0 == rawtok)
 			break;
 
 		if (rawtok > 0) {
@@ -484,7 +484,7 @@ blk_merge(struct sess *sess, int fd, int ffd,
 			if (NULL == (pp = realloc(buf, sz))) {
 				ERR(sess, "realloc");
 				goto out;
-			} 
+			}
 			buf = pp;
 			if ( ! io_read_buf(sess, fd, buf, sz)) {
 				ERRX1(sess, "io_read_int: data block");
@@ -512,7 +512,7 @@ blk_merge(struct sess *sess, int fd, int ffd,
 				goto out;
 			}
 
-			/* 
+			/*
 			 * Now we read from our block.
 			 * We should only be at this point if we have a
 			 * block to read from, i.e., if we were able to
@@ -522,8 +522,8 @@ blk_merge(struct sess *sess, int fd, int ffd,
 
 			assert(MAP_FAILED != map);
 
-			ssz = write(outfd, 
-				map + block->blks[tok].offs, 
+			ssz = write(outfd,
+				map + block->blks[tok].offs,
 				block->blks[tok].len);
 
 			if (ssz < 0) {
@@ -537,11 +537,11 @@ blk_merge(struct sess *sess, int fd, int ffd,
 			fromcopy += block->blks[tok].len;
 			total += block->blks[tok].len;
 			LOG4(sess, "%s: copied %zu bytes, now %jd "
-				"total", path, block->blks[tok].len, 
+				"total", path, block->blks[tok].len,
 				(intmax_t)total);
 
-			MD4_Update(&ctx, 
-				map + block->blks[tok].offs, 
+			MD4_Update(&ctx,
+				map + block->blks[tok].offs,
 				block->blks[tok].len);
 		}
 	}
@@ -560,7 +560,7 @@ blk_merge(struct sess *sess, int fd, int ffd,
 		goto out;
 	}
 
-	LOG3(sess, "%s: merged %jd total bytes", 
+	LOG3(sess, "%s: merged %jd total bytes",
 		path, (intmax_t)total);
 	LOG3(sess, "%s: %.2f%% upload", path, 100.0 * fromdown / total);
 	rc = 1;
@@ -574,7 +574,7 @@ out:
  * Return zero on failure, non-zero on success.
  */
 int
-blk_send(struct sess *sess, int fd, 
+blk_send(struct sess *sess, int fd,
 	const struct blkset *p, const char *path)
 {
 	size_t	 i;
@@ -592,7 +592,7 @@ blk_send(struct sess *sess, int fd,
 	} else if ( ! io_write_int(sess, fd, p->rem)) {
 		ERRX1(sess, "io_write_int: block remainder");
 		return 0;
-	} 
+	}
 
 	for (i = 0; i < p->blksz; i++) {
 		b = &p->blks[i];
@@ -607,7 +607,7 @@ blk_send(struct sess *sess, int fd,
 	}
 
 	LOG3(sess, "%s: sent block prologue: %zu blocks of %zu B, "
-		"%zu B remainder, %zu B checksum", path, 
+		"%zu B remainder, %zu B checksum", path,
 		p->blksz, p->len, p->rem, p->csum);
 	return 1;
 }

@@ -111,7 +111,7 @@ fargs_parse(size_t argc, char *argv[])
 	if (NULL == (f->sink = strdup(argv[i])))
 		err(EXIT_FAILURE, "strdup");
 
-	/* 
+	/*
 	 * Test files for its locality.
 	 * If the last is a remote host, then we're sending from the
 	 * local to the remote host ("sender" mode).
@@ -125,13 +125,13 @@ fargs_parse(size_t argc, char *argv[])
 		f->mode = FARGS_SENDER;
 
 	if (fargs_is_remote(f->sources[0])) {
-		if (FARGS_SENDER == f->mode) 
+		if (FARGS_SENDER == f->mode)
 			errx(EXIT_FAILURE, "both source and "
 				"destination cannot be remote files");
 		f->mode = FARGS_RECEIVER;
 	}
 
-	/* 
+	/*
 	 * Set our remote host depending upon the mode.
 	 * Save the host, which is the NUL-terminated host name, and the
 	 * buffer from which we got it that includes the colon.
@@ -181,13 +181,13 @@ fargs_parse(size_t argc, char *argv[])
 	/* Make sure we have the same "hostspec" for all files. */
 
 	if ( ! f->remote) {
-		if (FARGS_SENDER == f->mode || 
+		if (FARGS_SENDER == f->mode ||
 		    FARGS_LOCAL == f->mode)
 			for (i = 0; i < f->sourcesz; i++) {
 				if ( ! fargs_is_remote(f->sources[i]))
 					continue;
 				errx(EXIT_FAILURE, "remote file in "
-					"list of local sources: %s", 
+					"list of local sources: %s",
 					f->sources[i]);
 			}
 		if (FARGS_RECEIVER == f->mode)
@@ -201,7 +201,7 @@ fargs_parse(size_t argc, char *argv[])
 						"remote sources: %s",
 						f->sources[i]);
 				errx(EXIT_FAILURE, "local file in "
-					"list of remote sources: %s", 
+					"list of remote sources: %s",
 					f->sources[i]);
 			}
 	} else {
@@ -217,7 +217,7 @@ fargs_parse(size_t argc, char *argv[])
 		}
 	}
 
-	/* 
+	/*
 	 * If we're not remote and a sender, strip our hostname.
 	 * Then exit if we're a sender or a local connection.
 	 */
@@ -233,7 +233,7 @@ fargs_parse(size_t argc, char *argv[])
 			return f;
 	}
 
-	/* 
+	/*
 	 * Now strip the hostnames from the remote host.
 	 *   rsync://host/module/path -> module/path
 	 *   host::module/path -> module/path
@@ -247,7 +247,7 @@ fargs_parse(size_t argc, char *argv[])
 	for (i = 0; i < f->sourcesz; i++) {
 		cp = f->sources[i];
 		j = strlen(cp);
-		if (f->remote && 
+		if (f->remote &&
 		    0 == strncasecmp(cp, "rsync://", 8)) {
 			/* rsync://path */
 			cp += 8;
@@ -255,12 +255,12 @@ fargs_parse(size_t argc, char *argv[])
 			    ('/' != cp[len] && '\0' != cp[len]))
 				errx(EXIT_FAILURE, "different remote "
 					"host: %s", f->sources[i]);
-			memmove(f->sources[i], 
-				f->sources[i] + len + 8 + 1, 
+			memmove(f->sources[i],
+				f->sources[i] + len + 8 + 1,
 				j - len - 8);
 		} else if (f->remote && 0 == strncmp(cp, "::", 2)) {
 			/* ::path */
-			memmove(f->sources[i], 
+			memmove(f->sources[i],
 				f->sources[i] + 2, j - 1);
 		} else if (f->remote) {
 			/* host::path */
@@ -280,7 +280,7 @@ fargs_parse(size_t argc, char *argv[])
 			    (':' != cp[len] && '\0' != cp[len]))
 				errx(EXIT_FAILURE, "different remote "
 					"host: %s", f->sources[i]);
-			memmove(f->sources[i], 
+			memmove(f->sources[i],
 				f->sources[i] + len + 1, j - len);
 		}
 	}
@@ -362,7 +362,7 @@ main(int argc, char *argv[])
 		return c ? EXIT_SUCCESS : EXIT_FAILURE;
 	}
 
-	/* 
+	/*
 	 * Now we know that we're the client on the local machine
 	 * invoking rsync(1).
 	 * At this point, we need to start the client and server
@@ -383,7 +383,7 @@ main(int argc, char *argv[])
 
 	if (fargs->remote) {
 		assert(FARGS_RECEIVER == fargs->mode);
-		if (-1 == pledge("dns inet unveil stdio rpath wpath cpath fattr", NULL)) 
+		if (-1 == pledge("dns inet unveil stdio rpath wpath cpath fattr", NULL))
 			err(EXIT_FAILURE, "pledge");
 		c = rsync_socket(&opts, fargs);
 		fargs_free(fargs);
@@ -438,7 +438,7 @@ main(int argc, char *argv[])
 
 	return c ? EXIT_SUCCESS : EXIT_FAILURE;
 usage:
-	fprintf(stderr, "usage: %s [-lnprtv] src ... dst\n", 
+	fprintf(stderr, "usage: %s [-lnprtv] src ... dst\n",
 		getprogname());
 	return EXIT_FAILURE;
 }

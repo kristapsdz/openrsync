@@ -29,7 +29,7 @@
  * at one).
  */
 void
-rsync_log(struct sess *sess, const char *fname, 
+rsync_log(struct sess *sess, const char *fname,
 	size_t line, int level, const char *fmt, ...)
 {
 	char	*buf = NULL;
@@ -47,7 +47,7 @@ rsync_log(struct sess *sess, const char *fname,
 		va_end(ap);
 	}
 
-	fprintf(stderr, "%s:%zu%s%s\n", fname, line, 
+	fprintf(stderr, "%s:%zu%s%s\n", fname, line,
 		NULL != buf ? ": " : "",
 		NULL != buf ? buf : "");
 	free(buf);
@@ -58,7 +58,7 @@ rsync_log(struct sess *sess, const char *fname,
  * However, it is not like errx(3) in that it does not exit.
  */
 void
-rsync_errx(struct sess *sess, const char *fname, 
+rsync_errx(struct sess *sess, const char *fname,
 	size_t line, const char *fmt, ...)
 {
 	char	*buf = NULL;
@@ -73,7 +73,7 @@ rsync_errx(struct sess *sess, const char *fname,
 		va_end(ap);
 	}
 
-	fprintf(stderr, "%s:%zu: error%s%s\n", fname, line, 
+	fprintf(stderr, "%s:%zu: error%s%s\n", fname, line,
 		NULL != buf ? ": " : "",
 		NULL != buf ? buf : "");
 	free(buf);
@@ -84,7 +84,7 @@ rsync_errx(struct sess *sess, const char *fname,
  * However, it is not like err(3) in that it does not exit.
  */
 void
-rsync_err(struct sess *sess, const char *fname, 
+rsync_err(struct sess *sess, const char *fname,
 	size_t line, const char *fmt, ...)
 {
 	char	*buf = NULL;
@@ -100,7 +100,7 @@ rsync_err(struct sess *sess, const char *fname,
 		va_end(ap);
 	}
 
-	fprintf(stderr, "%s:%zu: error%s%s: %s\n", fname, line, 
+	fprintf(stderr, "%s:%zu: error%s%s: %s\n", fname, line,
 		NULL != buf ? ": " : "",
 		NULL != buf ? buf : "", strerror(er));
 	free(buf);
@@ -111,7 +111,7 @@ rsync_err(struct sess *sess, const char *fname,
  * chain of functions from which the actual warning occurred.
  */
 void
-rsync_errx1(struct sess *sess, const char *fname, 
+rsync_errx1(struct sess *sess, const char *fname,
 	size_t line, const char *fmt, ...)
 {
 	char	*buf = NULL;
@@ -129,7 +129,7 @@ rsync_errx1(struct sess *sess, const char *fname,
 		va_end(ap);
 	}
 
-	fprintf(stderr, "%s:%zu: error%s%s\n", fname, line, 
+	fprintf(stderr, "%s:%zu: error%s%s\n", fname, line,
 		NULL != buf ? ": " : "",
 		NULL != buf ? buf : "");
 	free(buf);
@@ -139,7 +139,7 @@ rsync_errx1(struct sess *sess, const char *fname,
  * Prints a warning message.
  */
 void
-rsync_warnx(struct sess *sess, const char *fname, 
+rsync_warnx(struct sess *sess, const char *fname,
 	size_t line, const char *fmt, ...)
 {
 	char	*buf = NULL;
@@ -154,7 +154,7 @@ rsync_warnx(struct sess *sess, const char *fname,
 		va_end(ap);
 	}
 
-	fprintf(stderr, "%s:%zu: warning%s%s\n", fname, line, 
+	fprintf(stderr, "%s:%zu: warning%s%s\n", fname, line,
 		NULL != buf ? ": " : "",
 		NULL != buf ? buf : "");
 	free(buf);
@@ -184,7 +184,7 @@ rsync_warn(struct sess *sess, int level,
 		va_end(ap);
 	}
 
-	fprintf(stderr, "%s:%zu: warning%s%s: %s\n", fname, line, 
+	fprintf(stderr, "%s:%zu: warning%s%s: %s\n", fname, line,
 		NULL != buf ? ": " : "",
 		NULL != buf ? buf : "", strerror(er));
 	free(buf);

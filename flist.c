@@ -105,7 +105,7 @@ flist_dedupe(struct sess *sess, struct flist **fl, size_t *sz)
 			free(fnext->link);
 			fnext->path = fnext->link = NULL;
 			continue;
-		} 
+		}
 
 		ERRX(sess, "duplicate working path for "
 			"possibly different file: %s: %s, %s",
@@ -119,7 +119,7 @@ flist_dedupe(struct sess *sess, struct flist **fl, size_t *sz)
 	if (i == *sz - 1)
 		new[j++] = (*fl)[i];
 
-	/* 
+	/*
 	 * Reassign to the deduplicated array.
 	 * If we started out with *sz > 0, which we check for at the
 	 * beginning, then we'll always continue having *sz > 0.
@@ -166,7 +166,7 @@ flist_free(struct flist *f, size_t sz)
  * Return zero on failure, non-zero on success.
  */
 int
-flist_send(struct sess *sess, int fd, 
+flist_send(struct sess *sess, int fd,
 	const struct flist *fl, size_t flsz)
 {
 	size_t		 i, fnlen;
@@ -193,7 +193,7 @@ flist_send(struct sess *sess, int fd,
 
 		LOG3(sess, "sending file metadata: %s "
 			"(size %jd, mtime %jd, mode %o)",
-			fn, (intmax_t)f->st.size, 
+			fn, (intmax_t)f->st.size,
 			(intmax_t)f->st.mtime, f->st.mode);
 
 		/* Now write to the wire. */
@@ -215,7 +215,7 @@ flist_send(struct sess *sess, int fd,
 			return 0;
 		} else if ( ! io_write_int(sess, fd, f->st.mode)) {
 			ERRX1(sess, "io_write_int: file mode");
-			return 0; 
+			return 0;
 		}
 
 		/* Optional link information. */
@@ -227,7 +227,7 @@ flist_send(struct sess *sess, int fd,
 			if ( ! io_write_int(sess, fd, fnlen)) {
 				ERRX1(sess, "io_write_int: link size");
 				return 0;
-			} 
+			}
 			if ( ! io_write_buf(sess, fd, fn, fnlen)) {
 				ERRX1(sess, "io_write_int: link");
 				return 0;
@@ -252,7 +252,7 @@ flist_send(struct sess *sess, int fd,
  * Returns zero on failure, non-zero on success.
  */
 static int
-flist_recv_name(struct sess *sess, int fd, 
+flist_recv_name(struct sess *sess, int fd,
 	struct flist *f, uint8_t flags, char last[MAXPATHLEN])
 {
 	uint8_t		 bval;
@@ -289,7 +289,7 @@ flist_recv_name(struct sess *sess, int fd,
 			ERRX1(sess, "io_read_byte: "
 				"filename length");
 			return 0;
-		} 
+		}
 		pathlen = bval;
 	}
 
@@ -316,7 +316,7 @@ flist_recv_name(struct sess *sess, int fd,
 		return 0;
 	}
 
-	/* 
+	/*
 	 * FIXME: security checks.
 	 * No absolute paths.
 	 * No path backtracking.
@@ -334,7 +334,7 @@ flist_recv_name(struct sess *sess, int fd,
  * Returns zero on failure, non-zero on success.
  */
 static int
-flist_realloc(struct sess *sess, 
+flist_realloc(struct sess *sess,
 	struct flist **fl, size_t *sz, size_t *max)
 {
 	void	*pp;
@@ -344,7 +344,7 @@ flist_realloc(struct sess *sess,
 		return 1;
 	}
 
-	pp = recallocarray(*fl, *max, 
+	pp = recallocarray(*fl, *max,
 		*max + FLIST_CHUNK_SIZE, sizeof(struct flist));
 	if (NULL == pp) {
 		ERR(sess, "recallocarray");
@@ -362,11 +362,11 @@ flist_realloc(struct sess *sess,
  * Returns zero on failure, non-zero on success.
  */
 static int
-flist_append(struct sess *sess, struct flist *f, 
+flist_append(struct sess *sess, struct flist *f,
 	struct stat *st, const char *path)
 {
 
-	/* 
+	/*
 	 * Copy the full path for local addressing and transmit
 	 * only the filename part for the receiver.
 	 */
@@ -381,7 +381,7 @@ flist_append(struct sess *sess, struct flist *f,
 	else
 		f->wpath++;
 
-	/* 
+	/*
 	 * On the receiving end, we'll strip out all bits on the
 	 * mode except for the file permissions.
 	 * No need to warn about it here.
@@ -506,7 +506,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 
 		LOG3(sess, "received file metadata: %s "
 			"(size %jd, mtime %jd, mode %o)",
-			ff->path, (intmax_t)ff->st.size, 
+			ff->path, (intmax_t)ff->st.size,
 			(intmax_t)ff->st.mtime, ff->st.mode);
 	}
 
@@ -531,7 +531,7 @@ out:
  * Returns zero on failure, non-zero on success.
  */
 static int
-flist_gen_dirent(struct sess *sess, char *root, 
+flist_gen_dirent(struct sess *sess, char *root,
 	struct flist **fl, size_t *sz, size_t *max)
 {
 	char		*cargv[2], *cp;
@@ -545,7 +545,7 @@ flist_gen_dirent(struct sess *sess, char *root,
 	cargv[0] = root;
 	cargv[1] = NULL;
 
-	/* 
+	/*
 	 * If we're a file, then revert to the same actions we use for
 	 * the non-recursive scan.
 	 */
@@ -602,7 +602,7 @@ flist_gen_dirent(struct sess *sess, char *root,
 	 * last directory component.
 	 */
 
-	if (0 == stripdir) 
+	if (0 == stripdir)
 		if (NULL != (cp = strrchr(root, '/')))
 			stripdir = cp - root + 1;
 
@@ -665,7 +665,7 @@ flist_gen_dirent(struct sess *sess, char *root,
 					ent->fts_path);
 				continue;
 			}
-		} 
+		}
 
 		if ( ! S_ISDIR(ent->fts_statp->st_mode) &&
 		     ! S_ISLNK(ent->fts_statp->st_mode) &&
@@ -731,7 +731,7 @@ out:
  * Returns zero on failure, non-zero on success.
  */
 static int
-flist_gen_dirs(struct sess *sess, size_t argc, 
+flist_gen_dirs(struct sess *sess, size_t argc,
 	char **argv, struct flist **flp, size_t *sz)
 {
 	size_t		 i, max = 0;
@@ -759,7 +759,7 @@ flist_gen_dirs(struct sess *sess, size_t argc,
  * Returns zero on failure, non-zero on success.
  */
 static int
-flist_gen_files(struct sess *sess, size_t argc, 
+flist_gen_files(struct sess *sess, size_t argc,
 	char **argv, struct flist **flp, size_t *sz)
 {
 	struct flist	*fl = NULL, *f;
@@ -774,14 +774,14 @@ flist_gen_files(struct sess *sess, size_t argc,
 	}
 
 	for (i = 0; i < argc; i++) {
-		if ('\0' == argv[i][0]) 
+		if ('\0' == argv[i][0])
 			continue;
 		if (-1 == lstat(argv[i], &st)) {
 			ERR(sess, "lstat: %s", argv[i]);
 			goto out;
 		}
 
-		/* 
+		/*
 		 * File type checks.
 		 * In non-recursive mode, we don't accept directories.
 		 * We also skip symbolic links without -l.
@@ -830,7 +830,7 @@ out:
  * Returns the list or NULL on failure (sz set to zero).
  */
 int
-flist_gen(struct sess *sess, size_t argc, 
+flist_gen(struct sess *sess, size_t argc,
 	char **argv, struct flist **flp, size_t *sz)
 {
 	int	 rc;
