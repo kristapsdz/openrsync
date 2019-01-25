@@ -23,6 +23,7 @@
 .Sh SYNOPSIS
 .Nm openrsync
 .Op Fl lnprtv
+.Op Fl -delete
 .Ar source ...
 .Ar directory
 .Sh DESCRIPTION
@@ -71,6 +72,14 @@ Increase verbosity.
 Specify once for files being transferred, twice for specific status,
 thrice for per-file transfer information, and four times for per-file
 breakdowns.
+.It Fl -delete
+Delete files in
+.Ar directory
+not found in
+.Ar source
+directories.
+Only applicable with
+.Fl r .
 .El
 .Pp
 A remote
