@@ -54,7 +54,7 @@ rsync_sender(struct sess *sess, int fdin,
 	 * This will also remove all invalid files.
 	 */
 
-	if (NULL == (fl = flist_gen(sess, argc, argv, &flsz))) {
+	if ( ! flist_gen(sess, argc, argv, &fl, &flsz)) {
 		ERRX1(sess, "flist_gen");
 		goto out;
 	}
@@ -66,6 +66,14 @@ rsync_sender(struct sess *sess, int fdin,
 		goto out;
 	} else if ( ! io_write_int(sess, fdout, 0)) {
 		ERRX1(sess, "io_write_int: io_error");
+		goto out;
+	} 
+	
+	/* Exit if we're the server with zero files. */
+
+	if (0 == flsz && sess->opts->server) {
+		WARNX(sess, "sender has empty file list: exiting");
+		rc = 1;
 		goto out;
 	}
 
