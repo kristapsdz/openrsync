@@ -553,7 +553,7 @@ rsync_receiver(struct sess *sess,
 	 * These we're going to be touching on our local system.
 	 */
 
-	if (NULL == (fl = flist_recv(sess, fdin, &flsz))) {
+	if ( ! flist_recv(sess, fdin, &fl, &flsz)) {
 		ERRX1(sess, "flist_recv");
 		goto out;
 	} else if ( ! io_read_int(sess, fdin, &ioerror)) {
@@ -567,6 +567,7 @@ rsync_receiver(struct sess *sess,
 	/* 
 	 * Create the path for our destination directory.
 	 * This uses our current umask.
+	 * FIXME: not with dryrun.
 	 */
 
 	if (NULL == (tofree = strdup(root))) {
