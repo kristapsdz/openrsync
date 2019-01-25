@@ -57,7 +57,7 @@ flist_cmp(const void *p1, const void *p2)
 }
 
 /*
- * Deduplicate our file list.
+ * Deduplicate our file list (which may be zero-length).
  * Returns zero on failure, non-zero on success.
  */
 static int
@@ -66,6 +66,9 @@ flist_dedupe(struct sess *sess, struct flist **fl, size_t *sz)
 	size_t	 	 i, j;
 	struct flist	*new;
 	struct flist	*f, *fnext;
+
+	if (0 == *sz)
+		return 1;
 
 	/* Create a new buffer, "new", and copy. */
 
@@ -116,12 +119,16 @@ flist_dedupe(struct sess *sess, struct flist **fl, size_t *sz)
 	if (i == *sz - 1)
 		new[j++] = (*fl)[i];
 
-	/* Reassign to the deduplicated array. */
+	/* 
+	 * Reassign to the deduplicated array.
+	 * If we started out with *sz > 0, which we check for at the
+	 * beginning, then we'll always continue having *sz > 0.
+	 */
 
 	free(*fl);
 	*fl = new;
 	*sz = j;
-
+	assert(*sz);
 	return 1;
 }
 
@@ -155,7 +162,7 @@ flist_free(struct flist *f, size_t sz)
 }
 
 /*
- * Serialise our file list to the wire.
+ * Serialise our file list (which may be zero-length) to the wire.
  * Return zero on failure, non-zero on success.
  */
 int
@@ -517,8 +524,14 @@ out:
 	return 0;
 }
 
+/*
+ * Generate a flist possibly-recursively given a file root, which may be
+ * a regular file or symlink.
+ * On success, augments the generated list in "flp" of length "sz".
+ * Returns zero on failure, non-zero on success.
+ */
 static int
-flist_gen_recursive_entry(struct sess *sess, char *root, 
+flist_gen_dirent(struct sess *sess, char *root, 
 	struct flist **fl, size_t *sz, size_t *max)
 {
 	char		*cargv[2], *cp;
@@ -712,66 +725,59 @@ out:
 
 /*
  * Generate a flist recursively given the array of directories (or
- * files, doesn't matter) specified in argv.
+ * files, symlinks, doesn't matter) specified in argv (argc >0).
+ * On success, stores the generated list in "flp" with length "sz",
+ * which may be zero.
+ * Returns zero on failure, non-zero on success.
  */
-static struct flist *
-flist_gen_recursive(struct sess *sess, 
-	size_t argc, char **argv, size_t *sz)
+static int
+flist_gen_dirs(struct sess *sess, size_t argc, 
+	char **argv, struct flist **flp, size_t *sz)
 {
-	int		 rc;
-	struct flist	*fl = NULL;
-	size_t		 max = 0;
-	size_t		 i;
+	size_t		 i, max = 0;
 
-	for (i = 0; i < argc; i++) {
-		rc = flist_gen_recursive_entry
-			(sess, argv[i], &fl, sz, &max);
-		if (0 == rc)
+	for (i = 0; i < argc; i++)
+		if ( ! flist_gen_dirent(sess, argv[i], flp, sz, &max))
 			break;
+
+	if (i == argc) {
+		LOG2(sess, "recursively generated %zu filenames", *sz);
+		return 1;
 	}
 
-	if (i < argc) {
-		ERRX1(sess, "flist_gen_recursive_entry");
-		flist_free(fl, *sz);
-		fl = NULL;
-		*sz = 0;
-	} else if (0 == *sz) {
-		/* FIXME: shouldn't be an error. */
-		ERRX(sess, "zero-length file list");
-		flist_free(fl, *sz);
-		fl = NULL;
-	} else
-		LOG2(sess, "recursively generated %zu filenames", *sz);
-
-	return fl;
+	ERRX1(sess, "flist_gen_dirent");
+	flist_free(*flp, max);
+	*flp = NULL;
+	*sz = 0;
+	return 0;
 }
 
-static struct flist *
-flist_gen_nonrecursive(struct sess *sess, 
-	size_t argc, char **argv, size_t *sz)
+/*
+ * Generate list of files from the command-line argc (>0) and argv.
+ * On success, stores the generated list in "flp" with length "sz",
+ * which may be zero.
+ * Returns zero on failure, non-zero on success.
+ */
+static int
+flist_gen_files(struct sess *sess, size_t argc, 
+	char **argv, struct flist **flp, size_t *sz)
 {
 	struct flist	*fl = NULL, *f;
-	size_t		 i;
+	size_t		 i, flsz = 0;
 	struct stat	 st;
-	int		 rc = 0;
 
-	/* We'll have at most argc. */
+	assert(argc);
 
 	if (NULL == (fl = calloc(argc, sizeof(struct flist)))) {
 		ERR(sess, "calloc");
-		return NULL;
+		return 0;
 	}
-
-	/*
-	 * Loop over all files and fstat them straight up.
-	 * Don't allow anything but regular files for now.
-	 */
 
 	for (i = 0; i < argc; i++) {
 		if ('\0' == argv[i][0]) 
 			continue;
 		if (-1 == lstat(argv[i], &st)) {
-			ERR(sess, "fstat: %s", argv[i]);
+			ERR(sess, "lstat: %s", argv[i]);
 			goto out;
 		}
 
@@ -796,7 +802,7 @@ flist_gen_nonrecursive(struct sess *sess,
 			continue;
 		}
 
-		f = &fl[(*sz)++];
+		f = &fl[flsz++];
 		assert(NULL != f);
 		if ( ! flist_append(sess, f, &st, argv[i])) {
 			ERRX1(sess, "flist_append");
@@ -804,22 +810,15 @@ flist_gen_nonrecursive(struct sess *sess,
 		}
 	}
 
-	if (0 == *sz) {
-		/* FIXME: shouldn't be an error. */
-		ERRX1(sess, "zero-length file list");
-		goto out;
-	}
-
-	LOG2(sess, "non-recursively generated %zu filenames", *sz);
-	rc = 1;
+	LOG2(sess, "non-recursively generated %zu filenames", flsz);
+	*sz = flsz;
+	*flp = fl;
+	return 1;
 out:
-	if (0 == rc) {
-		/* Use original size to catch last entry. */
-		flist_free(fl, argc);
-		*sz = 0;
-		fl = NULL;
-	}
-	return fl;
+	flist_free(fl, argc);
+	*sz = 0;
+	*flp = NULL;
+	return 0;
 }
 
 /*
@@ -830,27 +829,27 @@ out:
  * After generation, the list is sorted and deduplicated.
  * Returns the list or NULL on failure (sz set to zero).
  */
-struct flist *
-flist_gen(struct sess *sess, size_t argc, char **argv, size_t *sz)
+int
+flist_gen(struct sess *sess, size_t argc, 
+	char **argv, struct flist **flp, size_t *sz)
 {
-	struct flist	*f;
+	int	 rc;
 
+	assert(argc > 0);
+	rc = sess->opts->recursive ?
+		flist_gen_dirs(sess, argc, argv, flp, sz) :
+		flist_gen_files(sess, argc, argv, flp, sz);
+	if ( ! rc)
+		return 0;
+
+	qsort(*flp, *sz, sizeof(struct flist), flist_cmp);
+
+	if (flist_dedupe(sess, flp, sz))
+		return 1;
+
+	ERRX1(sess, "flist_dedupe");
+	flist_free(*flp, *sz);
+	*flp = NULL;
 	*sz = 0;
-	f = sess->opts->recursive ?
-		flist_gen_recursive(sess, argc, argv, sz) :
-		flist_gen_nonrecursive(sess, argc, argv, sz);
-
-	/* Run the fixup. */
-
-	if (NULL != f) {
-		qsort(f, *sz, sizeof(struct flist), flist_cmp);
-		if ( ! flist_dedupe(sess, &f, sz)) {
-			ERRX1(sess, "flist_dedupe");
-			flist_free(f, *sz);
-			f = NULL;
-			*sz = 0;
-		}
-	}
-
-	return f;
+	return 0;
 }

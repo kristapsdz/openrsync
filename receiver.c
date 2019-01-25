@@ -564,6 +564,12 @@ rsync_receiver(struct sess *sess,
 		goto out;
 	}
 
+	if (0 == flsz && ! sess->opts->server) {
+		WARNX(sess, "receiver has empty file list: exiting");
+		rc = 1;
+		goto out;
+	}
+
 	/* 
 	 * Create the path for our destination directory.
 	 * This uses our current umask.
