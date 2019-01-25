@@ -549,7 +549,7 @@ rsync_receiver(struct sess *sess,
 	}
 
 	/*
-	 * Start by receiving the list of filenames.
+	 * Start by receiving the file list and our mystery number.
 	 * These we're going to be touching on our local system.
 	 */
 
