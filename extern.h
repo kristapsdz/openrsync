@@ -185,7 +185,7 @@ void		  rsync_errx1(struct sess *, const char *,
 
 struct flist	 *flist_gen(struct sess *, size_t, char **, size_t *);
 void		  flist_free(struct flist *, size_t);
-struct flist	 *flist_recv(struct sess *, int, size_t *);
+int		  flist_recv(struct sess *, int, struct flist **, size_t *);
 int		  flist_send(struct sess *, int, const struct flist *, size_t);
 
 char		**fargs_cmdline(struct sess *, const struct fargs *);

@@ -245,7 +245,7 @@ flist_send(struct sess *sess, int fd,
  * Returns zero on failure, non-zero on success.
  */
 static int
-flist_recv_filename(struct sess *sess, int fd, 
+flist_recv_name(struct sess *sess, int fd, 
 	struct flist *f, uint8_t flags, char last[MAXPATHLEN])
 {
 	uint8_t		 bval;
@@ -396,23 +396,23 @@ flist_append(struct sess *sess, struct flist *f,
 }
 
 /*
- * Receive a file list, filling in length "sz", from the wire.
- * Return the file list or NULL on failure ("sz" will be zero).
+ * Receive a file list from the wire, filling in length "sz" (which may
+ * possibly be zero) and list "flp" on success.
+ * Return zero on failure, non-zero on success.
  */
-struct flist *
-flist_recv(struct sess *sess, int fd, size_t *sz)
+int
+flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 {
 	struct flist	*fl = NULL;
 	struct flist	*ff;
 	const struct flist *fflast = NULL;
 	size_t		 flsz = 0, flmax = 0, lsz;
 	uint8_t		 flag;
-	char		 lastname[MAXPATHLEN];
+	char		 last[MAXPATHLEN];
 	int64_t		 lval; /* temporary values... */
 	int32_t		 ival;
 
-	*sz = 0;
-	lastname[0] = '\0';
+	last[0] = '\0';
 
 	for (;;) {
 		if ( ! io_read_byte(sess, fd, &flag)) {
@@ -420,8 +420,6 @@ flist_recv(struct sess *sess, int fd, size_t *sz)
 			goto out;
 		} else if (0 == flag)
 			break;
-
-		/* Allocate in chunks instead of one by one. */
 
 		if ( ! flist_realloc(sess, &fl, &flsz, &flmax)) {
 			ERRX1(sess, "flist_realloc");
@@ -433,9 +431,8 @@ flist_recv(struct sess *sess, int fd, size_t *sz)
 
 		/* Filename first. */
 
-		if ( ! flist_recv_filename
-		    (sess, fd, ff, flag, lastname)) {
-			ERRX1(sess, "flist_recv_filename");
+		if ( ! flist_recv_name(sess, fd, ff, flag, last)) {
+			ERRX1(sess, "flist_recv_name");
 			goto out;
 		}
 
@@ -506,22 +503,18 @@ flist_recv(struct sess *sess, int fd, size_t *sz)
 			(intmax_t)ff->st.mtime, ff->st.mode);
 	}
 
-	if (0 == flsz) {
-		/* FIXME: shouldn't be an error. */
-		ERRX(sess, "zero-length file list");
-		goto out;
-	}
+	/* Remember to order the received list. */
 
+	qsort(fl, flsz, sizeof(struct flist), flist_cmp);
+	LOG2(sess, "received file metadata list: %zu", flsz);
 	*sz = flsz;
-	
-	/* Remember to order the received list! */
-
-	qsort(fl, *sz, sizeof(struct flist), flist_cmp);
-	LOG2(sess, "received file metadata list: %zu", *sz);
-	return fl;
+	*flp = fl;
+	return 1;
 out:
 	flist_free(fl, flsz);
-	return NULL;
+	*sz = 0;
+	*flp = NULL;
+	return 0;
 }
 
 static int
