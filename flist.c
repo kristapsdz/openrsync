@@ -19,6 +19,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <inttypes.h>
 #include <fts.h>
 #include <stdio.h>
@@ -130,6 +131,42 @@ flist_dedupe(struct sess *sess, struct flist **fl, size_t *sz)
 	*sz = j;
 	assert(*sz);
 	return 1;
+}
+
+/*
+ * Filter through the fts() file information.
+ * We want directories (pre-order), regular files, and symlinks.
+ * Everything else is skipped and possibly warned about.
+ * Return zero to skip, non-zero to examine.
+ */
+static int
+flist_fts_check(struct sess *sess, FTSENT *ent)
+{
+
+	if (FTS_F == ent->fts_info ||
+	    FTS_D == ent->fts_info ||
+	    FTS_SL == ent->fts_info ||
+	    FTS_SLNONE == ent->fts_info)
+		return 1;
+
+	if (FTS_DC == ent->fts_info) {
+		WARNX(sess, "directory cycle: %s", ent->fts_path);
+	} else if (FTS_DNR == ent->fts_info) {
+		errno = ent->fts_errno;
+		WARN(sess, "unreadable directory: %s", ent->fts_path);
+	} else if (FTS_DOT == ent->fts_info) {
+		WARNX(sess, "skipping dot-file: %s", ent->fts_path);
+	} else if (FTS_ERR == ent->fts_info) {
+		errno = ent->fts_errno;
+		WARN(sess, "%s", ent->fts_path);
+	} else if (FTS_DEFAULT == ent->fts_info) {
+		WARNX(sess, "skipping special: %s", ent->fts_path);
+	} else if (FTS_NS == ent->fts_info) {
+		errno = ent->fts_errno;
+		WARN(sess, "could not stat: %s", ent->fts_path);
+	} 
+
+	return 0;
 }
 
 /*
@@ -525,8 +562,8 @@ out:
 }
 
 /*
- * Generate a flist possibly-recursively given a file root, which may be
- * a regular file or symlink.
+ * Generate a flist possibly-recursively given a file root, which may
+ * also be a regular file or symlink.
  * On success, augments the generated list in "flp" of length "sz".
  * Returns zero on failure, non-zero on success.
  */
@@ -620,68 +657,31 @@ flist_gen_dirent(struct sess *sess, char *root,
 
 	errno = 0;
 	while (NULL != (ent = fts_read(fts))) {
-		/*
-		 * Filter through the read file information.
-		 * We want directories (pre-order) and regular files.
-		 * Everything else is skipped.
-		 */
-
-		if (FTS_DC == ent->fts_info) {
-			WARNX(sess, "skipping directory "
-				"cycle: %s", ent->fts_path);
-			continue;
-		} else if (FTS_DNR == ent->fts_info) {
-			errno = ent->fts_errno;
-			WARN(sess, "unreadable directory: "
-				"%s", ent->fts_path);
-			continue;
-		} else if (FTS_DOT == ent->fts_info) {
-			WARNX(sess, "skipping dot-file: "
-				"%s", ent->fts_path);
-			continue;
-		} else if (FTS_ERR == ent->fts_info) {
-			errno = ent->fts_errno;
-			WARN(sess, "unreadable file: %s",
-				ent->fts_path);
-			continue;
-		} else if (FTS_DEFAULT == ent->fts_info) {
-			WARNX(sess, "skipping non-regular "
-				"file: %s", ent->fts_path);
-			continue;
-		} else if (FTS_NS == ent->fts_info) {
-			errno = ent->fts_errno;
-			WARN(sess, "could not stat: %s",
-				ent->fts_path);
-			continue;
-		} else if (FTS_DP == ent->fts_info)
-			continue;
-
-		/* Check that the mode is alright. */
-
-		assert(NULL != ent->fts_statp);
-		if (S_ISLNK(ent->fts_statp->st_mode)) {
-			if ( ! sess->opts->preserve_links) {
-				WARNX(sess, "skipping symlink: %s",
-					ent->fts_path);
-				continue;
-			}
-		} 
-
-		if ( ! S_ISDIR(ent->fts_statp->st_mode) &&
-		     ! S_ISLNK(ent->fts_statp->st_mode) &&
-	             ! S_ISREG(ent->fts_statp->st_mode)) {
-			WARNX(sess, "skipping special: %s",
-				ent->fts_path);
+		if ( ! flist_fts_check(sess, ent)) {
+			errno = 0;
 			continue;
 		}
+
+		/* We don't allow symlinks without -l. */
+
+		assert(NULL != ent->fts_statp);
+		if (S_ISLNK(ent->fts_statp->st_mode) && 
+		    ! sess->opts->preserve_links) {
+			WARNX(sess, "skipping "
+				"symlink: %s", ent->fts_path);
+			continue;
+		} 
+
+		/* Allocate a new file entry. */
 
 		if ( ! flist_realloc(sess, fl, sz, max)) {
 			ERRX1(sess, "flist_realloc");
 			goto out;
 		}
-
 		flsz++;
 		f = &(*fl)[*sz - 1];
+
+		/* Our path defaults to "." for the root. */
 
 		if ('\0' == ent->fts_path[stripdir]) {
 			if (asprintf(&f->path, "%s.", ent->fts_path) < 0) {
@@ -695,12 +695,13 @@ flist_gen_dirent(struct sess *sess, char *root,
 				goto out;
 			}
 		}
+
 		f->wpath = f->path + stripdir;
 		flist_copy_stat(f, ent->fts_statp);
 
 		/* Optionally copy link information. */
 
-		if (S_ISLNK(st.st_mode)) {
+		if (S_ISLNK(ent->fts_statp->st_mode)) {
 			f->link = symlink_read(sess, f->path);
 			if (NULL == f->link) {
 				ERRX1(sess, "symlink_read");
@@ -822,12 +823,12 @@ out:
 }
 
 /*
- * Generate a list of file metadata (flist) from our arguments.
+ * Generate a sorted, de-duplicated list of file metadata.
  * In non-recursive mode (the default), we use only the files we're
  * given.
- * In recursive mode, we recursively generate a list of all files.
- * After generation, the list is sorted and deduplicated.
- * Returns the list or NULL on failure (sz set to zero).
+ * Otherwise, directories are recursively examined.
+ * Returns zero on failure, non-zero on success.
+ * On success, "fl" will need to be freed with flist_free().
  */
 int
 flist_gen(struct sess *sess, size_t argc, 
@@ -852,4 +853,121 @@ flist_gen(struct sess *sess, size_t argc,
 	*flp = NULL;
 	*sz = 0;
 	return 0;
+}
+
+/*
+ * Generate a sorted list of files starting at (but not including)
+ * "root" and descended into recursively.
+ * Only handles symbolic links, directories, and regular files.
+ * Returns zero on failure, non-zero on success.
+ * On success, "fl" will need to be freed with flist_free().
+ */
+int
+flist_gen_local(struct sess *sess, 
+	const char *root, struct flist **fl, size_t *sz)
+{
+	char		*cargv[2];
+	int		 rc = 0;
+	FTS		*fts;
+	FTSENT		*ent;
+	struct flist	*f;
+	size_t		 max = 0, stripdir;
+
+	if (NULL == (cargv[0] = strdup(root))) {
+		ERR(sess, "strdup");
+		return 0;
+	}
+	cargv[1] = NULL;
+
+	/* Strip away the root, since everything is relative to it. */
+
+	stripdir = strlen(root) + 1;
+
+	/* 
+	 * XXX: this only runs properly prior to unveil().
+	 * The caller needs to make sure that unveil() is not called
+	 * prior to this function.
+	 */
+
+	if (NULL == (fts = fts_open(cargv, FTS_PHYSICAL, NULL))) {
+		ERR(sess, "fts_open");
+		free(cargv[0]);
+		return 0;
+	}
+
+	errno = 0;
+	while (NULL != (ent = fts_read(fts))) {
+		if ( ! flist_fts_check(sess, ent)) {
+			errno = 0;
+			continue;
+		} else if (stripdir >= ent->fts_pathlen)
+			continue;
+
+		if ( ! flist_realloc(sess, fl, sz, &max)) {
+			ERRX1(sess, "flist_realloc");
+			goto out;
+		}
+		f = &(*fl)[*sz - 1];
+
+		if (NULL == (f->path = strdup(ent->fts_path))) {
+			ERR(sess, "strdup");
+			goto out;
+		}
+		f->wpath = f->path + stripdir;
+		assert(NULL != ent->fts_statp);
+		flist_copy_stat(f, ent->fts_statp);
+		errno = 0;
+	}
+
+	if (errno) {
+		ERR(sess, "fts_read");
+		goto out;
+	}
+
+	qsort(*fl, *sz, sizeof(struct flist), flist_cmp);
+	rc = 1;
+out:
+	fts_close(fts);
+	free(cargv[0]);
+	return rc;
+}
+
+/*
+ * Given the files that the system has ("have") and what we're going to
+ * update ("want"), delete all files and directories in "have" not found
+ * in "want".
+ * If dry_run is specified, simply write what would be done.
+ * Return zero on failure, non-zero on success.
+ */
+int
+flist_del(struct sess *sess, int root, 
+	const struct flist *have, size_t havesz, 
+	const struct flist *want, size_t wantsz)
+{
+	size_t	 j;
+	ssize_t	 i;
+	int	 fl;
+
+	/*
+	 * This is run in reverse order to catch files before
+	 * directories.
+	 */
+
+	for (i = (ssize_t)havesz - 1; i >= 0; i--) {
+		for (j = 0; j < wantsz; j++)
+			if (0 == strcmp(have[i].wpath, want[j].wpath))
+				break;
+		if (j < wantsz)
+			continue;
+		fl = S_ISDIR(have[i].st.mode) ? AT_REMOVEDIR : 0;
+		LOG1(sess, "deleting: %s", have[i].wpath);
+		if (sess->opts->dry_run)
+			continue;
+		if (-1 == unlinkat(root, have[i].wpath, fl)) {
+			ERR(sess, "unlinkat: %s", have[i].wpath);
+			return 0;
+		}
+	}
+
+	return 1;
 }
