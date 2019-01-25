@@ -296,6 +296,7 @@ main(int argc, char *argv[])
 	int	 	 fds[2], flags, c, st;
 	struct fargs	*fargs;
 	struct option	 lopts[] = {
+		{ "delete",	no_argument,	&opts.del,	1 },
 		{ "server",	no_argument,	&opts.server,	1 },
 		{ "sender",	no_argument,	&opts.sender,	1 },
 		{ "checksum-choice", required_argument,	NULL,	0 },
@@ -438,7 +439,7 @@ main(int argc, char *argv[])
 
 	return c ? EXIT_SUCCESS : EXIT_FAILURE;
 usage:
-	fprintf(stderr, "usage: %s [-lnprtv] src ... dst\n", 
+	fprintf(stderr, "usage: %s [-lnprtv] [--delete] src ... dst\n", 
 		getprogname());
 	return EXIT_FAILURE;
 }

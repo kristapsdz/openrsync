@@ -36,7 +36,7 @@ fargs_cmdline(struct sess *sess, const struct fargs *f)
 	argsz += 1; 	/* dot separator */
 	argsz += 1; 	/* sink file */
 	argsz += 5; 	/* per-mode maximum */
-	argsz += 9;	/* shared args */
+	argsz += 10;	/* shared args */
 	argsz += 1;	/* NULL pointer */
 	argsz += f->sourcesz;
 
@@ -79,6 +79,8 @@ fargs_cmdline(struct sess *sess, const struct fargs *f)
 		args[i++] = "-r";
 	if (sess->opts->preserve_links)
 		args[i++] = "-l";
+	if (sess->opts->del)
+		args[i++] = "--delete";
 
 	/* Terminate with a full-stop for reasons unknown. */
 
