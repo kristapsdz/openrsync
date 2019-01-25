@@ -527,8 +527,9 @@ int
 rsync_receiver(struct sess *sess, 
 	int fdin, int fdout, const char *root)
 {
-	struct flist	*fl = NULL;
-	size_t		 i, flsz = 0, csum_length = CSUM_LENGTH_PHASE1;
+	struct flist	*fl = NULL, *dfl = NULL;
+	size_t		 i, flsz = 0, csum_length = CSUM_LENGTH_PHASE1,
+			 dflsz = 0;
 	char		*tofree;
 	int		 rc = 0, dfd = -1, phase = 0, c;
 	int32_t	 	 ioerror;
@@ -590,6 +591,28 @@ rsync_receiver(struct sess *sess,
 
 	oumask = umask(0);
 
+	/* The destination is the basis of all future files. */
+
+	LOG2(sess, "receiver writing into: %s", root);
+
+	if (-1 == (dfd = open(root, O_RDONLY | O_DIRECTORY, 0))) {
+		ERR(sess, "open: %s", root);
+		goto out;
+	}
+
+	/* 
+	 * Begin by conditionally getting all files we have currently
+	 * available in our destination.
+	 * XXX: do this *before* the unveil() because fts_read() doesn't
+	 * work properly afterward.
+	 */
+
+	if (sess->opts->del && sess->opts->recursive)
+		if ( ! flist_gen_local(sess, root, &dfl, &dflsz)) {
+			ERRX1(sess, "flist_gen_local");
+			goto out;
+		}
+
 	/*
 	 * Make our entire view of the file-system be limited to what's
 	 * in the root directory.
@@ -605,17 +628,13 @@ rsync_receiver(struct sess *sess,
 		goto out;
 	}
 
-	/* 
-	 * Open the destination directory.
-	 * This will be the basis of all future files.
-	 */
+	/* If we have a local set, go for the deletion. */
 
-	LOG2(sess, "receiver writing into: %s", root);
-
-	if (-1 == (dfd = open(root, O_RDONLY | O_DIRECTORY, 0))) {
-		ERR(sess, "open: %s", root);
-		goto out;
-	}
+	if (NULL != dfl)
+		if ( ! flist_del(sess, dfd, dfl, dflsz, fl, flsz)) {
+			ERRX1(sess, "flist_del");
+			goto out;
+		}
 
 	/*
 	 * FIXME: I never use the full checksum amount; but if I were,
@@ -720,6 +739,7 @@ out:
 	if (-1 != dfd)
 		close(dfd);
 	flist_free(fl, flsz);
+	flist_free(dfl, dflsz);
 	free(newdir);
 	return rc;
 }
