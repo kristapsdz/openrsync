@@ -436,6 +436,16 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 		goto out;
 	}
 
+	/* Now we've completed the handshake. */
+
+	if (sess.rver < sess.lver) {
+		ERRX(&sess, "remote protocol is older "
+			"than our own (%" PRId32 " < %" PRId32 "): "
+			"this is not supported", 
+			sess.rver, sess.lver);
+		goto out;
+	}
+
 	sess.mplex_reads = 1;
 	LOG2(&sess, "read multiplexing enabled");
 

@@ -86,6 +86,14 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 
 	sess.mplex_writes = 1;
 
+	if (sess.rver < sess.lver) {
+		ERRX(&sess, "remote protocol is older "
+			"than our own (%" PRId32 " < %" PRId32 "): "
+			"this is not supported", 
+			sess.rver, sess.lver);
+		goto out;
+	}
+
 	LOG2(&sess, "server detected client version %" PRId32 
 		", server version %" PRId32 ", seed %" PRId32,
 		sess.rver, sess.lver, sess.seed);
