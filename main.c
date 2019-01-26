@@ -297,9 +297,9 @@ main(int argc, char *argv[])
 	struct fargs	*fargs;
 	struct option	 lopts[] = {
 		{ "delete",	no_argument,	&opts.del,	1 },
-		{ "server",	no_argument,	&opts.server,	1 },
+		{ "rsync-path",	required_argument, NULL,	0 },
 		{ "sender",	no_argument,	&opts.sender,	1 },
-		{ "checksum-choice", required_argument,	NULL,	0 },
+		{ "server",	no_argument,	&opts.server,	1 },
 		{ NULL,		0,		NULL,		0 }};
 
 	/* Global pledge. */
@@ -336,6 +336,7 @@ main(int argc, char *argv[])
 			opts.verbose++;
 			break;
 		case 0:
+			opts.rsync_path = optarg;
 			break;
 		default:
 			goto usage;

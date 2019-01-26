@@ -22,14 +22,20 @@
 
 #include "extern.h"
 
+#define	RSYNC_PATH 	"rsync"
+
 char **
 fargs_cmdline(struct sess *sess, const struct fargs *f)
 {
-	char	**args;
-	size_t	  i = 0, j, argsz = 0;
+	char		**args;
+	size_t		  i = 0, j, argsz = 0;
+	const char	 *rsync_path;
 
 	assert(NULL != f);
 	assert(f->sourcesz > 0);
+
+	if (NULL == (rsync_path = sess->opts->rsync_path))
+		rsync_path = RSYNC_PATH;
 
 	/* Be explicit with array size. */
 
@@ -50,12 +56,12 @@ fargs_cmdline(struct sess *sess, const struct fargs *f)
 		assert(NULL != f->host);
 		args[i++] = "ssh";
 		args[i++] = f->host;
-		args[i++] = "rsync";
+		args[i++] = (char *)rsync_path;
 		args[i++] = "--server";
 		if (FARGS_RECEIVER == f->mode)
 			args[i++] = "--sender";
 	} else {
-		args[i++] = "rsync";
+		args[i++] = (char *)rsync_path;
 		args[i++] = "--server";
 	}
 
