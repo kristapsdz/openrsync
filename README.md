@@ -1,14 +1,15 @@
 # Introduction
 
 This is a clean-room implementation of [rsync](https://rsync.samba.org/)
-with a BSD (ISC) license.  It is compatible with a modern rsync (3.1.3
-is used for testing), but accepts only a subset of rsync's command-line
-arguments.
+with a BSD (ISC) license.
+It's compatible with a modern rsync (3.1.3 is used for testing), but
+accepts only a subset of rsync's command-line arguments.
 
 *This project is still very new and very fast-moving.*
 
 At this time, openrsync runs only on [OpenBSD](https://www.openbsd.org).
-See the [Portability](#Portability) section for details.
+If you want to port to your system (e.g. Linux, FreeBSD), read the
+[Portability](#Portability) first.
 
 The canonical documentation for openrsync is its manual pages.
 See
@@ -20,7 +21,7 @@ for protocol details or utility documentation in
 If you'd like to write your own rsync implementation, the protocol
 manpages should have all the information required.
 The [Architecture](#Architecture) and [Algorithm](#Algorithm)
-information in this README serve to introduce developers to the source
+information on this page serve to introduce developers to the source
 code, and are non-canonical.
 
 This repository is a read-only mirror of a private CVS repository.  I
@@ -72,6 +73,110 @@ See
 for a listing.
 Again, see [Portability](#Portability) for non-OpenBSD system
 information.
+
+# Algorithm
+
+For a robust description of the rsync algorithm, see [The rsync
+algorithm](https://rsync.samba.org/tech_report/), by Andrew Tridgell and
+Paul Mackerras.
+This only gives a brief description, suitable for delving into the
+source code for more details.
+
+The rsync algorithm has two components: the *sender* and the *receiver*.
+The sender manages source files; the receiver manages the destination.
+In the following invocation, the source is host *remote* and the
+receiver is the localhost.
+
+```
+% openrsync -lrtp remote:foo/bar ~/baz/xyzzy
+```
+
+The algorithm hinges upon a file list of names and metadata (e.g., mode,
+mtime, etc.) shared between these components.
+The file list describes all source files of the update, and is generated
+by the sender.
+The sharing is implemented in
+[flist.c](https://github.com/kristapsdz/openrsync/blob/master/flist.c).
+
+After sharing this list, both the receiver and sender independently sort
+the entries by the filenames' lexicographical order.
+This allows the file list to be sent and received out of order.
+The ordering preserves a directory-first order, so directories are
+processed before their contained files.
+Moreover, once sorted, both sender and receiver may refer to file
+entries by their position in the sorted array.
+
+(*Note*: an additional step might be to compute and exchange a hash of
+the sorted contents.  This way, both sender and receiver would know that
+the file list has not been tampered with.)
+
+After the receiver accepts the list, it iterates through each file in
+the list, passing information to the sender so that the sender may send
+back instructions to update the file.
+This is the main "update" sequence of the algorithm.
+The sender waits to receive a request for update or end of sequence
+message.
+Once the iteration is complete, the files are all up to date.
+
+The receiver is implemented in
+[receiver.c](https://github.com/kristapsdz/openrsync/blob/master/receiver.c);
+the sender, in
+[sender.c](https://github.com/kristapsdz/openrsync/blob/master/sender.c).
+
+The sequence is different for whether the file is a directory, symbolic
+link, or regular file.
+
+For symbolic links, the information required by the receiver is already
+encoded in the file list metadata.
+The symbolic link is updated to point to the correct target.
+No update is requested from the sender.
+
+For directories, the directory is created if it does not already exist.
+No update is requested from the sender.
+
+Regular files are handled as follows, and constitute the main focus of
+the rsync algorithm.
+
+First, the file is checked to see if it's up to date.
+This happens if the file size and last modification time are the same.
+If so, no update is requested from the sender.
+
+Otherwise, the receiver examines each file in blocks of a fixed size.
+(The terminal block may be smaller if the file size is not divisible by
+the block size.)
+If the file is empty or does not exist, it will have zero blocks.
+Each block is hashed twice: first, with a fast Adler-32 type 4-byte
+hash; second, with a slower MD4 16-byte hash.
+These hashes are implemented in
+[hash.c](https://github.com/kristapsdz/openrsync/blob/master/hash.c).
+The receiver sends the file's block hashes to the sender.
+
+Once accepted, the sender examines the corresponding file with the given
+blocks.
+For each byte in the source file, the sender computes a fast hash given
+the block size.
+It then looks for matching fast hashes in the sent block information.
+If it finds a match, it then computes and checks the slow hash.
+If no match is found, it continues to the next byte.
+The matching (and indeed all block operation) is implemented in
+[block.c](https://github.com/kristapsdz/openrsync/blob/master/block.c).
+
+When a match is found, the data prior to the match is first sent as a
+stream of bytes to the receiver.
+This is followed by an identifier for the found block, or zero if no
+more data is forthcoming.
+
+The receiver writes the stream of bytes first, then copies the data in
+the identified block if one has been specified.
+This continues until the end of file, at which point the file has been
+fully reconstituted.
+
+If the file does not exist on the receiver side---the basis case---the
+entire file is sent as a stream of bytes.
+
+Following this, the whole file is hashed using an MD4 hash.
+These hashes are then compared; and on success, the algorithm continues
+to the next file.
 
 # Architecture
 
@@ -184,101 +289,6 @@ communicating with the receiver and sender.
 The purpose of the generator seems to be responding to file write
 requests.  In openrsync, this is accomplished by the receiver itself.
 
-# Algorithm
-
-For a complete description of the rsync algorithm, see [The rsync
-algorithm](https://rsync.samba.org/tech_report/), by Andrew Tridgell and
-Paul Mackerras.
-This only gives a brief description, suitable for delving into the source code
-for more details.
-
-The rsync algorithm itself depends upon a shared file list, which
-consists of file names and metadata as documented in
-[fstat(2)](https://man.openbsd.org/fstat.2).
-It is fully documented in the *File List* section of
-[rsync(5)](https://github.com/kristapsdz/openrsync/blob/master/rsync.5).
-The file list is always generated by the sender.
-The list transmission is implemented in
-[flist.c](https://github.com/kristapsdz/openrsync/blob/master/flist.c).
-
-Prior to processing the shared file list, both the receiver and sender
-independently sort the entries by the filenames' lexicographical order.
-This allows the file list to be sent and received out of order.
-
-The lexicographic ordering preserves a directory-first order, so
-directories are processed before their contained files.
-Moreover, once sorted, both sender and receiver may refer to file
-entries by their position in the sorted array.
-
-(*Note*: an additional step might be to compute and exchange a hash of
-the sorted contents.  This way, both sender and receiver would know that
-the file list has not been tampered with.)
-
-After the receiver receives the list, it iterates through each file in
-the list, passing information to the sender so that the sender may
-send back instructions to update the file.
-The sender waits to receive a request for update or end of sequence
-message.
-Once the iteration is complete, the files are all up to date.
-
-The receiver is implemented in
-[receiver.c](https://github.com/kristapsdz/openrsync/blob/master/receiver.c);
-the sender, in
-[sender.c](https://github.com/kristapsdz/openrsync/blob/master/sender.c).
-
-The update sequence is different for whether the file is a directory,
-symbolic link, or regular file.
-
-For symbolic links, the information required by the receiver is already
-encoded in the file list metadata.
-The symbolic link is updated to point to the correct target.
-No update is requested from the sender.
-
-For directories, the directory is created if it does not already exist.
-No update is requested from the sender.
-
-Regular files are handled as follows, and constitute the main focus of
-the rsync algorithm.
-First, the file is checked to see if it's up to date.
-This happens if the file size and last modification time are the same.
-If so, no update is requested from the sender.
-Otherwise, the receiver examines each file in blocks of a fixed size.
-(The terminal block may have less than that, if the file size is not
-divisible by the block size.)
-If the file is empty or does not exist, it will have zero blocks.
-Each block is hashed twice: first, with a fast 4-byte hash; second, with
-a slower 16-byte hash.
-The fast hash is a variant of Adler-32; the slow hash is an MD4.
-These hashes are implemented in
-[hash.c](https://github.com/kristapsdz/openrsync/blob/master/hash.c).
-The receiver then sends its block hashes to the sender.
-
-Once received, the sender examines the corresponding file with the given
-blocks.
-For each byte in each file, the sender computes a fast hash given the
-block size.
-It then looks for matching fast hashes in the sent block information.
-If it finds a match, it then computes and checks the slow hash.
-If no match is found, it continues to the next byte.
-The matching (and indeed all block operation) is implemented in
-[block.c](https://github.com/kristapsdz/openrsync/blob/master/block.c).
-
-When a match is found, the data prior to the match is first sent as a
-stream of bytes to the receiver.
-This is followed by an identifier for the found block, or zero if no
-more data is forthcoming.
-
-The receiver writes the stream of bytes first, then copies the data in
-the identified block if one has been specified.
-This continues until the end of file.
-
-If the file does not exist on the receiver side---the basis case---the
-entire file is sent as a stream of bytes.
-
-Following this, the whole file is hashed using an MD4 hash.
-These hashes are then compared; and on success, the algorithm continues
-to the next file.
-
 # Security
 
 Besides the usual defensive programming, openrsync makes significant use
@@ -305,11 +315,11 @@ root permissions to execute.
 # Portability
 
 Many have asked about portability.
-The system is moving a bit too fast for porting right now, but I was
-able to copy over
-[oconfigure](https://github.com/kristapsdz/oconfigure), add `config.h`
-as requirement, and mask the OpenBSD-specific functions on both Linux
-and FreeBSD without any problems.
+
+The system is easy to port into compiling and running: I was able to
+copy over [oconfigure](https://github.com/kristapsdz/oconfigure), add
+`config.h` as requirement, and mask the OpenBSD-specific functions on
+both Linux and FreeBSD without any problems.
 
 The actual work of porting, however, is matching the security features
 provided by OpenBSD's [pledge(2)](https://man.openbsd.org/pledge.2) and
@@ -321,3 +331,7 @@ network.
 This is possible (I think?) with FreeBSD's
 [Capsicum](https://man.freebsd.org/capsicum(4)), but Linux's security
 facilities are a mess, and will take an expert hand to properly secure.
+
+**rsync has specific running modes for the super-user**.
+It also pumps arbitrary data from the network onto your file-system.
+Do you want that running without specific mitigation in place?
