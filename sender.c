@@ -150,6 +150,8 @@ rsync_sender(struct sess *sess, int fdin,
 			goto out;
 		}
 
+		LOG1(sess, "%s", fl[idx].wpath);
+
 		/* Dry-run doesn't do anything. */
 
 		if (sess->opts->dry_run) {
