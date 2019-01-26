@@ -301,6 +301,8 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 	/* Dry-run short circuits. */
 
 	if (sess->opts->dry_run) {
+		if ( ! sess->opts->server)
+			LOG1(sess, "%s", f->path);
 		if ( ! io_write_int(sess, fdout, idx)) {
 			ERRX1(sess, "io_write_int: index");
 			goto out;
@@ -358,6 +360,9 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 		LOG3(sess, "creating: %s", f->path);
 
 	/* We need this file's data: start the transfer. */
+
+	if ( ! sess->opts->server)
+		LOG1(sess, "%s", f->path);
 
 	if ( ! io_write_int(sess, fdout, idx)) {
 		ERRX1(sess, "io_write_int: index");
