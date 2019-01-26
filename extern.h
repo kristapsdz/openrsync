@@ -137,6 +137,8 @@ struct	sess {
 	int		   mplex_writes; /* multiplexing writes? */
 };
 
+#define LOG0(_sess, _fmt, ...) \
+	rsync_log((_sess), __FILE__, __LINE__, -1, (_fmt), ##__VA_ARGS__)
 #define LOG1(_sess, _fmt, ...) \
 	rsync_log((_sess), __FILE__, __LINE__, 0, (_fmt), ##__VA_ARGS__)
 #define LOG2(_sess, _fmt, ...) \
