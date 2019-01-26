@@ -1009,6 +1009,7 @@ flist_del(struct sess *sess, int root,
 			if (sess->opts->dry_run)
 				continue;
 
+			assert(-1 != root);
 			fl = S_ISDIR(have[j].st.mode) ? AT_REMOVEDIR : 0;
 			if (-1 == unlinkat(root, have[j].wpath, fl) &&
 			    ENOENT != errno) {
