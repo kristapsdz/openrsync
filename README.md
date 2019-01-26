@@ -35,6 +35,39 @@ openrsync was funded by [NetNod](https://www.netnod.se),
 [IIS.SE](https://www.iis.se), [SUNET](https://www.sunet.se) and
 [6connect](https://www.6connect.com).
 
+# Installation
+
+On an up-to-date OpenBSD system, simply download and run:
+
+```
+% make && doas make install
+```
+
+This will install the openrsync utility and manual pages.
+It's ok to have an installation of rsync at the same time: the two will
+not collide in any way.
+
+If you upgrade your sources and want to re-install, just run the same.
+If you'd like to uninstall the sources:
+
+```
+% doas make uninstall
+```
+
+If you'd like to interact with the openrsync as a server, you can run
+the following:
+
+```
+% rsync --rsync-path=openrsync src/* dst
+% openrsync --rsync-path=openrsync src/* dst
+```
+
+If you'd like openrsync and rsync to interact, it's important to use
+command-line flags available on both.
+See
+[openrsync.1](https://github.com/kristapsdz/openrsync/blob/master/openrsync.1)
+for a listing.
+
 # Architecture
 
 Each openrsync session is divided into a running *server* and *client*
