@@ -32,12 +32,13 @@
 
 /*
  * Flush out "size" bytes of the buffer, doing all of the appropriate
- * chunking of the data.
- * FIXME: put the token write in here as well.
+ * chunking of the data, then the subsequent token (or zero).
+ * This is symmetrised in blk_merge().
  * Return zero on failure, non-zero on success.
  */
 static int
-blk_flush(struct sess *sess, int fd, const void *b, off_t size)
+blk_flush(struct sess *sess, int fd, 
+	const void *b, off_t size, int32_t token)
 {
 	off_t	i = 0, sz;
 
@@ -52,6 +53,11 @@ blk_flush(struct sess *sess, int fd, const void *b, off_t size)
 			return 0;
 		}
 		i += sz;
+	}
+
+	if ( ! io_write_int(sess, fd, token)) {
+		ERRX1(sess, "io_write_int: token");
+		return 0;
 	}
 
 	return 1;
@@ -133,7 +139,8 @@ blk_match_part(struct sess *sess, const char *path, int fd,
 	const void *buf, off_t size, const struct blkset *blks)
 {
 	off_t	 	 offs, last, end, fromcopy = 0, fromdown = 0,
-			 total = 0;
+			 total = 0, sz;
+	int32_t		 tok;
 	struct blk	*blk;
 
 	/* 
@@ -151,19 +158,23 @@ blk_match_part(struct sess *sess, const char *path, int fd,
 		if (NULL == blk)
 			continue;
 
-		fromdown += offs - last;
-		total += offs - last;
-		LOG4(sess, "%s: flushed %jd B before %zu B block "
-			"(%zu)", path, (intmax_t)(offs - last), 
-			blk->len, blk->idx);
+		sz = offs - last;
+		fromdown += sz;
+		total += sz;
+		LOG4(sess, "%s: flushing %jd B before %zu B "
+			"block %zu", path, (intmax_t)sz, blk->len,
+			blk->idx);
+		tok = -(blk->idx + 1);
 
-		/* Flush what we have and follow with our tag. */
+		/* 
+		 * Write the data we have, then follow it with the tag
+		 * of the block that matches.
+		 * The receiver will then write our data, then the data
+		 * it already has in the matching block.
+		 */
 
-		if ( ! blk_flush(sess, fd, buf + last, offs - last)) {
+		if ( ! blk_flush(sess, fd, buf + last, sz, tok)) {
 			ERRX1(sess, "blk_flush");
-			return 0;
-		} else if ( ! io_write_int(sess, fd, -(blk->idx + 1))) {
-			ERRX1(sess, "io_write_int: token");
 			return 0;
 		}
 
@@ -173,20 +184,20 @@ blk_match_part(struct sess *sess, const char *path, int fd,
 		last = offs + 1;
 	}
 
-	/* Emit remaining data and send terminator. */
+	/* Emit remaining data and send terminator token. */
 
-	total += size - last;
-	fromdown += size - last;
+	sz = size - last;
+	total += sz;
+	fromdown += sz;
 
-	LOG4(sess, "%s: flushed remaining %jd B", 
-		path, (intmax_t)(size - last));
+	LOG4(sess, "%s: flushing remaining %jd B", path, (intmax_t)sz);
 
-	if ( ! blk_flush(sess, fd, buf + last, size - last))
+	if ( ! blk_flush(sess, fd, buf + last, sz, 0)) {
 		ERRX1(sess, "blk_flush");
-	else if ( ! io_write_int(sess, fd, 0))
-		ERRX1(sess, "io_write_int: data block size");
+		return 0;
+	}
 
-	LOG3(sess, "%s: %.2f%% upload", 
+	LOG3(sess, "%s: %.2f%% upload ratio", 
 		path, 100.0 * fromdown / total);
 
 	return 1;
@@ -202,10 +213,8 @@ blk_match_full(struct sess *sess, int fd, const void *buf, off_t size)
 
 	/* Flush, then indicate that we have no more data to send. */
 
-	if ( ! blk_flush(sess, fd, buf, size))
+	if ( ! blk_flush(sess, fd, buf, size, 0))
 		ERRX1(sess, "blk_flush");
-	else if ( ! io_write_int(sess, fd, 0))
-		ERRX1(sess, "io_write_int: data block size");
 	else
 		return 1;
 
@@ -473,6 +482,13 @@ blk_merge(struct sess *sess, int fd, int ffd,
 	MD4_Update(&ctx, (unsigned char *)&rawtok, sizeof(int32_t));
 
 	for (;;) {
+		/*
+		 * This matches the sequence in blk_flush().
+		 * We read the size/token, then optionally the data.
+		 * The size >0 for reading data, 0 for no more data, and
+		 * <0 for a token indicator.
+		 */
+
 		if ( ! io_read_int(sess, fd, &rawtok)) {
 			ERRX1(sess, "io_read_int: data block size");
 			goto out;
