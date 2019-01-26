@@ -294,7 +294,7 @@ flist_recv_name(struct sess *sess, int fd,
 {
 	uint8_t		 bval;
 	size_t		 partial = 0;
-	size_t		 pathlen = 0, fpathlen;
+	size_t		 pathlen = 0, len;
 
 	/*
 	 * Read our filename.
@@ -333,17 +333,17 @@ flist_recv_name(struct sess *sess, int fd,
 	/* Allocate our full filename length. */
 	/* FIXME: maximum pathname length. */
 
-	fpathlen = pathlen + partial;
-	if (0 == fpathlen) {
-		ERRX(sess, "zero-length pathname");
+	if (0 == (len = pathlen + partial)) {
+		ERRX(sess, "security violation: "
+			"zero-length pathname");
 		return 0;
 	}
 
-	if (NULL == (f->path = malloc(fpathlen + 1))) {
+	if (NULL == (f->path = malloc(len + 1))) {
 		ERR(sess, "malloc");
 		return 0;
 	}
-	f->path[fpathlen] = '\0';
+	f->path[len] = '\0';
 
 	if (FLIST_NAME_SAME & flags)
 		memcpy(f->path, last, partial);
@@ -353,11 +353,20 @@ flist_recv_name(struct sess *sess, int fd,
 		return 0;
 	}
 
-	/* 
-	 * FIXME: security checks.
-	 * No absolute paths.
-	 * No path backtracking.
-	 */
+	if ('/' == f->path[0]) {
+		ERRX(sess, "security violation: "
+			"absolute pathname: %s", f->path);
+		return 0;
+	}
+
+	if (NULL != strstr(f->path, "/../") ||
+	    (len > 2 && 0 == strcmp(f->path + len - 3, "/..")) ||
+	    (len > 2 && 0 == strncmp(f->path, "../", 3)) ||
+	    0 == strcmp(f->path, "..")) {
+		ERRX(sess, "security violation: "
+			"backtracking pathname: %s", f->path);
+		return 0;
+	}
 
 	/* Record our last path and construct our filename. */
 
