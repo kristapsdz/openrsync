@@ -255,6 +255,8 @@ block size.
 It then looks for matching fast hashes in the sent block information.
 If it finds a match, it then computes and checks the slow hash.
 If no match is found, it continues to the next byte.
+The matching (and indeed all block operation) is implemented in
+[block.c](https://github.com/kristapsdz/openrsync/blob/master/block.c).
 
 When a match is found, the data prior to the match is first sent as a
 stream of bytes to the receiver.
