@@ -88,15 +88,16 @@ struct	flist {
  * See struct fargs.
  */
 struct	opts {
-	int	 sender; /* --sender */
-	int	 server; /* --server */
-	int	 recursive; /* -r */
-	int	 verbose; /* -v */
-	int	 dry_run; /* -n */
-	int	 preserve_times; /* -t */
-	int	 preserve_perms; /* -p */
-	int	 preserve_links; /* -l */
-	int	 del; /* --delete */
+	int		 sender; /* --sender */
+	int		 server; /* --server */
+	int		 recursive; /* -r */
+	int		 verbose; /* -v */
+	int		 dry_run; /* -n */
+	int		 preserve_times; /* -t */
+	int		 preserve_perms; /* -p */
+	int		 preserve_links; /* -l */
+	int		 del; /* --delete */
+	const char	*rsync_path; /* --rsync-path */
 };
 
 /*
