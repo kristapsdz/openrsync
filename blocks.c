@@ -135,7 +135,7 @@ blk_find(struct sess *sess, const void *buf, off_t size,
  * Return zero on failure, non-zero on success.
  */
 static int
-blk_match_part(struct sess *sess, const char *path, int fd, 
+blk_match_send(struct sess *sess, const char *path, int fd, 
 	const void *buf, off_t size, const struct blkset *blks)
 {
 	off_t	 	 offs, last, end, fromcopy = 0, fromdown = 0,
@@ -197,28 +197,10 @@ blk_match_part(struct sess *sess, const char *path, int fd,
 		return 0;
 	}
 
-	LOG3(sess, "%s: %.2f%% upload ratio", 
-		path, 100.0 * fromdown / total);
-
+	LOG3(sess, "%s: flushed (chunked) %jd B total, "
+		"%.2f%% upload ratio", path, (intmax_t)total, 
+		100.0 * fromdown / total);
 	return 1;
-}
-
-/*
- * Simply pushes the entire file over the wire.
- * Return zero on failure, non-zero on success.
- */
-static int
-blk_match_full(struct sess *sess, int fd, const void *buf, off_t size)
-{
-
-	/* Flush, then indicate that we have no more data to send. */
-
-	if ( ! blk_flush(sess, fd, buf, size, 0))
-		ERRX1(sess, "blk_flush");
-	else
-		return 1;
-
-	return 0;
 }
 
 /*
@@ -230,7 +212,7 @@ int
 blk_match(struct sess *sess, int fd, 
 	const struct blkset *blks, const char *path)
 {
-	int	 	 nfd, rc = 0;
+	int	 	 nfd, rc = 0, c;
 	struct stat	 st;
 	void		*map;
 	size_t		 mapsz;
@@ -258,18 +240,25 @@ blk_match(struct sess *sess, int fd,
 	/*
 	 * If the file's empty or we don't have any blocks from the
 	 * sender, then simply send the whole file.
-	 * Otherwise, run the hash matching routine.
+	 * Otherwise, run the hash matching routine and send raw chunks
+	 * and subsequent matching tokens.
+	 * This part broadly symmetrises blk_merge().
 	 */
 
 	if (st.st_size && blks->blksz) {
-		blk_match_part(sess, path, fd, map, st.st_size, blks);
-		LOG3(sess, "%s: sent chunked %zu blocks of "
-			"%zu B (%zu B remainder)", path, blks->blksz, 
-			blks->len, blks->rem);
+		c = blk_match_send(sess, path, 
+			fd, map, st.st_size, blks);
+		if ( ! c) {
+			ERRX1(sess, "blk_match_send");
+			goto out;
+		}
 	} else {
-		blk_match_full(sess, fd, map, st.st_size);
-		LOG3(sess, "%s: sent un-chunked %jd B", 
-			path, (intmax_t)st.st_size);
+		if ( ! blk_flush(sess, fd, map, st.st_size, 0)) {
+			ERRX1(sess, "blk_flush");
+			return 0;
+		}
+		LOG3(sess, "%s: flushed (un-chunked) %jd B, 100%% "
+			"upload ratio", path, (intmax_t)st.st_size);
 	}
 
 	/* Now write the full file hash. */
@@ -402,12 +391,12 @@ blk_recv(struct sess *sess, int fd, const char *path)
 
 		b->offs = offs;
 		b->idx = j;
-		b->len = (j == (s->blksz - 1) && s->rem) ? s->rem : s->len;
+		b->len = (j == (s->blksz - 1) && s->rem) ? 
+			s->rem : s->len;
 		offs += b->len;
 
-		LOG4(sess, "%s: read block %zu, length %zu B, "
-			"checksum=0x%08x", path, b->idx, b->len, 
-			b->chksum_short);
+		LOG4(sess, "%s: read block %zu, "
+			"length %zu B", path, b->idx, b->len);
 	}
 
 	s->size = offs;
@@ -517,8 +506,8 @@ blk_merge(struct sess *sess, int fd, int ffd,
 
 			fromdown += sz;
 			total += sz;
-			LOG4(sess, "%s: received %zd bytes, now %jd "
-				"total", path, ssz, (intmax_t)total);
+			LOG4(sess, "%s: received %zd B block, now %jd "
+				"B total", path, ssz, (intmax_t)total);
 
 			MD4_Update(&ctx, buf, sz);
 		} else {
@@ -552,8 +541,8 @@ blk_merge(struct sess *sess, int fd, int ffd,
 
 			fromcopy += block->blks[tok].len;
 			total += block->blks[tok].len;
-			LOG4(sess, "%s: copied %zu bytes, now %jd "
-				"total", path, block->blks[tok].len, 
+			LOG4(sess, "%s: copied %zu B, now %jd "
+				"B total", path, block->blks[tok].len, 
 				(intmax_t)total);
 
 			MD4_Update(&ctx, 
@@ -561,6 +550,9 @@ blk_merge(struct sess *sess, int fd, int ffd,
 				block->blks[tok].len);
 		}
 	}
+
+	LOG3(sess, "%s: merged %jd B total, %.2f%% download ratio",
+		path, (intmax_t)total, 100.0 * fromdown / total);
 
 	/* Make sure our resulting MD4_ hashes match. */
 
@@ -572,13 +564,10 @@ blk_merge(struct sess *sess, int fd, int ffd,
 	MD4_Final(ourmd, &ctx);
 
 	if (memcmp(md, ourmd, MD4_DIGEST_LENGTH)) {
-		ERRX(sess, "file hash does not match");
+		ERRX(sess, "%s: file hash does not match", path);
 		goto out;
 	}
 
-	LOG3(sess, "%s: merged %jd total bytes", 
-		path, (intmax_t)total);
-	LOG3(sess, "%s: %.2f%% upload", path, 100.0 * fromdown / total);
 	rc = 1;
 out:
 	free(buf);
