@@ -24,6 +24,17 @@ This repository is a read-only mirror of a private CVS repository.  I
 use it for issues and pull requests.  **Please do not make feature
 requests**: I will simply close out the issue.
 
+# Project Background
+
+openrsync is written as part of the
+[rpki-client(1)](https://medium.com/@jobsnijders/a-proposal-for-a-new-rpki-validator-openbsd-rpki-client-1-15b74e7a3f65)
+project, an
+[RPKI](https://en.wikipedia.org/wiki/Resource_Public_Key_Infrastructure)
+validator for OpenBSD. 
+openrsync was funded by [NetNod](https://www.netnod.se),
+[IIS.SE](https://www.iis.se), [SUNET](https://www.sunet.se) and
+[6connect](https://www.6connect.com).
+
 # Architecture
 
 Each openrsync session is divided into a running *server* and *client*
