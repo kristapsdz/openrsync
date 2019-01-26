@@ -19,6 +19,9 @@ for protocol details or utility documentation in
 [openrsync(1)](https://github.com/kristapsdz/openrsync/blob/master/openrsync.1).
 If you'd like to write your own rsync implementation, the protocol
 manpages should have all the information required.
+The [Architecture](#Architecture) and [Algorithm](#Algorithm)
+information in this README serve to introduce developers to the source
+code, and are non-canonical.
 
 This repository is a read-only mirror of a private CVS repository.  I
 use it for issues and pull requests.  **Please do not make feature
@@ -67,6 +70,8 @@ command-line flags available on both.
 See
 [openrsync(1)](https://github.com/kristapsdz/openrsync/blob/master/openrsync.1)
 for a listing.
+Again, see [Portability](#Portability) for non-OpenBSD system
+information.
 
 # Architecture
 
@@ -234,7 +239,10 @@ No update is requested from the sender.
 
 Regular files are handled as follows, and constitute the main focus of
 the rsync algorithm.
-First, the receiver examines each file in blocks of a fixed size.
+First, the file is checked to see if it's up to date.
+This happens if the file size and last modification time are the same.
+If so, no update is requested from the sender.
+Otherwise, the receiver examines each file in blocks of a fixed size.
 (The terminal block may have less than that, if the file size is not
 divisible by the block size.)
 If the file is empty or does not exist, it will have zero blocks.
@@ -243,10 +251,7 @@ a slower 16-byte hash.
 The fast hash is a variant of Adler-32; the slow hash is an MD4.
 These hashes are implemented in
 [hash.c](https://github.com/kristapsdz/openrsync/blob/master/hash.c).
-
-If, however, the file is up to date (the file size and last modification
-time are the same), no update is requested from the sender.
-Otherwise, the receiver then sends its block hashes to the sender.
+The receiver then sends its block hashes to the sender.
 
 Once received, the sender examines the corresponding file with the given
 blocks.
