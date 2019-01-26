@@ -143,6 +143,7 @@ pre_process_dir(struct sess *sess, mode_t oumask,
 
 	/* First, see if the directory already exists. */
 	
+	assert(-1 != root);
 	rc = fstatat(root, f->path, &st, AT_SYMLINK_NOFOLLOW);
 	if (-1 == rc) {
 		if (ENOENT != errno) {
@@ -200,6 +201,7 @@ process_link(struct sess *sess, int root, const struct flist *f)
 
 	/* See if the symlink already exists. */
 
+	assert(-1 != root);
 	rc = fstatat(root, f->path, &st, AT_SYMLINK_NOFOLLOW);
 	if (-1 == rc) {
 		if (-1 == symlinkat(f->link, root, f->path)) {
@@ -319,8 +321,8 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 	 * If we're recursive, then ignore the absolute indicator.
 	 */
 
+	assert(-1 != root);
 	ffd = openat(root, f->path, O_RDONLY | O_NOFOLLOW, 0);
-
 	if (-1 == ffd) {
 		if (ENOENT == errno)
 			WARN2(sess, "openat: %s", f->path);
@@ -571,33 +573,40 @@ rsync_receiver(struct sess *sess,
 		goto out;
 	}
 
+	LOG2(sess, "receiver destination: %s", root);
+
 	/* 
-	 * Create the path for our destination directory.
-	 * This uses our current umask.
-	 * FIXME: not with dryrun.
+	 * Create the path for our destination directory, if we're not
+	 * in dry-run mode (which would otherwise crash w/the pledge).
+	 * This uses our current umask: we might set the permissions on
+	 * this directory in post_process_dir().
 	 */
-
-	if (NULL == (tofree = strdup(root))) {
-		ERR(sess, "strdup");
-		goto out;
-	} else if (mkpath(sess, tofree) < 0) {
-		ERRX1(sess, "mkpath: %s", root);
+	
+	if ( ! sess->opts->dry_run) {
+		if (NULL == (tofree = strdup(root))) {
+			ERR(sess, "strdup");
+			goto out;
+		} else if (mkpath(sess, tofree) < 0) {
+			ERRX1(sess, "mkpath: %s", root);
+			free(tofree);
+			goto out;
+		}
 		free(tofree);
-		goto out;
 	}
-	free(tofree);
 
-	/* Disable umask() so we can set permissions fully. */
+	/* 
+	 * Disable umask() so we can set permissions fully.
+	 * Then open the directory iff we're not in dry_run.
+	 */
 
 	oumask = umask(0);
 
-	/* The destination is the basis of all future files. */
-
-	LOG2(sess, "receiver writing into: %s", root);
-
-	if (-1 == (dfd = open(root, O_RDONLY | O_DIRECTORY, 0))) {
-		ERR(sess, "open: %s", root);
-		goto out;
+	if ( ! sess->opts->dry_run) {
+		dfd = open(root, O_RDONLY | O_DIRECTORY, 0);
+		if (-1 == dfd) {
+			ERR(sess, "open: %s", root);
+			goto out;
+		}
 	}
 
 	/* 
