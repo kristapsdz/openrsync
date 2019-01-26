@@ -22,6 +22,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <inttypes.h>
 #include <netdb.h>
 #include <poll.h>
@@ -44,98 +45,56 @@ struct	source {
 };
 
 /*
- * Waits for a connection to complete.
- * Unlike other functions, this doesn't just return true/false.
- * If it manages to connect, it returns >1.
- * If it fails to connect because the host cannot be found or the
- * connection was terminaed, it returns 0.
- * If it fails because of non-endpoint-related errors, <0.
- * FIXME: make connect blocking.
- */
-static int
-inet_connect_wait(struct sess *sess, int fd)
-{
-	struct pollfd	pfd[1];
-	int 		er = 0;
-	socklen_t 	len = sizeof(int);
-
-	pfd[0].fd = fd;
-	pfd[0].events = POLLOUT;
-
-	if (-1 == poll(pfd, 1, INFTIM)) {
-		ERR(sess, "poll");
-		return -1;
-	}
-
-	if (-1 == getsockopt(fd, SOL_SOCKET, SO_ERROR, &er, &len)) {
-		ERR(sess, "getsockopt");
-		return -1;
-	} else if (er != 0) {
-		if (ECONNREFUSED == er || EHOSTUNREACH == er) {
-			return 0;
-		}
-		errno = er;
-		ERR(sess, "connect");
-		return -1;
-	}
-
-	return 1;
-}
-
-
-/*
  * Connect to an IP address representing a host.
  * Return <0 on failure, 0 on try another address, >0 on success.
- * FIXME: make the connect be blocking, then reenable non-blocking.
  */
 static int
 inet_connect(struct sess *sess, int *sd,
 	const struct source *src, const char *host)
 {
-	int	 c;
+	int	 c, flags;
 
 	if (-1 != *sd)
 		close(*sd);
 
 	LOG2(sess, "trying: %s, %s", src->ip, host);
 
-	*sd = socket(src->family, SOCK_STREAM | SOCK_NONBLOCK, 0);
-	if (-1 == *sd) {
+	if (-1 == (*sd = socket(src->family, SOCK_STREAM, 0))) {
 		ERR(sess, "socket");
 		return -1;
 	}
 
 	/* 
-	 * Initiate non-blocking connection.
-	 * If we get a soft connection error immediately, then continue
-	 * to attempt the next address.
+	 * Initiate blocking connection.
+	 * We use the blocking connect() instead of passing NONBLOCK to
+	 * the socket() function because we don't need to do anything
+	 * while waiting for this to finish.
 	 */
 
 	c = connect(*sd, 
 		(const struct sockaddr *)&src->sa, 
 		src->salen);
-
-	if (-1 == c && EINPROGRESS != errno) {
-		if (ECONNREFUSED == errno || EHOSTUNREACH == errno) {
+	if (-1 == c) {
+		if (ECONNREFUSED == errno || 
+		    EHOSTUNREACH == errno) {
 			WARNX(sess, "connect refused: "
 				"%s, %s", src->ip, host);
 			return 0;
 		}
 		ERR(sess, "connect");
 		return -1;
-	} else if (-1 == c) {
-		if ((c = inet_connect_wait(sess, *sd)) > 0)
-			return 1;
-		if (0 == c) {
-			WARNX(sess, "connect refused: "
-				"%s, %s", src->ip, host);
-			return 0;
-		}
-		ERRX1(sess, "inet_connect_wait");
+	} 
+
+	/* Set up non-blocking mode. */
+
+	if (-1 == (flags = fcntl(*sd, F_GETFL, 0))) {
+		ERR(sess, "fcntl");
+		return -1;
+	} else if (-1 == fcntl(*sd, F_SETFL, flags|O_NONBLOCK)) {
+		ERR(sess, "fcntl");
 		return -1;
 	}
 
-	assert(-1 != c);
 	return 1;
 }
 
@@ -240,8 +199,10 @@ protocol_line(struct sess *sess, const char *host, const char *cp)
 {
 	int	major, minor;
 
-	if (strncmp(cp, "@RSYNCD: ", 9))
+	if (strncmp(cp, "@RSYNCD: ", 9)) {
+		LOG0(sess, "%s", cp);
 		return 0;
+	}
 
 	cp += 9;
 	while (isspace((unsigned char)*cp))
@@ -341,7 +302,7 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 
 	/* Initiate with the rsyncd version and module request. */
 
-	LOG1(&sess, "connected: %s, %s", src[i].ip, f->host);
+	LOG2(&sess, "connected: %s, %s", src[i].ip, f->host);
 
 	(void)snprintf(buf, sizeof(buf), "@RSYNCD: %d", sess.lver);
 	if ( ! io_write_line(&sess, sd, buf)) {
@@ -349,7 +310,7 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 		goto out;
 	}
 
-	LOG1(&sess, "requesting module: %s, %s", f->module, f->host);
+	LOG2(&sess, "requesting module: %s, %s", f->module, f->host);
 
 	if ( ! io_write_line(&sess, sd, f->module)) {
 		ERRX1(&sess, "io_write_line: rsyncd module");
@@ -412,13 +373,11 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 	else
 		i = 1; /* rsync... */
 
-	for ( ; NULL != args[i]; i++) {
-		LOG1(&sess, "%s", args[i]);
+	for ( ; NULL != args[i]; i++)
 		if ( ! io_write_line(&sess, sd, args[i])) {
 			ERRX1(&sess, "io_write_line: arguments");
 			goto out;
 		}
-	}
 	if ( ! io_write_byte(&sess, sd, '\n')) {
 		ERRX1(&sess, "io_write_line: argument terminator");
 		goto out;
@@ -460,6 +419,9 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 		ERRX1(&sess, "rsync_receiver");
 		goto out;
 	}
+
+	if (io_read_check(&sess, sd))
+		WARNX(&sess, "data remains in read pipe");
 
 	rc = 1;
 out:
