@@ -24,6 +24,7 @@
 .Nm openrsync
 .Op Fl lnprtv
 .Op Fl -delete
+.Op Fl -rsync-path Ar prog
 .Ar source ...
 .Ar directory
 .Sh DESCRIPTION
@@ -80,6 +81,11 @@ not found in
 directories.
 Only applicable with
 .Fl r .
+.It Fl -rsync-path Ar prog
+Run
+.Ar prog
+on the remote host instead of the default
+.Ar rsync .
 .El
 .Pp
 A remote
@@ -191,7 +197,7 @@ on a remote host running
 with the local host running
 .Xr rsync 1 :
 .Pp
-.Dl % rsync -t ../dest/* host:dest
+.Dl % rsync --rsync-path openrsync -t ../dest/* host:dest
 .\" .Sh DIAGNOSTICS
 .\" For sections 1, 4, 6, 7, 8, and 9 printf/stderr messages only.
 .\" .Sh ERRORS

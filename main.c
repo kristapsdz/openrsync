@@ -440,7 +440,8 @@ main(int argc, char *argv[])
 
 	return c ? EXIT_SUCCESS : EXIT_FAILURE;
 usage:
-	fprintf(stderr, "usage: %s [-lnprtv] [--delete] src ... dst\n", 
+	fprintf(stderr, "usage: %s [-lnprtv] "
+		"[--delete] [--rsync-path=prog] src ... dst\n", 
 		getprogname());
 	return EXIT_FAILURE;
 }
