@@ -179,6 +179,82 @@ communicating with the receiver and sender.
 The purpose of the generator seems to be responding to file write
 requests.  In openrsync, this is accomplished by the receiver itself.
 
+# Algorithm
+
+The rsync algorithm itself depends upon a shared file list, which
+consists of file names and metadata documented in
+[fstat(2)](https://man.openbsd.org/fstat.2).
+These describe the files that will be sent from the sender and received
+by the receiver.
+The rsync algorithm uses this list to make the file transfer as minimal
+as possible.
+It is fully documented in the *File List* section of
+[rsync.5](https://github.com/kristapsdz/openrsync/blob/master/rsync.5).
+The list transmission is implemented in
+[flist.c](https://github.com/kristapsdz/openrsync/blob/master/flist.c).
+
+Prior to processing the shared file list, both the receiver and sender
+independently sort the entries in lexicographical order.
+This allows the file list to be sent and received out of order.
+The lexicographic ordering preserves a directory-first order as well, so
+directories are processed before their contained files.
+Once sorted, both sender and receiver may refer to file entries by their
+position in the sorted array.
+
+After the receiver receives the file list, it iterates through each file
+in the list, passing information to the sender so that the sender may
+send back instructions to update the file.
+Once the iteration is complete, the files are all up to date.
+
+The receiver portion of this is implemented in
+[receiver.c](https://github.com/kristapsdz/openrsync/blob/master/receiver.c);
+the sender, in
+[sender.c](https://github.com/kristapsdz/openrsync/blob/master/sender.c).
+
+The update sequence is different for whether the file is a directory,
+symbolic link, or regular file.
+
+For symbolic links, the information required is already encoded in the
+file list metadata.  The symbolic link is updated to point to the
+correct target.
+
+For directories, the directory is created if it does not already exist.
+
+Regular files are handled as follows, and constitute the main focus of
+the rsync algorithm.
+First, the files are broken down into blocks of a fixed size.
+(The terminal block may have less than that, if the file size is not
+divisible by the block size.)
+If the file is empty or does not exist, it will have zero blocks.
+Each block is hashed twice: first, with a fast 4-byte hash; second, with
+a slower 16-byte hash.
+The fast hash is a variant of Adler-32; the slow hash is an MD4.
+These hashes are implemented in
+[hash.c](https://github.com/kristapsdz/openrsync/blob/master/hash.c).
+The hashes and block information are sent to the sender.
+
+Once received, the sender examines each of its files with the given
+blocks.
+For each byte in each file, the sender computes a fast hash given the
+block size.
+It then looks for matching fast hashes in the sent block information.
+If it finds a match, it then computes and checks the slow hash.
+If no match is found, it continues to the next byte.
+
+When a match is found, the data prior to the match is first sent as-is
+to the receiver.
+This is followed by an identifier for the found block.
+The receiver writes the stream of bytes first, then copies the data in
+the identified block.
+This continues until the end of file.
+
+If the file does not exist on the receiver side---the basis case---the
+entire file is sent as a stream of bytes.
+
+Following this, the whole file is hashed using an MD4 hash.
+These hashes are then compared; and on success, the algorithm continues
+to the next file.
+
 # Security
 
 Besides the usual defensive programming, openrsync makes significant use
