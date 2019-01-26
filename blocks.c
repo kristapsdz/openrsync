@@ -66,11 +66,12 @@ blk_flush(struct sess *sess, int fd,
 /*
  * From our current position of "offs" in buffer "buf" of total size
  * "size", see if we can find a matching block in our list of blocks.
+ * The "hint" refers to the block that *might* work.
  * Returns the blk or NULL if no matching block was found.
  */
 static struct blk *
-blk_find(struct sess *sess, const void *buf, off_t size, 
-	off_t offs, const struct blkset *blks, const char *path)
+blk_find(struct sess *sess, const void *buf, off_t size, off_t offs, 
+	const struct blkset *blks, const char *path, size_t hint)
 {
 	unsigned char	 md[MD4_DIGEST_LENGTH];
 	uint32_t	 fhash;
@@ -91,7 +92,29 @@ blk_find(struct sess *sess, const void *buf, off_t size,
 	have_md = 0;
 
 	/* 
-	 * Now look for the fast hash.
+	 * Start with our match hint.
+	 * This just runs the fast and slow check with the hint.
+	 */
+
+	if (hint < blks->blksz &&
+	    fhash == blks->blks[hint].chksum_short &&
+	    (size_t)osz == blks->blks[hint].len) {
+		hash_slow(buf + offs, (size_t)osz, md, sess);
+		have_md = 1;
+		if (0 == memcmp(md, 
+		    blks->blks[hint].chksum_long, blks->csum)) {
+			LOG4(sess, "%s: found matching hinted match: "
+				"position %jd, block %zu "
+				"(position %jd, size %zu)", path,
+				(intmax_t)offs, blks->blks[hint].idx, 
+				(intmax_t)blks->blks[hint].offs,
+				blks->blks[hint].len);
+			return &blks->blks[hint];
+		}
+	}
+
+	/* 
+	 * Now loop and look for the fast hash.
 	 * If it's found, move on to the slow hash.
 	 */
 
@@ -142,6 +165,7 @@ blk_match_send(struct sess *sess, const char *path, int fd,
 			 total = 0, sz;
 	int32_t		 tok;
 	struct blk	*blk;
+	size_t		 hint = 0;
 
 	/* 
 	 * Stop searching at the length of the file minus the size of
@@ -154,7 +178,8 @@ blk_match_send(struct sess *sess, const char *path, int fd,
 	end = size + 1 - blks->blks[blks->blksz - 1].len;
 
 	for (last = offs = 0; offs < end; offs++) {
-		blk = blk_find(sess, buf, size, offs, blks, path);
+		blk = blk_find(sess, buf, size, 
+			offs, blks, path, hint);
 		if (NULL == blk)
 			continue;
 
@@ -182,6 +207,7 @@ blk_match_send(struct sess *sess, const char *path, int fd,
 		total += blk->len;
 		offs += blk->len - 1;
 		last = offs + 1;
+		hint = blk->idx + 1;
 	}
 
 	/* Emit remaining data and send terminator token. */
