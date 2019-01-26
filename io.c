@@ -309,27 +309,12 @@ io_read_buf(struct sess *sess, int fd, void *buf, size_t sz)
 		if ('\n' == mpbuf[sess->mplex_read_remain - 1])
 			mpbuf[--sess->mplex_read_remain] = '\0';
 
-		/* The tag seems to indicate severity...? */
-		
-		switch (tag) {
-		case 3:
-			LOG2(sess, "server (debug): %.*s", 
-				(int)sess->mplex_read_remain, mpbuf);
-			break;
-		case 2:
-			LOG1(sess, "server (info): %.*s", 
-				(int)sess->mplex_read_remain, mpbuf);
-			break;
-		case 1:
-			WARNX(sess, "server (error): %.*s", 
-				(int)sess->mplex_read_remain, mpbuf);
-			break;
-		default:
-			LOG3(sess, "server (unknown channel): %.*s", 
-				(int)sess->mplex_read_remain, mpbuf);
-			break;
-		}
+		/* 
+		 * Always print the server's messages, as the server
+		 * will control its own log levelling.
+		 */
 
+		LOG0(sess, "%.*s", (int)sess->mplex_read_remain, mpbuf);
 		sess->mplex_read_remain = 0;
 	}
 
