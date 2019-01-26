@@ -47,9 +47,12 @@ rsync_log(struct sess *sess, const char *fname,
 		va_end(ap);
 	}
 
-	fprintf(stderr, "%s:%zu%s%s\n", fname, line, 
-		NULL != buf ? ": " : "",
-		NULL != buf ? buf : "");
+	if (0 == level && NULL != buf) 
+		fprintf(stderr, "%s\n", buf);
+	else if (level > 0)
+		fprintf(stderr, "%s:%zu%s%s\n", fname, line, 
+			NULL != buf ? ": " : "",
+			NULL != buf ? buf : "");
 	free(buf);
 }
 
