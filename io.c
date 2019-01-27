@@ -48,7 +48,7 @@ io_read_check(struct sess *sess, int fd)
  * Returns zero on failure, non-zero on success (zero or more bytes).
  */
 int
-io_write_nonblocking(struct sess *sess, 
+io_write_nonblocking(struct sess *sess,
 	int fd, const void *buf, size_t bsz, size_t *sz)
 {
 	struct pollfd	pfd;
@@ -91,7 +91,7 @@ io_write_nonblocking(struct sess *sess,
  * Returns 0 on failure, non-zero on success (all bytes written).
  */
 int
-io_write_blocking(struct sess *sess, 
+io_write_blocking(struct sess *sess,
 	int fd, const void *buf, size_t sz)
 {
 	size_t		wsz;
@@ -169,7 +169,7 @@ io_write_line(struct sess *sess, int fd, const char *line)
  * Returns zero on failure, non-zero on success (zero or more bytes).
  */
 int
-io_read_nonblocking(struct sess *sess, 
+io_read_nonblocking(struct sess *sess,
 	int fd, void *buf, size_t bsz, size_t *sz)
 {
 	struct pollfd	pfd;
@@ -198,7 +198,7 @@ io_read_nonblocking(struct sess *sess,
 	if ((rsz = read(fd, buf, bsz)) < 0) {
 		ERR(sess, "read");
 		return 0;
-	} 
+	}
 
 	*sz = rsz;
 	return 1;
@@ -209,7 +209,7 @@ io_read_nonblocking(struct sess *sess,
  * Returns 0 on failure, non-zero on success (all bytes read).
  */
 int
-io_read_blocking(struct sess *sess, 
+io_read_blocking(struct sess *sess,
 	int fd, void *buf, size_t sz)
 {
 	size_t	 rsz;
@@ -300,7 +300,7 @@ io_read_buf(struct sess *sess, int fd, void *buf, size_t sz)
 		} else if (0 == sess->mplex_read_remain)
 			continue;
 
-		if ( ! io_read_blocking(sess, fd, 
+		if ( ! io_read_blocking(sess, fd,
 		    mpbuf, sess->mplex_read_remain)) {
 			ERRX1(sess, "io_read_blocking: "
 				"multiplexed out-of-band data");
@@ -309,7 +309,7 @@ io_read_buf(struct sess *sess, int fd, void *buf, size_t sz)
 		if ('\n' == mpbuf[sess->mplex_read_remain - 1])
 			mpbuf[--sess->mplex_read_remain] = '\0';
 
-		/* 
+		/*
 		 * Always print the server's messages, as the server
 		 * will control its own log levelling.
 		 */

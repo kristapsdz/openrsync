@@ -54,7 +54,7 @@ int
 rsync_server(const struct opts *opts, size_t argc, char *argv[])
 {
 	struct sess	 sess;
-	int	 	 fdin = STDIN_FILENO, 
+	int	 	 fdin = STDIN_FILENO,
 			 fdout = STDOUT_FILENO, c = 0;
 
 	memset(&sess, 0, sizeof(struct sess));
@@ -62,7 +62,7 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 
 	/* Begin by making descriptors non-blocking. */
 
-	if ( ! fcntl_nonblock(&sess, fdin) || 
+	if ( ! fcntl_nonblock(&sess, fdin) ||
 	     ! fcntl_nonblock(&sess, fdout)) {
 		ERRX1(&sess, "fcntl_nonblock");
 		goto out;
@@ -89,12 +89,12 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 	if (sess.rver < sess.lver) {
 		ERRX(&sess, "remote protocol is older "
 			"than our own (%" PRId32 " < %" PRId32 "): "
-			"this is not supported", 
+			"this is not supported",
 			sess.rver, sess.lver);
 		goto out;
 	}
 
-	LOG2(&sess, "server detected client version %" PRId32 
+	LOG2(&sess, "server detected client version %" PRId32
 		", server version %" PRId32 ", seed %" PRId32,
 		sess.rver, sess.lver, sess.seed);
 

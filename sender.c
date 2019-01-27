@@ -34,7 +34,7 @@
  * Pledges: stdio, rpath, unveil.
  */
 int
-rsync_sender(struct sess *sess, int fdin, 
+rsync_sender(struct sess *sess, int fdin,
 	int fdout, size_t argc, char **argv)
 {
 	struct flist	*fl = NULL;
@@ -67,8 +67,8 @@ rsync_sender(struct sess *sess, int fdin,
 	} else if ( ! io_write_int(sess, fdout, 0)) {
 		ERRX1(sess, "io_write_int: io_error");
 		goto out;
-	} 
-	
+	}
+
 	/* Exit if we're the server with zero files. */
 
 	if (0 == flsz && sess->opts->server) {
@@ -100,9 +100,9 @@ rsync_sender(struct sess *sess, int fdin,
 		if ( ! io_read_int(sess, fdin, &idx)) {
 			ERRX1(sess, "io_read_int: index");
 			goto out;
-		} 
+		}
 
-		/* 
+		/*
 		 * If we receive an invalid index (-1), then we're
 		 * either promoted to the second phase or it's time to
 		 * exit, depending upon which phase we're in.

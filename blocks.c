@@ -37,13 +37,13 @@
  * Return zero on failure, non-zero on success.
  */
 static int
-blk_flush(struct sess *sess, int fd, 
+blk_flush(struct sess *sess, int fd,
 	const void *b, off_t size, int32_t token)
 {
 	off_t	i = 0, sz;
 
 	while (i < size) {
-		sz = MAX_CHUNK < (size - i) ? 
+		sz = MAX_CHUNK < (size - i) ?
 			MAX_CHUNK : (size - i);
 		if ( ! io_write_int(sess, fd, sz)) {
 			ERRX1(sess, "io_write_int: data block size");
@@ -70,7 +70,7 @@ blk_flush(struct sess *sess, int fd,
  * Returns the blk or NULL if no matching block was found.
  */
 static struct blk *
-blk_find(struct sess *sess, const void *buf, off_t size, off_t offs, 
+blk_find(struct sess *sess, const void *buf, off_t size, off_t offs,
 	const struct blkset *blks, const char *path, size_t hint)
 {
 	unsigned char	 md[MD4_DIGEST_LENGTH];
@@ -79,7 +79,7 @@ blk_find(struct sess *sess, const void *buf, off_t size, off_t offs,
 	size_t		 i;
 	int		 have_md = 0;
 
-	/* 
+	/*
 	 * First, compute our fast hash.
 	 * FIXME: yes, this can be a rolling computation, but I'm
 	 * deliberately making it simple first.
@@ -91,7 +91,7 @@ blk_find(struct sess *sess, const void *buf, off_t size, off_t offs,
 	fhash = hash_fast(buf + offs, (size_t)osz);
 	have_md = 0;
 
-	/* 
+	/*
 	 * Start with our match hint.
 	 * This just runs the fast and slow check with the hint.
 	 */
@@ -101,25 +101,25 @@ blk_find(struct sess *sess, const void *buf, off_t size, off_t offs,
 	    (size_t)osz == blks->blks[hint].len) {
 		hash_slow(buf + offs, (size_t)osz, md, sess);
 		have_md = 1;
-		if (0 == memcmp(md, 
+		if (0 == memcmp(md,
 		    blks->blks[hint].chksum_long, blks->csum)) {
 			LOG4(sess, "%s: found matching hinted match: "
 				"position %jd, block %zu "
 				"(position %jd, size %zu)", path,
-				(intmax_t)offs, blks->blks[hint].idx, 
+				(intmax_t)offs, blks->blks[hint].idx,
 				(intmax_t)blks->blks[hint].offs,
 				blks->blks[hint].len);
 			return &blks->blks[hint];
 		}
 	}
 
-	/* 
+	/*
 	 * Now loop and look for the fast hash.
 	 * If it's found, move on to the slow hash.
 	 */
 
 	for (i = 0; i < blks->blksz; i++) {
-		if (fhash != blks->blks[i].chksum_short) 
+		if (fhash != blks->blks[i].chksum_short)
 			continue;
 		if ((size_t)osz != blks->blks[i].len)
 			continue;
@@ -127,7 +127,7 @@ blk_find(struct sess *sess, const void *buf, off_t size, off_t offs,
 		LOG4(sess, "%s: found matching fast match: "
 			"position %jd, block %zu "
 			"(position %jd, size %zu)", path,
-			(intmax_t)offs, blks->blks[i].idx, 
+			(intmax_t)offs, blks->blks[i].idx,
 			(intmax_t)blks->blks[i].offs,
 			blks->blks[i].len);
 
@@ -158,7 +158,7 @@ blk_find(struct sess *sess, const void *buf, off_t size, off_t offs,
  * Return zero on failure, non-zero on success.
  */
 static int
-blk_match_send(struct sess *sess, const char *path, int fd, 
+blk_match_send(struct sess *sess, const char *path, int fd,
 	const void *buf, off_t size, const struct blkset *blks)
 {
 	off_t	 	 offs, last, end, fromcopy = 0, fromdown = 0,
@@ -167,7 +167,7 @@ blk_match_send(struct sess *sess, const char *path, int fd,
 	struct blk	*blk;
 	size_t		 hint = 0;
 
-	/* 
+	/*
 	 * Stop searching at the length of the file minus the size of
 	 * the last block.
 	 * The reason for this being that we don't need to do an
@@ -178,7 +178,7 @@ blk_match_send(struct sess *sess, const char *path, int fd,
 	end = size + 1 - blks->blks[blks->blksz - 1].len;
 
 	for (last = offs = 0; offs < end; offs++) {
-		blk = blk_find(sess, buf, size, 
+		blk = blk_find(sess, buf, size,
 			offs, blks, path, hint);
 		if (NULL == blk)
 			continue;
@@ -191,7 +191,7 @@ blk_match_send(struct sess *sess, const char *path, int fd,
 			blk->idx);
 		tok = -(blk->idx + 1);
 
-		/* 
+		/*
 		 * Write the data we have, then follow it with the tag
 		 * of the block that matches.
 		 * The receiver will then write our data, then the data
@@ -224,7 +224,7 @@ blk_match_send(struct sess *sess, const char *path, int fd,
 	}
 
 	LOG3(sess, "%s: flushed (chunked) %jd B total, "
-		"%.2f%% upload ratio", path, (intmax_t)total, 
+		"%.2f%% upload ratio", path, (intmax_t)total,
 		100.0 * fromdown / total);
 	return 1;
 }
@@ -235,7 +235,7 @@ blk_match_send(struct sess *sess, const char *path, int fd,
  * Return zero on failure, non-zero on success.
  */
 int
-blk_match(struct sess *sess, int fd, 
+blk_match(struct sess *sess, int fd,
 	const struct blkset *blks, const char *path)
 {
 	int	 	 nfd, rc = 0, c;
@@ -272,7 +272,7 @@ blk_match(struct sess *sess, int fd,
 	 */
 
 	if (st.st_size && blks->blksz) {
-		c = blk_match_send(sess, path, 
+		c = blk_match_send(sess, path,
 			fd, map, st.st_size, blks);
 		if ( ! c) {
 			ERRX1(sess, "blk_match_send");
@@ -320,7 +320,7 @@ blkset_free(struct blkset *p)
  * Returns zero on failure, non-zero on success.
  */
 int
-blk_recv_ack(struct sess *sess, 
+blk_recv_ack(struct sess *sess,
 	int fd, const struct blkset *blocks, int32_t idx)
 {
 
@@ -382,7 +382,7 @@ blk_recv(struct sess *sess, int fd, const char *path)
 	}
 
 	LOG3(sess, "%s: read block prologue: %zu blocks of "
-		"%zu B, %zu B remainder, %zu B checksum", path, 
+		"%zu B, %zu B remainder, %zu B checksum", path,
 		s->blksz, s->len, s->rem, s->csum);
 
 	if (s->blksz) {
@@ -404,7 +404,7 @@ blk_recv(struct sess *sess, int fd, const char *path)
 		b->chksum_short = i;
 
 		assert(s->csum <= sizeof(b->chksum_long));
-		if ( ! io_read_buf(sess, 
+		if ( ! io_read_buf(sess,
 		    fd, b->chksum_long, s->csum)) {
 			ERRX1(sess, "io_read_buf: slow checksum");
 			goto out;
@@ -417,7 +417,7 @@ blk_recv(struct sess *sess, int fd, const char *path)
 
 		b->offs = offs;
 		b->idx = j;
-		b->len = (j == (s->blksz - 1) && s->rem) ? 
+		b->len = (j == (s->blksz - 1) && s->rem) ?
 			s->rem : s->len;
 		offs += b->len;
 
@@ -439,7 +439,7 @@ out:
  * Return zero on failure, non-zero on success.
  */
 int
-blk_send_ack(struct sess *sess, int fd, 
+blk_send_ack(struct sess *sess, int fd,
 	const struct blkset *blocks, size_t idx)
 {
 	size_t		 rem, len, blksz, nidx, csum;
@@ -477,7 +477,7 @@ blk_send_ack(struct sess *sess, int fd,
  */
 int
 blk_merge(struct sess *sess, int fd, int ffd,
-	const struct blkset *block, int outfd, const char *path, 
+	const struct blkset *block, int outfd, const char *path,
 	const void *map, size_t mapsz)
 {
 	size_t		 sz, tok;
@@ -507,7 +507,7 @@ blk_merge(struct sess *sess, int fd, int ffd,
 		if ( ! io_read_int(sess, fd, &rawtok)) {
 			ERRX1(sess, "io_read_int: data block size");
 			goto out;
-		} else if (0 == rawtok) 
+		} else if (0 == rawtok)
 			break;
 
 		if (rawtok > 0) {
@@ -515,7 +515,7 @@ blk_merge(struct sess *sess, int fd, int ffd,
 			if (NULL == (pp = realloc(buf, sz))) {
 				ERR(sess, "realloc");
 				goto out;
-			} 
+			}
 			buf = pp;
 			if ( ! io_read_buf(sess, fd, buf, sz)) {
 				ERRX1(sess, "io_read_int: data block");
@@ -543,7 +543,7 @@ blk_merge(struct sess *sess, int fd, int ffd,
 				goto out;
 			}
 
-			/* 
+			/*
 			 * Now we read from our block.
 			 * We should only be at this point if we have a
 			 * block to read from, i.e., if we were able to
@@ -553,8 +553,8 @@ blk_merge(struct sess *sess, int fd, int ffd,
 
 			assert(MAP_FAILED != map);
 
-			ssz = write(outfd, 
-				map + block->blks[tok].offs, 
+			ssz = write(outfd,
+				map + block->blks[tok].offs,
 				block->blks[tok].len);
 
 			if (ssz < 0) {
@@ -568,11 +568,11 @@ blk_merge(struct sess *sess, int fd, int ffd,
 			fromcopy += block->blks[tok].len;
 			total += block->blks[tok].len;
 			LOG4(sess, "%s: copied %zu B, now %jd "
-				"B total", path, block->blks[tok].len, 
+				"B total", path, block->blks[tok].len,
 				(intmax_t)total);
 
-			MD4_Update(&ctx, 
-				map + block->blks[tok].offs, 
+			MD4_Update(&ctx,
+				map + block->blks[tok].offs,
 				block->blks[tok].len);
 		}
 	}
@@ -605,7 +605,7 @@ out:
  * Return zero on failure, non-zero on success.
  */
 int
-blk_send(struct sess *sess, int fd, 
+blk_send(struct sess *sess, int fd,
 	const struct blkset *p, const char *path)
 {
 	size_t	 i;
@@ -623,7 +623,7 @@ blk_send(struct sess *sess, int fd,
 	} else if ( ! io_write_int(sess, fd, p->rem)) {
 		ERRX1(sess, "io_write_int: block remainder");
 		return 0;
-	} 
+	}
 
 	for (i = 0; i < p->blksz; i++) {
 		b = &p->blks[i];
@@ -638,7 +638,7 @@ blk_send(struct sess *sess, int fd,
 	}
 
 	LOG3(sess, "%s: sent block prologue: %zu blocks of %zu B, "
-		"%zu B remainder, %zu B checksum", path, 
+		"%zu B remainder, %zu B checksum", path,
 		p->blksz, p->len, p->rem, p->csum);
 	return 1;
 }
