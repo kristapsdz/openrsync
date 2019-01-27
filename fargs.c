@@ -52,7 +52,7 @@ fargs_cmdline(struct sess *sess, const struct fargs *f)
 		return NULL;
 	}
 
-	if (FARGS_RECEIVER == f->mode || FARGS_SENDER == f->mode) {
+	if (NULL != f->host) {
 		assert(NULL != f->host);
 		args[i++] = "ssh";
 		args[i++] = f->host;
