@@ -215,9 +215,6 @@ flist_send(struct sess *sess, int fdin,
 
 	/* Double-check that we've no pending multiplexed data. */
 
-	assert(sess->mplex_reads);
-	assert(0 == sess->mplex_read_remain);
-
 	LOG2(sess, "sending file metadata list: %zu", flsz);
 
 	for (i = 0; i < flsz; i++) {
@@ -233,7 +230,8 @@ flist_send(struct sess *sess, int fdin,
 		 * without checking for messages.
 		 */
 
-		if (io_read_check(sess, fdin) &&
+		if (sess->mplex_reads &&
+		    io_read_check(sess, fdin) &&
 		     ! io_read_flush(sess, fdin)) {
 			ERRX1(sess, "io_read_flush");
 			return 0;
