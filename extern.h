@@ -195,7 +195,7 @@ int		  flist_gen_local(struct sess *, const char *,
 void		  flist_free(struct flist *, size_t);
 int		  flist_recv(struct sess *, int,
 			struct flist **, size_t *);
-int		  flist_send(struct sess *, int,
+int		  flist_send(struct sess *, int, int,
 			const struct flist *, size_t);
 
 char		**fargs_cmdline(struct sess *, const struct fargs *);
@@ -203,9 +203,10 @@ char		**fargs_cmdline(struct sess *, const struct fargs *);
 int		  io_read_buf(struct sess *, int, void *, size_t);
 int		  io_read_byte(struct sess *, int, uint8_t *);
 int		  io_read_check(struct sess *, int);
+int		  io_read_flush(struct sess *, int);
 int		  io_read_int(struct sess *, int, int32_t *);
-int		  io_read_size(struct sess *, int, size_t *);
 int		  io_read_long(struct sess *, int, int64_t *);
+int		  io_read_size(struct sess *, int, size_t *);
 int		  io_write_buf(struct sess *, int, const void *, size_t);
 int		  io_write_byte(struct sess *, int, uint8_t);
 int		  io_write_int(struct sess *, int, int32_t);
