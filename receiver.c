@@ -383,7 +383,7 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 
 	p->csum = csumlen;
 
-	if (-1 != ffd) {
+	if (-1 != ffd && st.st_size > 0) {
 		mapsz = st.st_size;
 		map = mmap(NULL, mapsz, PROT_READ, MAP_SHARED, ffd, 0);
 
@@ -510,7 +510,7 @@ out:
 
 	if (-1 != tfd) {
 		close(tfd);
-		remove(tmpfile);
+		unlinkat(root, tmpfile, 0);
 	}
 
 	free(tmpfile);
