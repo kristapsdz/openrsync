@@ -232,6 +232,71 @@ io_read_blocking(struct sess *sess,
 }
 
 /*
+ * When we do a lot of writes in a row (such as when the sender emits
+ * the file list), the server might be sending us multiplexed log
+ * messages.
+ * If it sends too many, it clogs the socket.
+ * This function looks into the read buffer and clears out any log
+ * messages pending.
+ * If called when there are valid data reads available, this function
+ * does nothing.
+ * Returns zero on failure, non-zero on success.
+ */
+int
+io_read_flush(struct sess *sess, int fd)
+{
+	int32_t	 tagbuf, tag;
+	char	 mpbuf[1024];
+
+	if (sess->mplex_read_remain)
+		return 1;
+
+	/*
+	 * First, read the 4-byte multiplex tag.
+	 * The first byte is the tag identifier (7 for normal
+	 * data, !7 for out-of-band data), the last three are
+	 * for the remaining data size.
+	 */
+
+	if ( ! io_read_blocking(sess, fd, &tagbuf, sizeof(tagbuf))) {
+		ERRX1(sess, "io_read_blocking: "
+			"multiplex tag identifier");
+		return 0;
+	}
+	tag = le32toh(tagbuf);
+	sess->mplex_read_remain = tag & 0xFFFFFF;
+	tag >>= 24;
+	if (7 == tag)
+		return 1;
+
+	tag -= 7;
+
+	if (sess->mplex_read_remain > sizeof(mpbuf)) {
+		ERRX(sess, "multiplex buffer overflow");
+		return 0;
+	} else if (0 == sess->mplex_read_remain)
+		return 1;
+
+	if ( ! io_read_blocking(sess, fd,
+	    mpbuf, sess->mplex_read_remain)) {
+		ERRX1(sess, "io_read_blocking: "
+			"multiplexed out-of-band data");
+		return 0;
+	}
+	if ('\n' == mpbuf[sess->mplex_read_remain - 1])
+		mpbuf[--sess->mplex_read_remain] = '\0';
+
+	/*
+	 * Always print the server's messages, as the server
+	 * will control its own log levelling.
+	 */
+
+	LOG0(sess, "%.*s", (int)sess->mplex_read_remain, mpbuf);
+	sess->mplex_read_remain = 0;
+	return 1;
+}
+
+/*
  * Read buffer from non-blocking descriptor, possibly in multiplex read
  * mode.
  * Returns zero on failure, non-zero on success (all bytes read from
@@ -240,8 +305,6 @@ io_read_blocking(struct sess *sess,
 int
 io_read_buf(struct sess *sess, int fd, void *buf, size_t sz)
 {
-	char	 mpbuf[1024];
-	int32_t	 tagbuf, tag;
 	size_t	 rsz;
 
 	/* If we're not multiplexing, read directly. */
@@ -273,49 +336,11 @@ io_read_buf(struct sess *sess, int fd, void *buf, size_t sz)
 			continue;
 		}
 
-		/*
-		 * We're multiplexing.
-		 * First, read the 4-byte multiplex tag.
-		 * The first byte is the tag identifier (7 for normal
-		 * data, !7 for out-of-band data), the last three are
-		 * for the remaining data size.
-		 */
-
 		assert(0 == sess->mplex_read_remain);
-		if ( ! io_read_blocking(sess, fd, &tagbuf, sizeof(tagbuf))) {
-			ERRX1(sess, "io_read_blocking: "
-				"multiplex tag identifier");
+		if ( ! io_read_flush(sess, fd)) {
+			ERRX1(sess, "io_read_flush");
 			return 0;
 		}
-		tag = le32toh(tagbuf);
-		sess->mplex_read_remain = tag & 0xFFFFFF;
-		tag >>= 24;
-		if (7 == tag)
-			continue;
-		tag -= 7;
-
-		if (sess->mplex_read_remain > sizeof(mpbuf)) {
-			ERRX(sess, "multiplex buffer overflow");
-			return 0;
-		} else if (0 == sess->mplex_read_remain)
-			continue;
-
-		if ( ! io_read_blocking(sess, fd,
-		    mpbuf, sess->mplex_read_remain)) {
-			ERRX1(sess, "io_read_blocking: "
-				"multiplexed out-of-band data");
-			return 0;
-		}
-		if ('\n' == mpbuf[sess->mplex_read_remain - 1])
-			mpbuf[--sess->mplex_read_remain] = '\0';
-
-		/*
-		 * Always print the server's messages, as the server
-		 * will control its own log levelling.
-		 */
-
-		LOG0(sess, "%.*s", (int)sess->mplex_read_remain, mpbuf);
-		sess->mplex_read_remain = 0;
 	}
 
 	return 1;

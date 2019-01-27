@@ -61,7 +61,7 @@ rsync_sender(struct sess *sess, int fdin,
 
 	/* Now send the file list and our mystery number. */
 
-	if ( ! flist_send(sess, fdout, fl, flsz)) {
+	if ( ! flist_send(sess, fdin, fdout, fl, flsz)) {
 		ERRX1(sess, "flist_send");
 		goto out;
 	} else if ( ! io_write_int(sess, fdout, 0)) {

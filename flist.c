@@ -200,16 +200,23 @@ flist_free(struct flist *f, size_t sz)
 
 /*
  * Serialise our file list (which may be zero-length) to the wire.
+ * Makes sure that the receiver isn't going to block on sending us
+ * return messages on the log channel.
  * Return zero on failure, non-zero on success.
  */
 int
-flist_send(struct sess *sess, int fd,
-	const struct flist *fl, size_t flsz)
+flist_send(struct sess *sess, int fdin, 
+	int fdout, const struct flist *fl, size_t flsz)
 {
 	size_t		 i, fnlen;
 	uint8_t		 flag;
 	const struct flist *f;
 	const char	*fn;
+
+	/* Double-check that we've no pending multiplexed data. */
+
+	assert(sess->mplex_reads);
+	assert(0 == sess->mplex_read_remain);
 
 	LOG2(sess, "sending file metadata list: %zu", flsz);
 
@@ -218,6 +225,19 @@ flist_send(struct sess *sess, int fd,
 		fn = f->wpath;
 		fnlen = strlen(f->wpath);
 		assert(fnlen > 0);
+
+		/* 
+		 * If applicable, unclog the read buffer.
+		 * This happens when the receiver has a lot of log
+		 * messages and all we're doing is sending our file list
+		 * without checking for messages.
+		 */
+
+		if (io_read_check(sess, fdin) &&
+		     ! io_read_flush(sess, fdin)) {
+			ERRX1(sess, "io_read_flush");
+			return 0;
+		}
 
 		/*
 		 * For ease, make all of our filenames be "long"
@@ -235,22 +255,22 @@ flist_send(struct sess *sess, int fd,
 
 		/* Now write to the wire. */
 
-		if ( ! io_write_byte(sess, fd, flag)) {
+		if ( ! io_write_byte(sess, fdout, flag)) {
 			ERRX1(sess, "io_write_byte: flags");
 			return 0;
-		} else if ( ! io_write_int(sess, fd, fnlen)) {
+		} else if ( ! io_write_int(sess, fdout, fnlen)) {
 			ERRX1(sess, "io_write_int: filename length");
 			return 0;
-		} else if ( ! io_write_buf(sess, fd, fn, fnlen)) {
+		} else if ( ! io_write_buf(sess, fdout, fn, fnlen)) {
 			ERRX1(sess, "io_write_buf: filename");
 			return 0;
-		} else if ( ! io_write_long(sess, fd, f->st.size)) {
+		} else if ( ! io_write_long(sess, fdout, f->st.size)) {
 			ERRX1(sess, "io_write_long: file size");
 			return 0;
-		} else if ( ! io_write_int(sess, fd, f->st.mtime)) {
+		} else if ( ! io_write_int(sess, fdout, f->st.mtime)) {
 			ERRX1(sess, "io_write_int: file mtime");
 			return 0;
-		} else if ( ! io_write_int(sess, fd, f->st.mode)) {
+		} else if ( ! io_write_int(sess, fdout, f->st.mode)) {
 			ERRX1(sess, "io_write_int: file mode");
 			return 0;
 		}
@@ -261,18 +281,18 @@ flist_send(struct sess *sess, int fd,
 		    sess->opts->preserve_links) {
 			fn = f->link;
 			fnlen = strlen(f->link);
-			if ( ! io_write_int(sess, fd, fnlen)) {
+			if ( ! io_write_int(sess, fdout, fnlen)) {
 				ERRX1(sess, "io_write_int: link size");
 				return 0;
 			}
-			if ( ! io_write_buf(sess, fd, fn, fnlen)) {
+			if ( ! io_write_buf(sess, fdout, fn, fnlen)) {
 				ERRX1(sess, "io_write_int: link");
 				return 0;
 			}
 		}
 	}
 
-	if ( ! io_write_byte(sess, fd, 0)) {
+	if ( ! io_write_byte(sess, fdout, 0)) {
 		ERRX1(sess, "io_write_byte: zero flag");
 		return 0;
 	}
