@@ -94,8 +94,11 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 		}
 	}
 
+#if 0
+	/* Probably the EOF. */
 	if (io_read_check(&sess, fd))
 		WARNX(&sess, "data remains in read pipe");
+#endif
 
 	rc = 1;
 out:

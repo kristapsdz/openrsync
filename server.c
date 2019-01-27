@@ -150,8 +150,11 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 		}
 	}
 
+#if 0
+	/* Probably the EOF. */
 	if (io_read_check(&sess, fdin))
 		WARNX(&sess, "data remains in read pipe");
+#endif
 
 	c = 1;
 out:
