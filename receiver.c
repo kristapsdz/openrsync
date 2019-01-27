@@ -353,7 +353,8 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 		if (st.st_size == f->st.size &&
 		    st.st_mtime == f->st.mtime) {
 			LOG3(sess, "%s: skipping: up to date", f->path);
-			return 1;
+			rc = 1;
+			goto out;
 		}
 		LOG3(sess, "updating: %s", f->path);
 	} else
