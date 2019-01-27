@@ -64,18 +64,18 @@ inet_connect(struct sess *sess, int *sd,
 		return -1;
 	}
 
-	/* 
+	/*
 	 * Initiate blocking connection.
 	 * We use the blocking connect() instead of passing NONBLOCK to
 	 * the socket() function because we don't need to do anything
 	 * while waiting for this to finish.
 	 */
 
-	c = connect(*sd, 
-		(const struct sockaddr *)&src->sa, 
+	c = connect(*sd,
+		(const struct sockaddr *)&src->sa,
 		src->salen);
 	if (-1 == c) {
-		if (ECONNREFUSED == errno || 
+		if (ECONNREFUSED == errno ||
 		    EHOSTUNREACH == errno) {
 			WARNX(sess, "connect refused: "
 				"%s, %s", src->ip, host);
@@ -83,7 +83,7 @@ inet_connect(struct sess *sess, int *sd,
 		}
 		ERR(sess, "connect");
 		return -1;
-	} 
+	}
 
 	/* Set up non-blocking mode. */
 
@@ -124,7 +124,7 @@ inet_resolve(struct sess *sess, const char *host, size_t *sz)
 	LOG2(sess, "resolving: %s", host);
 
 	if (error == EAI_AGAIN || error == EAI_NONAME) {
-		ERRX(sess, "DNS resolve error: %s: %s", 
+		ERRX(sess, "DNS resolve error: %s: %s",
 			host, gai_strerror(error));
 		return NULL;
 	} else if (error) {
@@ -179,7 +179,7 @@ inet_resolve(struct sess *sess, const char *host, size_t *sz)
 				&(((struct sockaddr_in6 *)sa)->sin6_addr),
 				src[i].ip, INET6_ADDRSTRLEN);
 		}
-		
+	
 		LOG2(sess, "DNS resolved: %s: %s", host, src[i].ip);
 		i++;
 	}
@@ -210,10 +210,10 @@ protocol_line(struct sess *sess, const char *host, const char *cp)
 
 	/* @RSYNCD: OK indicates that we're finished. */
 
-	if (0 == strcmp(cp, "OK")) 
+	if (0 == strcmp(cp, "OK"))
 		return 1;
 
-	/* 
+	/*
 	 * Otherwise, all we have left is our version.
 	 * There are two formats: x.y (w/submodule) and x.
 	 */
@@ -256,10 +256,10 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 	if (NULL == (args = fargs_cmdline(&sess, f))) {
 		ERRX1(&sess, "fargs_cmdline");
 		return 0;
-	} 
+	}
 
 	/* Resolve all IP addresses from the host. */
-	
+
 	if (NULL == (src = inet_resolve(&sess, f->host, &srcsz))) {
 		ERRX1(&sess, "inet_resolve");
 		free(args);
@@ -359,7 +359,7 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 			break;
 	}
 
-	/* 
+	/*
 	 * Now we've exchanged all of our protocol information.
 	 * We want to send our command-line arguments over the wire,
 	 * each with a newline termination.
@@ -400,7 +400,7 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 	if (sess.rver < sess.lver) {
 		ERRX(&sess, "remote protocol is older "
 			"than our own (%" PRId32 " < %" PRId32 "): "
-			"this is not supported", 
+			"this is not supported",
 			sess.rver, sess.lver);
 		goto out;
 	}
@@ -408,7 +408,7 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 	sess.mplex_reads = 1;
 	LOG2(&sess, "read multiplexing enabled");
 
-	LOG2(&sess, "socket detected client version %" PRId32 
+	LOG2(&sess, "socket detected client version %" PRId32
 		", server version %" PRId32 ", seed %" PRId32,
 		sess.lver, sess.rver, sess.seed);
 

@@ -43,7 +43,7 @@
  */
 enum	fmode {
 	FARGS_LOCAL, /* FIXME: necessary? */
-	FARGS_SENDER, 
+	FARGS_SENDER,
 	FARGS_RECEIVER
 };
 
@@ -165,38 +165,38 @@ struct	sess {
 
 __BEGIN_DECLS
 
-void		  rsync_log(struct sess *, 
+void		  rsync_log(struct sess *,
 			const char *, size_t, int, const char *, ...)
 			__attribute__((format(printf, 5, 6)));
-void		  rsync_warnx1(struct sess *, 
+void		  rsync_warnx1(struct sess *,
 			const char *, size_t, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
-void		  rsync_warn(struct sess *, int, 
+void		  rsync_warn(struct sess *, int,
 			const char *, size_t, const char *, ...)
 			__attribute__((format(printf, 5, 6)));
-void		  rsync_warnx(struct sess *, const char *, 
+void		  rsync_warnx(struct sess *, const char *,
 			size_t, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
-void		  rsync_err(struct sess *, const char *, 
+void		  rsync_err(struct sess *, const char *,
 			size_t, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
-void		  rsync_errx(struct sess *, const char *, 
+void		  rsync_errx(struct sess *, const char *,
 			size_t, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
-void		  rsync_errx1(struct sess *, const char *, 
+void		  rsync_errx1(struct sess *, const char *,
 			size_t, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
 
 int		  flist_del(struct sess *, int, const struct flist *,
 			size_t, const struct flist *, size_t);
-int		  flist_gen(struct sess *, size_t, char **, 
+int		  flist_gen(struct sess *, size_t, char **,
 			struct flist **, size_t *);
-int		  flist_gen_local(struct sess *, const char *, 
+int		  flist_gen_local(struct sess *, const char *,
 			struct flist **, size_t *);
 void		  flist_free(struct flist *, size_t);
-int		  flist_recv(struct sess *, int, 
+int		  flist_recv(struct sess *, int,
 			struct flist **, size_t *);
-int		  flist_send(struct sess *, int, 
+int		  flist_send(struct sess *, int,
 			const struct flist *, size_t);
 
 char		**fargs_cmdline(struct sess *, const struct fargs *);
@@ -225,23 +225,23 @@ int		  rsync_socket(const struct opts *, const struct fargs *);
 int		  rsync_server(const struct opts *, size_t, char *[]);
 
 struct blkset	 *blk_recv(struct sess *, int, const char *);
-int		  blk_recv_ack(struct sess *, 
+int		  blk_recv_ack(struct sess *,
 			int, const struct blkset *, int32_t);
-int		  blk_match(struct sess *, int, 
+int		  blk_match(struct sess *, int,
 			const struct blkset *, const char *);
-int		  blk_send(struct sess *, int, 
+int		  blk_send(struct sess *, int,
 			const struct blkset *, const char *);
-int		  blk_send_ack(struct sess *, int, 
+int		  blk_send_ack(struct sess *, int,
 			const struct blkset *, size_t);
-int		  blk_merge(struct sess *, int, int, 
-			const struct blkset *, int, const char *, 
+int		  blk_merge(struct sess *, int, int,
+			const struct blkset *, int, const char *,
 			const void *, size_t);
 void		  blkset_free(struct blkset *);
 
 uint32_t	  hash_fast(const void *, size_t);
-void		  hash_slow(const void *, size_t, 
+void		  hash_slow(const void *, size_t,
 			unsigned char *, const struct sess *);
-void		  hash_file(const void *, size_t, 
+void		  hash_file(const void *, size_t,
 			unsigned char *, const struct sess *);
 
 int		  mkpath(struct sess *, char *);

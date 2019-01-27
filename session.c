@@ -23,7 +23,7 @@
 
 #include "extern.h"
 
-/* 
+/*
  * TODO.
  */
 int
@@ -41,7 +41,7 @@ sess_stats_send(struct sess *sess, int fd)
 	} else if ( ! io_write_int(sess, fd, 30)) {
 		ERRX1(sess, "io_write_int: total size");
 		return 0;
-	} 
+	}
 
 	return 1;
 }
@@ -66,7 +66,7 @@ sess_stats_recv(struct sess *sess, int fd)
 	} else if ( ! io_read_size(sess, fd, &tsize)) {
 		ERRX1(sess, "io_read_size: total size");
 		return 0;
-	} 
+	}
 
 	LOG1(sess, "stats: %zu B read, %zu B written, %zu B size",
 		tread, twrite, tsize);

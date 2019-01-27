@@ -39,18 +39,18 @@ hash_fast(const void *buf, size_t len)
 
 	if (len > 4)
 		for ( ; i < len - 4; i += 4) {
-			b += 4 * (a + dat[i]) + 
-			      3 * dat[i + 1] + 
-			      2 * dat[i + 2] + 
+			b += 4 * (a + dat[i]) +
+			      3 * dat[i + 1] +
+			      2 * dat[i + 2] +
 			          dat[i + 3];
-			a += dat[i + 0] + 
-			      dat[i + 1] + 
-			      dat[i + 2] + 
+			a += dat[i + 0] +
+			      dat[i + 1] +
+			      dat[i + 2] +
 			      dat[i + 3];
 		}
 
 	for ( ; i < len; i++) {
-		a += dat[i]; 
+		a += dat[i];
 		b += a;
 	}
 
@@ -63,7 +63,7 @@ hash_fast(const void *buf, size_t len)
  * Slow MD4-based hash with trailing seed.
  */
 void
-hash_slow(const void *buf, size_t len, 
+hash_slow(const void *buf, size_t len,
 	unsigned char *md, const struct sess *sess)
 {
 	MD4_CTX		 ctx;
@@ -81,7 +81,7 @@ hash_slow(const void *buf, size_t len,
  * of the sequence, not the beginning.
  */
 void
-hash_file(const void *buf, size_t len, 
+hash_file(const void *buf, size_t len,
 	unsigned char *md, const struct sess *sess)
 {
 	MD4_CTX		 ctx;

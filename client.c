@@ -61,12 +61,12 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 	if (sess.rver < sess.lver) {
 		ERRX(&sess, "remote protocol is older "
 			"than our own (%" PRId32 " < %" PRId32 "): "
-			"this is not supported", 
+			"this is not supported",
 			sess.rver, sess.lver);
 		goto out;
 	}
 
-	LOG2(&sess, "client detected client version %" PRId32 
+	LOG2(&sess, "client detected client version %" PRId32
 		", server version %" PRId32 ", seed %" PRId32,
 		sess.lver, sess.rver, sess.seed);
 
@@ -78,15 +78,15 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 	 */
 
 	if (FARGS_RECEIVER != f->mode) {
-		LOG2(&sess, "client starting sender: %s", 
+		LOG2(&sess, "client starting sender: %s",
 			NULL == f->host ? "(local?)" : f->host);
-		if ( ! rsync_sender(&sess, fd, fd, 
+		if ( ! rsync_sender(&sess, fd, fd,
 				f->sourcesz, f->sources)) {
 			ERRX1(&sess, "rsync_sender");
 			goto out;
 		}
 	} else {
-		LOG2(&sess, "client starting receiver: %s", 
+		LOG2(&sess, "client starting receiver: %s",
 			NULL == f->host ? "(local?)" : f->host);
 		if ( ! rsync_receiver(&sess, fd, fd, f->sink)) {
 			ERRX1(&sess, "rsync_receiver");
@@ -96,7 +96,7 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 
 	if (io_read_check(&sess, fd))
 		WARNX(&sess, "data remains in read pipe");
-	
+
 	rc = 1;
 out:
 	return rc;
