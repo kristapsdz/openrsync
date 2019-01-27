@@ -119,31 +119,22 @@ fargs_parse(size_t argc, char *argv[])
 	 * If neither, a local transfer in sender style.
 	 */
 
-	f->mode = FARGS_LOCAL;
+	f->mode = FARGS_SENDER;
 
-	if (fargs_is_remote(f->sink))
+	if (fargs_is_remote(f->sink)) {
 		f->mode = FARGS_SENDER;
+		if (NULL == (f->host = strdup(f->sink)))
+			err(EXIT_FAILURE, "strdup");
+	}
 
 	if (fargs_is_remote(f->sources[0])) {
-		if (FARGS_SENDER == f->mode)
+		if (NULL != f->host)
 			errx(EXIT_FAILURE, "both source and "
 				"destination cannot be remote files");
 		f->mode = FARGS_RECEIVER;
+		if (NULL == (f->host = strdup(f->sources[0])))
+			err(EXIT_FAILURE, "strdup");
 	}
-
-	/*
-	 * Set our remote host depending upon the mode.
-	 * Save the host, which is the NUL-terminated host name, and the
-	 * buffer from which we got it that includes the colon.
-	 */
-
-	if (FARGS_RECEIVER == f->mode)
-		f->host = strdup(argv[0]);
-	else if (FARGS_SENDER == f->mode)
-		f->host = strdup(argv[argc - 1]);
-
-	if (FARGS_LOCAL != f->mode && NULL == f->host)
-		err(EXIT_FAILURE, "strdup");
 
 	if (NULL != f->host) {
 		if (0 == strncasecmp(f->host, "rsync://", 8)) {
@@ -181,8 +172,7 @@ fargs_parse(size_t argc, char *argv[])
 	/* Make sure we have the same "hostspec" for all files. */
 
 	if ( ! f->remote) {
-		if (FARGS_SENDER == f->mode ||
-		    FARGS_LOCAL == f->mode)
+		if (FARGS_SENDER == f->mode)
 			for (i = 0; i < f->sourcesz; i++) {
 				if ( ! fargs_is_remote(f->sources[i]))
 					continue;
@@ -223,6 +213,8 @@ fargs_parse(size_t argc, char *argv[])
 	 */
 
 	if ( ! f->remote) {
+		if (NULL == f->host)
+			return f;
 		if (FARGS_SENDER == f->mode) {
 			assert(NULL != f->host);
 			assert(len > 0);

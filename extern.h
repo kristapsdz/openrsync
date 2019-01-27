@@ -42,7 +42,6 @@
  * This is relative to which host we're running on.
  */
 enum	fmode {
-	FARGS_LOCAL, /* FIXME: necessary? */
 	FARGS_SENDER,
 	FARGS_RECEIVER
 };
@@ -52,7 +51,7 @@ enum	fmode {
  * See struct opts.
  */
 struct	fargs {
-	char	  *host; /* hostname or NULL if FARGS_LOCAL */
+	char	  *host; /* hostname or NULL if local */
 	char	 **sources; /* transfer source */
 	size_t	   sourcesz; /* number of sources */
 	char	  *sink; /* transfer endpoint */
