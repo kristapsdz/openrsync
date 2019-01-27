@@ -6,6 +6,9 @@ It's compatible with a modern rsync (3.1.3 is used for testing), but
 accepts only a subset of rsync's command-line arguments.
 
 *This project is still very new and very fast-moving.*
+However, it's at the point where more wide-spread testing is possible.
+Please read the [Installation](#Installation) notes for more about
+testing openrsync.
 
 At this time, openrsync runs only on [OpenBSD](https://www.openbsd.org).
 If you want to port to your system (e.g. Linux, FreeBSD), read the
@@ -28,7 +31,7 @@ This repository is a read-only mirror of a private CVS repository.  I
 use it for issues and pull requests.  **Please do not make feature
 requests**: I will simply close out the issue.
 
-# Project Background
+## Project background
 
 openrsync is written as part of the
 [rpki-client(1)](https://medium.com/@jobsnijders/a-proposal-for-a-new-rpki-validator-openbsd-rpki-client-1-15b74e7a3f65)
@@ -41,7 +44,7 @@ openrsync was funded by [NetNod](https://www.netnod.se),
 
 # Installation
 
-On an up-to-date OpenBSD system, simply download and run:
+On an up-to-date [OpenBSD](https://www.openbsd.org) system, simply download and run:
 
 ```
 % make && doas make install
@@ -76,9 +79,9 @@ information.
 
 # Algorithm
 
-For a robust description of the rsync algorithm, see [The rsync
-algorithm](https://rsync.samba.org/tech_report/), by Andrew Tridgell and
-Paul Mackerras.
+For a robust description of the rsync algorithm, see "[The rsync
+algorithm](https://rsync.samba.org/tech_report/)", by Andrew Tridgell
+and Paul Mackerras.
 This only gives a brief description, suitable for delving into the
 source code for more details.
 
