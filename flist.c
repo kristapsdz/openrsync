@@ -606,8 +606,12 @@ flist_gen_dirent(struct sess *sess, char *root,
 		}
 		f = &(*fl)[(*sz) - 1];
 		assert(NULL != f);
+
 		if ( ! flist_append(sess, f, &st, root)) {
 			ERRX1(sess, "flist_append");
+			return 0;
+		} else if (-1 == unveil(root, "r")) {
+			ERR(sess, "unveil: %s", root);
 			return 0;
 		}
 		return 1;
@@ -621,8 +625,12 @@ flist_gen_dirent(struct sess *sess, char *root,
 		}
 		f = &(*fl)[(*sz) - 1];
 		assert(NULL != f);
+
 		if ( ! flist_append(sess, f, &st, root)) {
 			ERRX1(sess, "flist_append");
+			return 0;
+		} else if (-1 == unveil(root, "r")) {
+			ERR(sess, "unveil: %s", root);
 			return 0;
 		}
 		return 1;
@@ -724,6 +732,9 @@ flist_gen_dirent(struct sess *sess, char *root,
 	if (errno) {
 		ERR(sess, "fts_read");
 		goto out;
+	} else if (-1 == unveil(root, "r")) {
+		ERR(sess, "unveil: %s", root);
+		goto out;
 	}
 
 	LOG3(sess, "generated %zu filenames: %s", flsz, root);
@@ -814,7 +825,13 @@ flist_gen_files(struct sess *sess, size_t argc,
 
 		f = &fl[flsz++];
 		assert(NULL != f);
-		if ( ! flist_append(sess, f, &st, argv[i])) {
+
+		/* Add this file to our file-system worldview. */
+
+		if (-1 == unveil(argv[i], "r")) {
+			ERR(sess, "unveil: %s", argv[i]);
+			goto out;
+		} else if ( ! flist_append(sess, f, &st, argv[i])) {
 			ERRX1(sess, "flist_append");
 			goto out;
 		}
@@ -849,7 +866,13 @@ flist_gen(struct sess *sess, size_t argc,
 	rc = sess->opts->recursive ?
 		flist_gen_dirs(sess, argc, argv, flp, sz) :
 		flist_gen_files(sess, argc, argv, flp, sz);
-	if ( ! rc)
+
+	/* After scanning, lock our file-system view. */
+
+	if (-1 == unveil(NULL, NULL)) {
+		ERR(sess, "unveil");
+		return 0;
+	} else if ( ! rc)
 		return 0;
 
 	qsort(*flp, *sz, sizeof(struct flist), flist_cmp);

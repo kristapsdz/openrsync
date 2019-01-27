@@ -31,7 +31,7 @@
  * request updates to individual files.
  * Returns zero on failure, non-zero on success.
  *
- * Pledges: stdio, rpath.
+ * Pledges: stdio, rpath, unveil.
  */
 int
 rsync_sender(struct sess *sess, int fdin, 
@@ -43,7 +43,7 @@ rsync_sender(struct sess *sess, int fdin,
 	int32_t		 idx, preamble;
 	struct blkset	*blks = NULL;
 
-	if (-1 == pledge("stdio rpath", NULL)) {
+	if (-1 == pledge("unveil stdio rpath", NULL)) {
 		ERR(sess, "pledge");
 		return 0;
 	}
