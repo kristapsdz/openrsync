@@ -420,8 +420,11 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 		goto out;
 	}
 
+#if 0
+	/* Probably the EOF. */
 	if (io_read_check(&sess, sd))
 		WARNX(&sess, "data remains in read pipe");
+#endif
 
 	rc = 1;
 out:
