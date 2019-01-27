@@ -294,8 +294,8 @@ requests.  In openrsync, this is accomplished by the receiver itself.
 Besides the usual defensive programming, openrsync makes significant use
 of OpenBSD's native security features.
 
-The system operations available to executing code are limited by
-[pledge(2)](https://man.openbsd.org/pledge.2).
+The system operations available to executing code are foremost limited
+by [pledge(2)](https://man.openbsd.org/pledge.2).
 The pledges given depend upon the operating mode.
 For example, the receiver needs write access to the disc---but only when
 not in dry-run mode (**-n**).
@@ -305,12 +305,27 @@ to be limited over the course of operation.
 
 The second tool is [unveil(2)](https://man.openbsd.org/unveil.2), which
 limits access to the file-system.
-At this time, the receiver has its file-system limited to only the
-receiving directory.
 This protects against rogue attempts to "break out" of the destination.
 It's an attractive alternative to
 [chroot(2)](https://man.openbsd.org/chroot.2) because it doesn't require
 root permissions to execute.
+
+On the receiver side, the file-system is 
+[unveil(2)](https://man.openbsd.org/unveil.2)ed at and beneath the
+destination directory.
+After the creation of the destination directory, only targets within
+that directory may be accessed or modified.
+
+On the sender side, input files (and directories) are
+[unveil(2)](https://man.openbsd.org/unveil.2)ed.
+After the generation of the file list, only sources specified or within
+specified directories may be accessed.
+
+Lastly, the MD4 hashs are seeded with
+[arc4random(3)](https://man.openbsd.org/arc4random.3) instead of with
+[time(3)](https://man.openbsd.org/time.3).
+This is only applicable when running openrsync in server mode, as the
+server generates the seed.
 
 # Portability
 
