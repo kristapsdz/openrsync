@@ -240,7 +240,7 @@ blk_match(struct sess *sess, int fd,
 {
 	int	 	 nfd, rc = 0, c;
 	struct stat	 st;
-	void		*map;
+	void		*map = MAP_FAILED;
 	size_t		 mapsz;
 	unsigned char	 filemd[MD4_DIGEST_LENGTH];
 
@@ -255,12 +255,18 @@ blk_match(struct sess *sess, int fd,
 		return 0;
 	}
 
-	mapsz = st.st_size;
-	map = mmap(NULL, mapsz, PROT_READ, MAP_SHARED, nfd, 0);
-	if (MAP_FAILED == map) {
-		ERR(sess, "mmap: %s", path);
-		close(nfd);
-		return 0;
+	/*
+	 * We might possibly have a zero-length file, in which case the
+	 * mmap() will fail, so only do this with non-zero files.
+	 */
+
+	if ((mapsz = st.st_size) > 0) {
+		map = mmap(NULL, mapsz, PROT_READ, MAP_SHARED, nfd, 0);
+		if (MAP_FAILED == map) {
+			ERR(sess, "mmap: %s", path);
+			close(nfd);
+			return 0;
+		}
 	}
 
 	/*
@@ -287,7 +293,11 @@ blk_match(struct sess *sess, int fd,
 			"upload ratio", path, (intmax_t)st.st_size);
 	}
 
-	/* Now write the full file hash. */
+	/* 
+	 * Now write the full file hash.
+	 * Since we're seeding the hash, this always gives us some sort
+	 * of data even if the file's zero-length.
+	 */
 
 	hash_file(map, st.st_size, filemd, sess);
 
@@ -298,7 +308,8 @@ blk_match(struct sess *sess, int fd,
 
 	rc = 1;
 out:
-	munmap(map, mapsz);
+	if (MAP_FAILED != map)
+		munmap(map, mapsz);
 	close(nfd);
 	return rc;
 }
