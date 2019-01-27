@@ -430,14 +430,13 @@ main(int argc, char *argv[])
 		err(EXIT_FAILURE, "pledge");
 	c = rsync_client(&opts, fds[0], fargs);
 	fargs_free(fargs);
-	close(fds[0]);
 
 	if (-1 == waitpid(child, &st, 0))
 		err(EXIT_FAILURE, "waitpid");
-
 	if ( ! (WIFEXITED(st) && EXIT_SUCCESS == WEXITSTATUS(st)))
 		c = 0;
 
+	close(fds[0]);
 	return c ? EXIT_SUCCESS : EXIT_FAILURE;
 usage:
 	fprintf(stderr, "usage: %s [-lnprtv] "
