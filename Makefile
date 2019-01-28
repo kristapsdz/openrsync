@@ -26,7 +26,7 @@ BINDIR	 = $(PREFIX)/bin
 all: openrsync
 
 openrsync: $(ALLOBJS)
-	$(CC) -o $@ $(ALLOBJS)
+	$(CC) -o $@ $(ALLOBJS) -lm
 
 afl: $(AFLS)
 

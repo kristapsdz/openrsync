@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,17 +31,44 @@
 #include "extern.h"
 
 /*
+ * This is the minimum size for a block of data not including those in
+ * the remainder block.
+ */
+#define	BLOCK_SIZE_MIN		(700)
+
+/*
  * Prepare the overall block set's metadata.
  * We always have at least one block.
+ * The block size is an important part of the algorithm.
+ * I use the same heuristic as the reference rsync, but implemented in a
+ * bit more of a straightforward way.
+ * In general, the individual block length is the rounded square root of
+ * the total file size.
+ * The minimum block length is 700.
+ * 
  */
 static void
 init_blkset(struct blkset *p, off_t sz)
 {
+	double	 v;
 
-	/* For now, hard-code the block size. */
+	if (sz >= (BLOCK_SIZE_MIN * BLOCK_SIZE_MIN)) {
+		/* Simple rounded-up integer square root. */
+
+		v = sqrt(sz);
+		p->len = ceil(v);
+
+		/* 
+		 * Always be a multiple of eight.
+		 * There's no reason to do this, but rsync does.
+		 */
+
+		if ((p->len % 8) > 0)
+			p->len += 8 - (p->len % 8);
+	} else
+		p->len = BLOCK_SIZE_MIN;
 
 	p->size = sz;
-	p->len = MAX_CHUNK;
 	if (0 == (p->blksz = sz / p->len))
 		p->rem = sz;
 	else
@@ -407,7 +435,7 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 		LOG3(sess, "%s: mapped %jd B with %zu blocks",
 			f->path, (intmax_t)p->size, p->blksz);
 	} else {
-		p->len = MAX_CHUNK;
+		p->len = MAX_CHUNK; /* Doesn't matter. */
 		LOG3(sess, "%s: not mapped", f->path);
 	}
 
