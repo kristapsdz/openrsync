@@ -23,9 +23,15 @@
 #define	RSYNC_PROTOCOL	(27)
 
 /*
- * Maximum amount of data sent over the wire at once.
+ * Maximum amount of file data sent over the wire at once.
  */
 #define MAX_CHUNK	(32 * 1024)
+
+/*
+ * This is the minimum size for a block of data not including those in
+ * the remainder block.
+ */
+#define	BLOCK_SIZE_MIN	(700)
 
 /*
  * The sender and receiver use a two-phase synchronisation process.
