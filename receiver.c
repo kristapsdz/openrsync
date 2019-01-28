@@ -31,12 +31,6 @@
 #include "extern.h"
 
 /*
- * This is the minimum size for a block of data not including those in
- * the remainder block.
- */
-#define	BLOCK_SIZE_MIN		(700)
-
-/*
  * Prepare the overall block set's metadata.
  * We always have at least one block.
  * The block size is an important part of the algorithm.
@@ -45,7 +39,6 @@
  * In general, the individual block length is the rounded square root of
  * the total file size.
  * The minimum block length is 700.
- * 
  */
 static void
 init_blkset(struct blkset *p, off_t sz)
