@@ -82,6 +82,10 @@ information.
 For a robust description of the rsync algorithm, see "[The rsync
 algorithm](https://rsync.samba.org/tech_report/)", by Andrew Tridgell
 and Paul Mackerras.
+Andrew Tridgell's PhD thesis, "[Efficient Algorithms for Sorting and
+Synchronization](https://www.samba.org/~tridge/phd_thesis.pdf)", covers the
+topics in more detail.
+
 This only gives a brief description, suitable for delving into the
 source code for more details.
 
@@ -145,6 +149,7 @@ This happens if the file size and last modification time are the same.
 If so, no update is requested from the sender.
 
 Otherwise, the receiver examines each file in blocks of a fixed size.
+See [Block sizes](#block-sizes) for details.
 (The terminal block may be smaller if the file size is not divisible by
 the block size.)
 If the file is empty or does not exist, it will have zero blocks.
@@ -180,6 +185,20 @@ entire file is sent as a stream of bytes.
 Following this, the whole file is hashed using an MD4 hash.
 These hashes are then compared; and on success, the algorithm continues
 to the next file.
+
+## Block sizes
+
+The block size algorithm plays a crucial role in the protocol
+efficiency.
+In general, the block size is the rounded square root of the total file
+size.
+The minimum block size, however, is 700 B.
+Otherwise, the square root computation is simply
+[sqrt(3)](https://man.openbsd.org/sqrt.3) followed by
+[ceil(3)](https://man.openbsd.org/ceil.3) 
+
+For reasons unknown, the square root result is rounded up to the nearest
+multiple of eight.
 
 # Architecture
 
