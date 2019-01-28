@@ -423,12 +423,24 @@ main(int argc, char *argv[])
 	c = rsync_client(&opts, fds[0], fargs);
 	fargs_free(fargs);
 
+	/*
+	 * If the client has an error and exits, the server may be
+	 * sitting around waiting to get data while we waitpid().
+	 * So close the connection here so that they don't hang.
+	 */
+
+	if ( ! c) {
+		close(fds[0]);
+		fds[0] = -1;
+	}
+
 	if (-1 == waitpid(child, &st, 0))
 		err(EXIT_FAILURE, "waitpid");
 	if ( ! (WIFEXITED(st) && EXIT_SUCCESS == WEXITSTATUS(st)))
 		c = 0;
 
-	close(fds[0]);
+	if (-1 != fds[0])
+		close(fds[0]);
 	return c ? EXIT_SUCCESS : EXIT_FAILURE;
 usage:
 	fprintf(stderr, "usage: %s [-lnprtv] "
