@@ -198,6 +198,9 @@ io_read_nonblocking(struct sess *sess,
 	if ((rsz = read(fd, buf, bsz)) < 0) {
 		ERR(sess, "read");
 		return 0;
+	} else if (0 == rsz) {
+		ERRX(sess, "unexpected end of file");
+		return 0;
 	}
 
 	*sz = rsz;
