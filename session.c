@@ -53,7 +53,10 @@ sess_stats_send(struct sess *sess, int fd)
 int
 sess_stats_recv(struct sess *sess, int fd)
 {
-	size_t	 tread, twrite, tsize;
+	size_t	 	 tread, twrite, tsize;
+	float		 tr, tw, ts;
+	const char	*tru = "B", *twu = "B", *tsu = "B";
+	int		 trsz = 0, twsz = 0, tssz = 0;
 
 	assert( ! sess->opts->server);
 
@@ -68,8 +71,58 @@ sess_stats_recv(struct sess *sess, int fd)
 		return 0;
 	}
 
-	LOG1(sess, "stats: %zu B read, %zu B written, %zu B size",
-		tread, twrite, tsize);
+	if (tread >= 1024 * 1024 * 1024) {
+		tr = tread / (1024.0 * 1024.0 * 1024.0);
+		tru = "GB";
+		trsz = 3;
+	} else if (tread >= 1024 * 1024) {
+		tr = tread / (1024.0 * 1024.0);
+		tru = "MB";
+		trsz = 2;
+	} else if (tread >= 1024) {
+		tr = tread / 1024.0;
+		tru = "KB";
+		trsz = 1;
+	} else
+		tr = tread;
+
+	if (twrite >= 1024 * 1024 * 1024) {
+		tw = twrite / (1024.0 * 1024.0 * 1024.0);
+		twu = "GB";
+		twsz = 3;
+	} else if (twrite >= 1024 * 1024) {
+		tw = twrite / (1024.0 * 1024.0);
+		twu = "MB";
+		twsz = 2;
+	} else if (twrite >= 1024) {
+		tw = twrite / 1024.0;
+		twu = "KB";
+		twsz = 1;
+	} else
+		tw = twrite;
+
+	if (tsize >= 1024 * 1024 * 1024) {
+		ts = tsize / (1024.0 * 1024.0 * 1024.0);
+		tsu = "GB";
+		tssz = 3;
+	} else if (tsize >= 1024 * 1024) {
+		ts = tsize / (1024.0 * 1024.0);
+		tsu = "MB";
+		tssz = 2;
+	} else if (tsize >= 1024) {
+		ts = tsize / 1024.0;
+		tsu = "KB";
+		tssz = 1;
+	} else
+		ts = tsize;
+
+	LOG1(sess, "Transfer complete: "
+		"%.*f %s read, "
+		"%.*f %s sent, "
+		"%.*f %s file size",
+		trsz, tr, tru, 
+		twsz, tw, twu, 
+		tssz, ts, tsu);
 	return 1;
 }
 
