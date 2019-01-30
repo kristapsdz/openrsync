@@ -117,8 +117,8 @@ sess_stats_recv(struct sess *sess, int fd)
 		ts = tsize;
 
 	LOG1(sess, "Transfer complete: "
-		"%.*f %s read, "
 		"%.*f %s sent, "
+		"%.*f %s read, "
 		"%.*f %s file size",
 		trsz, tr, tru, 
 		twsz, tw, twu, 
