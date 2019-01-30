@@ -397,6 +397,13 @@ io_write_int(struct sess *sess, int fd, int32_t val)
 	return 1;
 }
 
+/*
+ * A simple assertion-protected memory copy from th einput "val" or size
+ * "valsz" into our buffer "buf", full size "buflen", position "bufpos".
+ * Increases our "bufpos" appropriately.
+ * This has no return value, but will assert() if the size of the buffer
+ * is insufficient for the new data.
+ */
 void
 io_buffer_buf(struct sess *sess, void *buf, 
 	size_t *bufpos, size_t buflen, const void *val, size_t valsz)
@@ -407,6 +414,9 @@ io_buffer_buf(struct sess *sess, void *buf,
 	*bufpos += valsz;
 }
 
+/*
+ * Converts "val" to LE prior to io_buffer_buf().
+ */
 void
 io_buffer_int(struct sess *sess, void *buf, 
 	size_t *bufpos, size_t buflen, int32_t val)
@@ -481,6 +491,12 @@ io_read_int(struct sess *sess, int fd, int32_t *val)
 	return 1;
 }
 
+/*
+ * Copies "valsz" from "buf", full size "bufsz" at position" bufpos",
+ * into "val".
+ * Calls assert() if the source doesn't have enough data.
+ * Increases "bufpos" to the new position.
+ */
 void
 io_unbuffer_buf(struct sess *sess, const void *buf, 
 	size_t *bufpos, size_t bufsz, void *val, size_t valsz)
@@ -491,6 +507,9 @@ io_unbuffer_buf(struct sess *sess, const void *buf,
 	*bufpos += valsz;
 }
 
+/*
+ * Calls io_unbuffer_buf() and converts from LE.
+ */
 void
 io_unbuffer_int(struct sess *sess, const void *buf, 
 	size_t *bufpos, size_t bufsz, int32_t *val)
