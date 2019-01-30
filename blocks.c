@@ -611,24 +611,20 @@ blk_merge(struct sess *sess, int fd, int ffd,
 		}
 	}
 
-	*stats = 100.0 * fromdown / total;
-	LOG3(sess, "%s: merged %jd B total, %.2f%% download ratio",
-		path, (intmax_t)total, 100.0 * fromdown / total);
 
 	/* Make sure our resulting MD4_ hashes match. */
+
+	MD4_Final(ourmd, &ctx);
 
 	if ( ! io_read_buf(sess, fd, md, MD4_DIGEST_LENGTH)) {
 		ERRX1(sess, "io_read_buf: data blocks hash");
 		goto out;
-	}
-
-	MD4_Final(ourmd, &ctx);
-
-	if (memcmp(md, ourmd, MD4_DIGEST_LENGTH)) {
+	} else if (memcmp(md, ourmd, MD4_DIGEST_LENGTH)) {
 		ERRX(sess, "%s: file hash does not match", path);
 		goto out;
 	}
 
+	*stats = 100.0 * fromdown / total;
 	rc = 1;
 out:
 	free(buf);
