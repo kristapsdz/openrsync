@@ -296,6 +296,16 @@ io_read_flush(struct sess *sess, int fd)
 
 	LOG0(sess, "%.*s", (int)sess->mplex_read_remain, mpbuf);
 	sess->mplex_read_remain = 0;
+
+	/* 
+	 * I only know that a tag of one means an error.
+	 * This means that we should exit.
+	 */
+
+	if (1 == tag) {
+		ERRX1(sess, "error from remote host");
+		return 0;
+	}
 	return 1;
 }
 
