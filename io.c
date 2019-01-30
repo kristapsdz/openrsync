@@ -397,6 +397,26 @@ io_write_int(struct sess *sess, int fd, int32_t val)
 	return 1;
 }
 
+void
+io_buffer_buf(struct sess *sess, void *buf, 
+	size_t *bufpos, size_t buflen, const void *val, size_t valsz)
+{
+
+	assert(*bufpos + valsz <= buflen);
+	memcpy(buf + *bufpos, val, valsz);
+	*bufpos += valsz;
+}
+
+void
+io_buffer_int(struct sess *sess, void *buf, 
+	size_t *bufpos, size_t buflen, int32_t val)
+{
+	int32_t	nv = htole32(val);
+
+	io_buffer_buf(sess, buf, bufpos, 
+		buflen, &nv, sizeof(int32_t));
+}
+
 int
 io_read_long(struct sess *sess, int fd, int64_t *val)
 {
@@ -459,6 +479,27 @@ io_read_int(struct sess *sess, int fd, int32_t *val)
 
 	*val = le32toh(oval);
 	return 1;
+}
+
+void
+io_unbuffer_buf(struct sess *sess, const void *buf, 
+	size_t *bufpos, size_t bufsz, void *val, size_t valsz)
+{
+
+	assert(*bufpos + valsz <= bufsz);
+	memcpy(val, buf + *bufpos, valsz);
+	*bufpos += valsz;
+}
+
+void
+io_unbuffer_int(struct sess *sess, const void *buf, 
+	size_t *bufpos, size_t bufsz, int32_t *val)
+{
+	int32_t	oval;
+
+	io_unbuffer_buf(sess, buf, bufpos, 
+		bufsz, &oval, sizeof(int32_t));
+	*val = le32toh(oval);
 }
 
 int
