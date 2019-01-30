@@ -155,6 +155,7 @@ pre_process_dir(struct sess *sess, mode_t oumask,
 {
 	struct stat	 st;
 	int	 	 rc;
+	size_t		 sz;
 
 	if ( ! sess->opts->recursive) {
 		WARNX(sess, "ignoring directory: %s", f->path);
@@ -186,6 +187,12 @@ pre_process_dir(struct sess *sess, mode_t oumask,
 		}
 		*newdir = 1;
 		LOG3(sess, "created: %s", f->path);
+		if ( ! sess->opts->server) {
+			sz = strlen(f->path);
+			assert(sz > 0);
+			LOG1(sess, "%s%s", f->path, 
+				'/' == f->path[sz - 1] ? "" : "/");
+		}
 		return 1;
 	} else if ( ! S_ISDIR(st.st_mode)) {
 		WARNX(sess, "file not directory: %s", f->path);
@@ -292,6 +299,9 @@ process_link(struct sess *sess, int root, const struct flist *f)
 			f->path, f->st.mode);
 	}
 
+	if ( ! sess->opts->server)
+		LOG1(sess, "%s", f->path);
+
 	return 1;
 }
 
@@ -308,7 +318,7 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 	const struct flist *f, size_t idx, size_t csumlen)
 {
 	struct blkset	*p = NULL;
-	int		 ffd = -1, rc = 0, tfd = -1;
+	int		 ffd = -1, rc = 0, tfd = -1, c;
 	off_t		 offs = 0;
 	struct stat	 st;
 	size_t		 i, mapsz = 0, dirlen;
@@ -318,6 +328,7 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 	uint32_t	 hash;
 	struct timespec	 tv[2];
 	mode_t		 perm;
+	float		 stats;
 
 	/* Dry-run short circuits. */
 
@@ -383,26 +394,18 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 
 	/* We need this file's data: start the transfer. */
 
-	if ( ! sess->opts->server)
-		LOG1(sess, "%s", f->path);
-
-	if ( ! io_write_int(sess, fdout, idx)) {
-		ERRX1(sess, "io_write_int: index");
-		goto out;
-	}
-
 	if (NULL == (p = calloc(1, sizeof(struct blkset)))) {
 		ERR(sess, "calloc");
 		goto out;
 	}
+
+	p->csum = csumlen;
 
 	/*
 	 * If open, try to map the file into memory.
 	 * If we fail doing this, then we have a problem: we don't need
 	 * the file, but we need to be able to mmap() it.
 	 */
-
-	p->csum = csumlen;
 
 	if (-1 != ffd && st.st_size > 0) {
 		mapsz = st.st_size;
@@ -432,6 +435,17 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 		LOG3(sess, "%s: not mapped", f->path);
 	}
 
+	/* 
+	 * Now transmit the metadata for set and blocks.
+	 * We do this now to let the server figure out which blocks to
+	 * send us in the meantime as we create our temporary files.
+	 */
+
+	if ( ! blk_send(sess, fdout, idx, p, f->path)) {
+		ERRX1(sess, "blk_send");
+		goto out;
+	} 
+	
 	/*
 	 * Open our writable temporary file.
 	 * To make this reasonably unique, make the file into a dot-file
@@ -439,7 +453,6 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 	 */
 
 	hash = arc4random();
-
 	if (sess->opts->recursive &&
 	    NULL != (cp = strrchr(f->path, '/'))) {
 		dirlen = cp - f->path;
@@ -451,7 +464,8 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 			goto out;
 		}
 	} else {
-		if (asprintf(&tmpfile, ".%s.%" PRIu32, f->path, hash) < 0) {
+		if (asprintf(&tmpfile, ".%s.%" PRIu32, 
+		    f->path, hash) < 0) {
 			ERR(sess, "asprintf");
 			tmpfile = NULL;
 			goto out;
@@ -476,26 +490,24 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 	LOG3(sess, "%s: temporary: %s (mode %o)",
 		f->path, tmpfile, perm);
 
-	/* Now transmit the metadata for set and blocks. */
-
-	if ( ! blk_send(sess, fdout, p, f->path)) {
-		ERRX1(sess, "blk_send");
-		goto out;
-	} else if ( ! blk_send_ack(sess, fdin, p, idx)) {
-		ERRX1(sess, "blk_send_ack");
-		goto out;
-	}
-
 	/*
-	 * Now we respond to matches.
+	 * Now acknowlede the block and respond to matches.
 	 * We write all of the data into "tfd", which we're going to
 	 * rename as the original file.
 	 */
 
-	if ( ! blk_merge(sess, fdin, ffd, p, tfd, f->path, map, mapsz)) {
-		ERRX1(sess, "blk_merge");
+	if ( ! blk_send_ack(sess, fdin, p, idx)) {
+		ERRX1(sess, "blk_send_ack");
 		goto out;
 	}
+
+	c = blk_merge(sess, fdin, ffd, p, 
+		tfd, f->path, map, mapsz, &stats);
+
+	if (0 == c) {
+		ERRX1(sess, "blk_merge");
+		goto out;
+	} 
 
 	/* Optionally preserve times for the output file. */
 
@@ -517,6 +529,12 @@ process_file(struct sess *sess, int fdin, int fdout, int root,
 		ERR(sess, "renameat: %s, %s", tmpfile, f->path);
 		goto out;
 	}
+
+	/* Log the transfer. */
+
+	if ( ! sess->opts->server)
+		LOG1(sess, "%s: %.2f%% (%jd KB)", f->path, 
+			stats, (intmax_t)(f->st.size / 1024));
 
 	close(tfd);
 	tfd = -1;
@@ -598,7 +616,8 @@ rsync_receiver(struct sess *sess,
 		WARNX(sess, "receiver has empty file list: exiting");
 		rc = 1;
 		goto out;
-	}
+	} else if ( ! sess->opts->server)
+		LOG1(sess, "Transfer starting: %zu files", flsz);
 
 	LOG2(sess, "receiver destination: %s", root);
 
