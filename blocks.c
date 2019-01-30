@@ -453,32 +453,55 @@ int
 blk_send_ack(struct sess *sess, int fd,
 	const struct blkset *blocks, size_t idx)
 {
-	size_t		 rem, len, blksz, nidx, csum;
+	size_t	 sz, pos = 0;
+	int32_t	 rem, len, blksz, nidx, csum;
+	int	 rc = 0;
+	char	*buf;
 
-	if ( ! io_read_size(sess, fd, &nidx))
-		ERRX1(sess, "io_read_size: read ack");
-	else if (idx != nidx)
+	/* Read all at once into a buffer. */
+
+	sz = sizeof(int32_t) + /* read ack */
+	     sizeof(int32_t) + /* block count */
+	     sizeof(int32_t) + /* block size */
+	     sizeof(int32_t) + /* checksum length */
+	     sizeof(int32_t); /* block remainder */
+	if (NULL == (buf = malloc(sz))) {
+		ERR(sess, "malloc");
+		return 0;
+	}
+
+	if ( ! io_read_buf(sess, fd, buf, sz)) {
+		ERRX1(sess, "io_read_buf: block ack");
+		free(buf);
+		return 0;
+	}
+
+	/* Extract from buffer. */
+
+	io_unbuffer_int(sess, buf, &pos, sz, &nidx);
+	io_unbuffer_int(sess, buf, &pos, sz, &blksz);
+	io_unbuffer_int(sess, buf, &pos, sz, &len);
+	io_unbuffer_int(sess, buf, &pos, sz, &csum);
+	io_unbuffer_int(sess, buf, &pos, sz, &rem);
+	assert(pos == sz);
+
+	/* Query. */
+
+	if (nidx < 0 || (size_t)nidx != idx)
 		ERRX1(sess, "read ack: indices don't match");
-	else if ( ! io_read_size(sess, fd, &blksz))
-		ERRX1(sess, "io_read_size: read ack: block count");
-	else if (blksz != blocks->blksz)
+	else if (blksz < 0 || (size_t)blksz != blocks->blksz)
 		ERRX1(sess, "read ack: block counts don't match");
-	else if ( ! io_read_size(sess, fd, &len))
-		ERRX1(sess, "io_read_size: read ack: block size");
-	else if (len != blocks->len)
+	else if (len < 0 || (size_t)len != blocks->len)
 		ERRX1(sess, "read ack: block sizes don't match");
-	else if ( ! io_read_size(sess, fd, &csum))
-		ERRX1(sess, "io_read_size: read ack: checksum length");
-	else if (csum != blocks->csum)
+	else if (csum < 0 || (size_t)csum != blocks->csum)
 		ERRX1(sess, "read ack: checksum lengths don't match");
-	else if ( ! io_read_size(sess, fd, &rem))
-		ERRX1(sess, "io_read_size: read ack: remainder");
-	else if (rem != blocks->rem)
+	else if (rem < 0 || (size_t)rem != blocks->rem)
 		ERRX1(sess, "read ack: block remainders don't match");
 	else
-		return 1;
+		rc = 1;
 
-	return 0;
+	free(buf);
+	return rc;
 }
 
 /*
@@ -489,7 +512,7 @@ blk_send_ack(struct sess *sess, int fd,
 int
 blk_merge(struct sess *sess, int fd, int ffd,
 	const struct blkset *block, int outfd, const char *path,
-	const void *map, size_t mapsz)
+	const void *map, size_t mapsz, float *stats)
 {
 	size_t		 sz, tok;
 	int32_t		 rawtok;
@@ -588,6 +611,7 @@ blk_merge(struct sess *sess, int fd, int ffd,
 		}
 	}
 
+	*stats = 100.0 * fromdown / total;
 	LOG3(sess, "%s: merged %jd B total, %.2f%% download ratio",
 		path, (intmax_t)total, 100.0 * fromdown / total);
 
@@ -616,40 +640,54 @@ out:
  * Return zero on failure, non-zero on success.
  */
 int
-blk_send(struct sess *sess, int fd,
+blk_send(struct sess *sess, int fd, size_t idx,
 	const struct blkset *p, const char *path)
 {
-	size_t	 i;
-	const struct blk *b;
+	char	*buf;
+	size_t	 i, pos = 0, sz;
+	int	 rc = 0;
 
-	if ( ! io_write_int(sess, fd, p->blksz)) {
-		ERRX1(sess, "io_write_int: block count");
-		return 0;
-	} else if ( ! io_write_int(sess, fd, p->len)) {
-		ERRX1(sess, "io_write_int: block length");
-		return 0;
-	} else if ( ! io_write_int(sess, fd, p->csum)) {
-		ERRX1(sess, "io_write_int: checksum length");
-		return 0;
-	} else if ( ! io_write_int(sess, fd, p->rem)) {
-		ERRX1(sess, "io_write_int: block remainder");
+	/* Put the entire send routine into a buffer. */
+
+	sz = sizeof(int32_t) + /* identifier */
+	     sizeof(int32_t) + /* block count */
+	     sizeof(int32_t) + /* block length */
+	     sizeof(int32_t) + /* checksum length */
+	     sizeof(int32_t) + /* block remainder */
+	     p->blksz * 
+	     (sizeof(int32_t) + /* short checksum */
+	      p->csum); /* long checksum */
+
+	if (NULL == (buf = malloc(sz))) {
+		ERR(sess, "malloc");
 		return 0;
 	}
 
+	io_buffer_int(sess, buf, &pos, sz, idx);
+	io_buffer_int(sess, buf, &pos, sz, p->blksz);
+	io_buffer_int(sess, buf, &pos, sz, p->len);
+	io_buffer_int(sess, buf, &pos, sz, p->csum);
+	io_buffer_int(sess, buf, &pos, sz, p->rem);
+
 	for (i = 0; i < p->blksz; i++) {
-		b = &p->blks[i];
-		if ( ! io_write_int(sess, fd, b->chksum_short)) {
-			ERRX1(sess, "io_write_int: short checksum");
-			return 0;
-		}
-		if ( ! io_write_buf(sess, fd, b->chksum_long, p->csum)) {
-			ERRX1(sess, "io_write_int: long checksum");
-			return 0;
-		}
+		io_buffer_int(sess, buf, &pos, 
+			sz, p->blks[i].chksum_short);
+		io_buffer_buf(sess, buf, &pos, sz, 
+			p->blks[i].chksum_long, p->csum);
+	}
+
+	assert(pos == sz);
+
+	if ( ! io_write_buf(sess, fd, buf, sz)) {
+		ERRX1(sess, "io_write_buf: buffer");
+		goto out;
 	}
 
 	LOG3(sess, "%s: sent block prologue: %zu blocks of %zu B, "
 		"%zu B remainder, %zu B checksum", path,
 		p->blksz, p->len, p->rem, p->csum);
-	return 1;
+	rc = 1;
+out:
+	free(buf);
+	return rc;
 }

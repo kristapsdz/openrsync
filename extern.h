@@ -251,7 +251,7 @@ int		  blk_send_ack(struct sess *, int,
 			const struct blkset *, size_t);
 int		  blk_merge(struct sess *, int, int,
 			const struct blkset *, int, const char *,
-			const void *, size_t);
+			const void *, size_t, float *);
 void		  blkset_free(struct blkset *);
 
 uint32_t	  hash_fast(const void *, size_t);
