@@ -219,6 +219,16 @@ int		  io_write_int(struct sess *, int, int32_t);
 int		  io_write_line(struct sess *, int, const char *);
 int		  io_write_long(struct sess *, int, int64_t);
 
+void		  io_buffer_int(struct sess *, void *, 
+			size_t *, size_t, int32_t);
+void		  io_buffer_buf(struct sess *, void *, 
+			size_t *, size_t, const void *, size_t);
+
+void		  io_unbuffer_int(struct sess *, const void *, 
+			size_t *, size_t, int32_t *);
+void		  io_unbuffer_buf(struct sess *, const void *, 
+			size_t *, size_t, void *, size_t);
+
 int		  io_read_blocking(struct sess *, int, void *, size_t);
 int		  io_read_nonblocking(struct sess *, int, void *, size_t, size_t *);
 
