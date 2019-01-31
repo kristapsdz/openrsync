@@ -239,16 +239,15 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 			if (-1 == fstat(p->ofd, &st)) {
 				ERR(sess, "%s: fstat", f->path);
 				goto out;
-			}
-
-			/* FIXME: make sure we're a regular file. */
-
-			p->mapsz = st.st_size;
-			p->map = mmap(NULL, p->mapsz, 
-				PROT_READ, MAP_SHARED, p->ofd, 0);
-			if (MAP_FAILED == p->map) {
-				ERR(sess, "%s: mmap", f->path);
-				goto out;
+			} else if (st.st_size) {
+				/* FIXME: make sure we're a regular file. */
+				p->mapsz = st.st_size;
+				p->map = mmap(NULL, p->mapsz, 
+					PROT_READ, MAP_SHARED, p->ofd, 0);
+				if (MAP_FAILED == p->map) {
+					ERR(sess, "%s: mmap", f->path);
+					goto out;
+				}
 			}
 		} else
 			assert(-1 == *ofd);
