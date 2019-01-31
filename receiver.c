@@ -111,28 +111,26 @@ post_dir(struct sess *sess, int root, const struct flist *f, int newdir)
 /* 
  * Pledges: unveil, rpath, cpath, wpath, stdio, fattr.
  * Pledges (dry-run): -cpath, -wpath, -fattr.
- * Pledges (!preserve_times): -fattr.
  */
 int
 rsync_receiver(struct sess *sess,
 	int fdin, int fdout, const char *root)
 {
 	struct flist	*fl = NULL, *dfl = NULL;
-	size_t		 i, j, flsz = 0, csum_length = CSUM_LENGTH_PHASE1,
-			 dflsz = 0;
+	size_t		 i, j, flsz = 0, dflsz = 0;
 	char		*tofree;
 	int		 rc = 0, dfd = -1, phase = 0, c;
 	int32_t	 	 ioerror;
-	int		*newdir = NULL;
-	mode_t		 oumask;
 	struct pollfd	 pfd[PFD__MAX];
 	struct download	*dl = NULL;
-	struct upload 	*ul = NULL;
+	struct upload 	 ul;
 
 	if (-1 == pledge("unveil rpath cpath wpath stdio fattr", NULL)) {
 		ERR(sess, "pledge");
 		goto out;
 	}
+
+	memset(&ul, 0, sizeof(struct upload));
 
 	/* XXX: what does this do? */
 
@@ -191,7 +189,7 @@ rsync_receiver(struct sess *sess,
 	 * Then open the directory iff we're not in dry_run.
 	 */
 
-	oumask = umask(0);
+	ul.oumask = umask(0);
 
 	if ( ! sess->opts->dry_run) {
 		dfd = open(root, O_RDONLY | O_DIRECTORY, 0);
@@ -237,20 +235,6 @@ rsync_receiver(struct sess *sess,
 			goto out;
 		}
 
-	/*
-	 * FIXME: I never use the full checksum amount; but if I were,
-	 * here is where the "again" label would go.
-	 * This has been demonstrated to work, but I just don't use it
-	 * til I understand the need.
-	 */
-
-	LOG2(sess, "%s: ready for phase 1 data", root);
-
-	if (NULL == (newdir = calloc(flsz, sizeof(int)))) {
-		ERR(sess, "calloc");
-		goto out;
-	}
-
 	/* Initialise poll events to listen from the sender. */
 
 	pfd[PFD_SENDER_IN].fd = fdin;
@@ -263,7 +247,20 @@ rsync_receiver(struct sess *sess,
 	pfd[PFD_DOWNLOADER_IN].events = POLLIN;
 	pfd[PFD_SENDER_OUT].events = POLLOUT;
 
-	for (i = 0;;) {
+	ul.rootfd = dfd;
+	ul.csumlen = CSUM_LENGTH_PHASE1;
+	ul.fdout = fdout;
+	ul.fl = fl;
+	ul.flsz = flsz;
+	ul.newdir = calloc(flsz, sizeof(int));
+	if (NULL == ul.newdir) {
+		ERR(sess, "calloc");
+		goto out;
+	}
+
+	LOG2(sess, "%s: ready for phase 1 data", root);
+
+	for (;;) {
 		if (-1 == (c = poll(pfd, PFD__MAX, INFTIM))) {
 			ERR(sess, "poll");
 			goto out;
@@ -305,10 +302,9 @@ rsync_receiver(struct sess *sess,
 
 		if ((POLLIN & pfd[PFD_UPLOADER_IN].revents) ||
 		    (POLLOUT & pfd[PFD_SENDER_OUT].revents)) {
-			c = rsync_uploader(fdout, dfd, &ul, &i, 
-				&pfd[PFD_UPLOADER_IN].fd, fl, flsz, 
-				sess, csum_length, oumask, newdir,
-				&pfd[PFD_SENDER_OUT].fd);
+			c = rsync_uploader(&ul, 
+				&pfd[PFD_UPLOADER_IN].fd, 
+				sess, &pfd[PFD_SENDER_OUT].fd);
 			if (c < 0) {
 				ERRX1(sess, "rsync_uploader");
 				goto out;
@@ -319,8 +315,9 @@ rsync_receiver(struct sess *sess,
 		 * We need to run the downloader when we either have
 		 * read events from the sender or an asynchronous local
 		 * open is ready.
-		 * FIXME: we don't always need to wait on both, and
-		 * might up end getting superfluous events.
+		 * XXX: we don't disable PFD_SENDER_IN like with the
+		 * uploader because we might stop getting error
+		 * messages, which will otherwise clog up the pipes.
 		 */
 
 		if ((POLLIN & pfd[PFD_SENDER_IN].revents) || 
@@ -356,7 +353,7 @@ rsync_receiver(struct sess *sess,
 		for (i = 0; i < flsz; i++) {
 			if ( ! S_ISDIR(fl[i].st.mode))
 				continue;
-			if ( ! post_dir(sess, dfd, &fl[i], newdir[i]))
+			if ( ! post_dir(sess, dfd, &fl[i], ul.newdir[i]))
 				goto out;
 		}
 
@@ -373,7 +370,6 @@ rsync_receiver(struct sess *sess,
 			ERRX(sess, "expected phase ack");
 			goto out;
 		}
-		phase++;
 	}
 
 	/* If we're the client, read server statistics. */
@@ -399,6 +395,7 @@ out:
 		close(dfd);
 	flist_free(fl, flsz);
 	flist_free(dfl, dflsz);
-	free(newdir);
+	free(ul.newdir);
+	free(ul.buf);
 	return rc;
 }
