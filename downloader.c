@@ -44,8 +44,8 @@ struct	download {
 	int		 fd; /* open output file */
 	char		*fname; /* output filename */
 	MD4_CTX	 	 ctx; /* current hashing context */
-	off_t		 downloaded;
-	off_t		 total;
+	off_t		 downloaded; /* total downloaded */
+	off_t		 total; /* total in file */
 };
 
 /*
