@@ -32,6 +32,9 @@
 #include "extern.h"
 #include "md4.h"
 
+/*
+ * Use this to keep track of what we're downloading.
+ */
 struct	download {
 	size_t	 	 idx; /* index of current file */
 	struct blkset	 blk; /* its blocks */
@@ -41,54 +44,123 @@ struct	download {
 	int		 fd; /* open output file */
 	char		*fname; /* output filename */
 	MD4_CTX	 	 ctx; /* current hashing context */
+	off_t		 downloaded;
+	off_t		 total;
 };
 
 /*
- * FIXME: bounds-check csum and rem < len iff rem > 0.
+ * Simply log the filename.
  */
-static int
-blk_send_ack2(struct sess *sess, int fd, struct blkset *blks)
+static void
+log_file(struct sess *sess, 
+	const struct download *dl, const struct flist *f)
 {
+	float	 frac;
 
-	if ( ! io_read_size(sess, fd, &blks->blksz))
-		ERRX1(sess, "io_read_size: block count");
-	else if ( ! io_read_size(sess, fd, &blks->len))
-		ERRX1(sess, "io_read_size: block length");
-	else if ( ! io_read_size(sess, fd, &blks->csum))
-		ERRX1(sess, "io_read_size: block checksum");
-	else if ( ! io_read_size(sess, fd, &blks->rem))
-		ERRX1(sess, "io_read_size: block remainder");
+	if (sess->opts->server)
+		return;
+
+	frac = 0 == dl->total ? 100.0 : 
+		100.0 * dl->downloaded / dl->total;
+
+	if (dl->total > 1024 * 1024 * 1024) 
+		LOG1(sess, "%s (%.3f GB, %.1f%% downloaded)", 
+			f->path, 
+			dl->total / (1024. * 1024. * 1024.), 
+			frac);
+	else if (dl->total > 1024 * 1024)
+		LOG1(sess, "%s (%.2f MB, %.1f%% downloaded)", 
+			f->path, dl->total / (1024. * 1024.), frac);
+	else if (dl->total > 1024)
+		LOG1(sess, "%s (%.1f KB, %.1f%% downloaded)", 
+			f->path, dl->total / 1024., frac);
 	else
-		return 1;
-
-	return 0;
+		LOG1(sess, "%s (%jd B, %.1f%% downloaded)", 
+			f->path, dl->total, frac);
 }
 
 /*
- * Returns <0 on failure, 0 on no more data (end of phase), 1 on success
- * (more data to be read).
+ * Allocate and initialise a download context.
+ * The MD4 context is pre-seeded.
+ */
+static struct download *
+download_alloc(struct sess *sess, size_t idx)
+{
+	struct download	*p;
+	int32_t		 seed;
+
+	p = calloc(1, sizeof(struct download));
+	if (NULL == p) {
+		ERR(sess, "calloc");
+		return NULL;
+	}
+
+	p->idx = idx;
+	p->map = MAP_FAILED;
+	p->ofd = p->fd = -1;
+	MD4_Init(&p->ctx);
+	seed = htole32(sess->seed);
+	MD4_Update(&p->ctx, &seed, sizeof(int32_t));
+	return p;
+}
+
+/*
+ * Free a download context.
+ * If "cleanup" is non-zero, we also try to clean up the temporary file,
+ * assuming that it has been opened in p->fd.
+ */
+static void
+download_free(struct download *p, int rootfd, int cleanup)
+{
+
+	if (NULL == p)
+		return;
+
+	if (MAP_FAILED != p->map) {
+		assert(p->mapsz);
+		munmap(p->map, p->mapsz);
+	}
+	if (-1 != p->ofd)
+		close(p->ofd);
+	if (-1 != p->fd)
+		close(p->fd);
+	if (-1 != p->fd && cleanup) {
+		assert(NULL != p->fname);
+		unlinkat(rootfd, p->fname, 0);
+	}
+	free(p->fname);
+	free(p);
+}
+
+/*
+ * The downloader waits on a file the sender is going to give us, opens
+ * and mmaps the existing file, opens a temporary file, dumps the file
+ * (or metadata) into the temporary file, then renames.
+ * This happens in several possible phases to avoid blocking.
+ * Returns <0 on failure, 0 on no more data (end of phase), >0 on
+ * success (more data to be read from the sender).
  */
 int
 rsync_downloader(int fd, int rootfd, struct download **pp,
 	const struct flist *fl, size_t flsz, struct sess *sess)
 {
-	int32_t			 idx, rawtok;
-	uint32_t		 hash;
-	struct download		*p = *pp;
-	const struct flist	*f;
-	size_t			 sz, dirlen, tok;
-	const char		*cp;
-	mode_t			 perm;
-	struct stat	  	 st;
-	ssize_t			 ssz;
-	char			*buf = NULL;
-	unsigned char		 ourmd[16], md[16];
-	struct timespec	 	 tv[2];
+	int32_t		 idx, rawtok;
+	uint32_t	 hash;
+	struct download	*p = *pp;
+	const struct flist *f;
+	size_t		 sz, dirlen, tok;
+	const char	*cp;
+	mode_t		 perm;
+	struct stat  	 st;
+	ssize_t		 ssz;
+	char		*buf = NULL;
+	unsigned char	 ourmd[16], md[16];
+	struct timespec	 tv[2];
 
 	/*
 	 * If we don't have a download already in session, then the next
 	 * one is coming in.
-	 * Read either the stop signal from the sender or block
+	 * Read either the stop (phase) signal from the sender or block
 	 * metadata, in which case we open our file and wait for data.
 	 */
 
@@ -100,11 +172,11 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 			ERRX(sess, "index out of bounds");
 			return -1;
 		} else if (idx < 0) {
-			LOG3(sess, "downloader: phase over");
+			LOG3(sess, "downloader: phase complete");
 			return 0;
 		}
 
-		f = &fl[idx];
+		/* Short-circuit: dry_run mode does nothing. */
 
 		if (sess->opts->dry_run)
 			return 1;
@@ -115,22 +187,15 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 		 * the map, as block sizes are regular.
 		 */
 
-		p = *pp = calloc(1, sizeof(struct download));
-		if (NULL == p) {
-			ERR(sess, "calloc");
+		if (NULL == (p = download_alloc(sess, idx))) {
+			ERRX(sess, "download_alloc");
 			return -1;
-		}
-		p->idx = idx;
-		p->map = MAP_FAILED;
-		p->ofd = p->fd = -1;
-		MD4_Init(&p->ctx);
-		rawtok = htole32(sess->seed);
-		MD4_Update(&p->ctx, &rawtok, sizeof(int32_t));
-
-		if ( ! blk_send_ack2(sess, fd, &p->blk)) {
+		} else if ( ! blk_send_ack(sess, fd, &p->blk)) {
 			ERRX1(sess, "blk_send_ack");
 			goto out;
 		}
+
+		*pp = p;
 
 		/* 
 		 * Next, we want to open the existing file for using as
@@ -140,6 +205,7 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 		 * readable and we can mmap() it.
 		 */
 
+		f = &fl[idx];
 		p->ofd = openat(rootfd, f->path, 
 			O_RDONLY | O_NONBLOCK, 0);
 
@@ -158,11 +224,11 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 	/*
 	 * Next in sequence: we have an open download session but
 	 * haven't created our temporary file.
-	 * This means that we've already tried to open the original file
-	 * in a nonblocking way.
+	 * This means that we've already opened (or tried to open) the
+	 * original file in a nonblocking way, and we can map it.
 	 */
 
-	if (NULL != p && NULL == p->fname) {
+	if (NULL == p->fname) {
 		if (-1 != p->ofd) {
 			if (-1 == fstat(p->ofd, &st)) {
 				ERR(sess, "%s: fstat", f->path);
@@ -212,17 +278,28 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 			goto out;
 		}
 
+		/* 
+		 * FIXME: we can technically wait until the temporary
+		 * file is writable, but since it's guaranteed to be
+		 * empty, I don't think this is a terribly expensive
+		 * operation as it doesn't involve reading the file into
+		 * memory beforehand.
+		 */
+
 		LOG3(sess, "%s: temporary: %s", f->path, p->fname);
 		return 1;
 	}
 
 	/*
 	 * This matches the sequence in blk_flush().
+	 * If we've gotten here, then we have a possibly-open map file
+	 * (not for new files) and our temporary file is writable.
 	 * We read the size/token, then optionally the data.
 	 * The size >0 for reading data, 0 for no more data, and <0 for
 	 * a token indicator.
 	 */
 
+	assert(NULL != p->fname);
 	assert(-1 != p->fd);
 	assert(-1 != fd);
 
@@ -230,6 +307,11 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 		ERRX1(sess, "io_read_int: data block size");
 		goto out;
 	} 
+
+	/* 
+	 * FIXME: we can avoid writing so much by buffering all of these
+	 * writes, then flushing them out after a certain point.
+	 */
 
 	if (rawtok > 0) {
 		sz = rawtok;
@@ -241,7 +323,6 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 			ERRX1(sess, "io_read_int: data block");
 			goto out;
 		}
-
 		if ((ssz = write(p->fd, buf, sz)) < 0) {
 			ERR(sess, "write: temporary file");
 			goto out;
@@ -250,6 +331,8 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 			goto out;
 		}
 
+		p->total += sz;
+		p->downloaded += sz;
 		LOG4(sess, "%s: received %zu B block", f->path, sz);
 		MD4_Update(&p->ctx, buf, sz);
 		free(buf);
@@ -282,6 +365,7 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 			goto out;
 		}
 
+		p->total += sz;
 		LOG4(sess, "%s: copied %zu B", f->path, sz);
 		MD4_Update(&p->ctx, buf, sz);
 		return 1;
@@ -290,7 +374,13 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 	assert(0 == rawtok);
 	LOG4(sess, "%s: finished", f->path);
 
-	/* Make sure our resulting MD4_ hashes match. */
+	/* 
+	 * Make sure our resulting MD4 hashes match.
+	 * FIXME: if the MD4 hashes don't match, then our file has
+	 * changed out from under us.
+	 * This should require us to re-run the sequence in another
+	 * phase.
+	 */
 
 	MD4_Final(ourmd, &p->ctx);
 
@@ -321,27 +411,12 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 		goto out;
 	}
 
-	close(p->fd);
-	free(p->fname);
-	free(p);
+	log_file(sess, p, f);
+	download_free(p, rootfd, 0);
 	*pp = NULL;
-
-	/* Log the transfer. */
-
-	if ( ! sess->opts->server)
-		LOG1(sess, "%s", f->path);
 	return 1;
 out:
-	if (MAP_FAILED != p->map)
-		munmap(p->map, p->mapsz);
-	if (-1 != p->ofd)
-		close(p->ofd);
-	if (-1 != p->fd) {
-		close(p->fd);
-		unlinkat(rootfd, p->fname, 0);
-	}
-	free(p->fname);
-	free(p);
+	download_free(p, rootfd, 1);
 	*pp = NULL;
 	return -1;
 }
