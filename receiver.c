@@ -80,17 +80,6 @@ post_dir(struct sess *sess, int root, const struct flist *f, int newdir)
 	return 1;
 }
 
-struct download;
-
-extern int
-rsync_downloader(int fd, int rootfd, struct download **pp,
-	const struct flist *fl, size_t flsz, struct sess *sess);
-extern int
-rsync_uploader(int fd, int rootfd, size_t *idx, 
-	int *filefd, const struct flist *fl, size_t flsz,
-	struct sess *sess, size_t csumlen, mode_t oumask, 
-	int *newdir);
-
 /* 
  * Pledges: unveil, rpath, cpath, wpath, stdio, fattr.
  * Pledges (dry-run): -cpath, -wpath, -fattr.
@@ -233,15 +222,27 @@ rsync_receiver(struct sess *sess,
 		goto out;
 	}
 
+	/* Initialise poll events to listen from the sender. */
+
 	pfd[0].fd = fdin;
 	pfd[1].fd = -1;
 	pfd[0].events = pfd[1].events = POLLIN;
 
-	i = 0;
-	for (;;) {
+	for (i = 0;;) {
+		/*
+		 * If we've sent all of our block requests, so "i" is
+		 * set to the file list length, then we wait to receive
+		 * until the phase changes.
+		 * If we're waiting for a local file to open so we can
+		 * mmap it, so "i" is a valid file and pfd[1].fd is
+		 * valid, then wait for that perpetually.
+		 * Otherwise, we don't wait at all so that the uploader
+		 * can get the next file sent upstream.
+		 */
+
 		timeo = (i == flsz || -1 != pfd[1].fd) ? INFTIM : 0;
-		c = poll(pfd, 2, timeo);
-		if (-1 == c) {
+
+		if (-1 == (c = poll(pfd, 2, timeo))) {
 			ERR(sess, "poll");
 			goto out;
 		} else if ((pfd[0].revents & (POLLERR|POLLNVAL))) {
@@ -257,6 +258,13 @@ rsync_receiver(struct sess *sess,
 			ERRX(sess, "poll: hangup");
 			goto out;
 		}
+
+		/*
+		 * We run the uploader if we have files left to examine
+		 * (if "i" is less than the file list) or if we have a
+		 * file that we've opened and is read to mmap.
+		 */
+
 		if (i < flsz || POLLIN & pfd[1].revents) {
 			c = rsync_uploader(fdout, dfd, &i, 
 				&pfd[1].fd, fl, flsz, sess, 
@@ -266,17 +274,44 @@ rsync_receiver(struct sess *sess,
 				goto out;
 			}
 		}
+
+		/* 
+		 * We run the downloader if there are reads coming from
+		 * the sender.
+		 * These reads may just be multiplexed log messages, so
+		 * let's check for that before passing to the downloader.
+		 * We would otherwise block after flushing the log
+		 * message and waiting for data.
+		 */
+
 		if (POLLIN & pfd[0].revents) {
-			/* FIXME: we might get multiplexed messages... */
+			if (sess->mplex_reads) {
+				if ( ! io_read_flush(sess, fdin)) {
+					ERRX1(sess, "io_read_flush");
+					goto out;
+				} else if (0 == sess->mplex_read_remain)
+					continue;
+			}
 			c = rsync_downloader
 				(fdin, dfd, &dl, fl, flsz, sess);
 			if (c < 0) {
 				ERRX1(sess, "rsync_downloader");
 				goto out;
 			} else if (0 == c) {
-				phase = 1;
+				assert(0 == phase);
+				phase++;
+				LOG2(sess, "%s: receiver ready "
+					"for phase 2 data", root);
 				break;
 			}
+
+			/*
+			 * FIXME: if we have any errors during the
+			 * download, most notably files getting out of
+			 * sync between the send and the receiver, then
+			 * here we should bump our checksum length and
+			 * go into the second phase.
+			 */
 		} 
 	}
 
@@ -292,29 +327,6 @@ rsync_receiver(struct sess *sess,
 		}
 
 	/* Properly close us out by progressing through the phases. */
-
-	if (0 == phase) {
-		if ( ! io_write_int(sess, fdout, -1)) {
-			ERRX1(sess, "io_write_int: index");
-			goto out;
-		} else if ( ! io_read_int(sess, fdin, &ioerror)) {
-			ERRX1(sess, "io_read_int: phase ack");
-			goto out;
-		} else if (-1 != ioerror) {
-			ERRX(sess, "expected phase ack");
-			goto out;
-		}
-		phase++;
-		csum_length = CSUM_LENGTH_PHASE2;
-		LOG2(sess, "receiver ready for "
-			"phase 2 data: %s", root);
-
-		/*
-		 * FIXME: under what conditions should we resend files?
-		 * What kind of failure?  This is never specified.
-		 * goto again;
-		 */
-	}
 
 	if (1 == phase) {
 		if ( ! io_write_int(sess, fdout, -1)) {
