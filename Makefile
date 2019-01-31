@@ -2,6 +2,7 @@ PREFIX	 = /usr/local
 OBJS	 = blocks.o \
 	   child.o \
 	   client.o \
+	   downloader.o \
 	   fargs.o \
 	   flist.o \
 	   hash.o \
@@ -14,12 +15,13 @@ OBJS	 = blocks.o \
 	   server.o \
 	   session.o \
 	   socket.o \
-	   symlinks.o
+	   symlinks.o \
+	   uploader.o
 ALLOBJS	 = $(OBJS) \
 	   main.o
 AFLS	 = afl/test-blk_recv \
 	   afl/test-flist_recv
-CFLAGS	+= -g -W -Wall -Wextra -Wno-unused-parameter
+CFLAGS	+= -O0 -g -W -Wall -Wextra -Wno-unused-parameter
 MANDIR	 = $(PREFIX)/man
 BINDIR	 = $(PREFIX)/bin
 
