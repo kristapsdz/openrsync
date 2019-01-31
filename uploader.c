@@ -32,6 +32,46 @@
 #include "extern.h"
 
 /*
+ * Log a directory by emitting the file and a trailing slash, just to
+ * show the operator that we're a directory.
+ */
+static void
+log_dir(struct sess *sess, const struct flist *f)
+{
+	size_t	 sz;
+
+	if (sess->opts->server)
+		return;
+	sz = strlen(f->path);
+	assert(sz > 0);
+	LOG1(sess, "%s%s", f->path, 
+		'/' == f->path[sz - 1] ? "" : "/");
+}
+
+/*
+ * Log a link by emitting the file and the target, just to show the
+ * operator that we're a link.
+ */
+static void
+log_link(struct sess *sess, const struct flist *f)
+{
+
+	if ( ! sess->opts->server)
+		LOG1(sess, "%s -> %s", f->path, f->link);
+}
+
+/*
+ * Simply log the filename.
+ */
+static void
+log_file(struct sess *sess, const struct flist *f)
+{
+
+	if ( ! sess->opts->server)
+		LOG1(sess, "%s", f->path);
+}
+
+/*
  * Prepare the overall block set's metadata.
  * We always have at least one block.
  * The block size is an important part of the algorithm.
@@ -110,7 +150,7 @@ prep_link(struct sess *sess, int root, const struct flist *f)
 		WARNX(sess, "%s: ignoring symlink", f->path);
 		return 0;
 	} else if (sess->opts->dry_run) {
-		LOG1(sess, "%s -> %s", f->path, f->link);
+		log_link(sess, f);
 		return 0;
 	}
 
@@ -193,9 +233,7 @@ prep_link(struct sess *sess, int root, const struct flist *f)
 		LOG4(sess, "%s: updated symlink mode", f->path);
 	}
 
-	if ( ! sess->opts->server)
-		LOG1(sess, "%s -> %s", f->path, f->link);
-
+	log_link(sess, f);
 	return 0;
 }
 
@@ -208,18 +246,12 @@ prep_dir(struct sess *sess, mode_t oumask,
 {
 	struct stat	 st;
 	int	 	 rc;
-	size_t		 sz;
 
 	if ( ! sess->opts->recursive) {
 		WARNX(sess, "%s: ignoring directory", f->path);
 		return 0;
 	} else if (sess->opts->dry_run) {
-		if ( ! sess->opts->server) {
-			sz = strlen(f->path);
-			assert(sz > 0);
-			LOG1(sess, "%s%s", f->path, 
-				'/' == f->path[sz - 1] ? "" : "/");
-		}
+		log_dir(sess, f);
 		return 0;
 	}
 
@@ -232,7 +264,11 @@ prep_dir(struct sess *sess, mode_t oumask,
 		WARNX(sess, "%s: not directory", f->path);
 		return -1;
 	} else if (-1 != rc) {
-		/* FIXME: do we fchmod to have writable perms? */
+		/* 
+		 * FIXME: we should fchmod the permissions here as well,
+		 * as we may locally have shut down writing into the
+		 * directory and that doesn't work.
+		 */
 		LOG3(sess, "%s: updating directory", f->path);
 		return 0;
 	}
@@ -251,23 +287,21 @@ prep_dir(struct sess *sess, mode_t oumask,
 	}
 
 	*newdir = 1;
-	if ( ! sess->opts->server) {
-		sz = strlen(f->path);
-		assert(sz > 0);
-		LOG1(sess, "%s%s", f->path, 
-			'/' == f->path[sz - 1] ? "" : "/");
-	}
+	log_dir(sess, f);
 	return 0;
 }
 
+/*
+ * Return <0 on failure, 0 on success w/nothing to be done, >0 on
+ * success and the file needs attention.
+ */
 static int
 prep_file(int fd, int rootfd, int *filefd, 
 	size_t idx, const struct flist *f, struct sess *sess)
 {
 
 	if (sess->opts->dry_run) {
-		if ( ! sess->opts->server)
-			LOG1(sess, "%s", f->path);
+		log_file(sess, f);
 		if ( ! io_write_int(sess, fd, idx)) {
 			ERRX1(sess, "io_write_int: index");
 			return -1;
@@ -277,6 +311,8 @@ prep_file(int fd, int rootfd, int *filefd,
 
 	*filefd = openat(rootfd, f->path,
 		O_RDONLY | O_NOFOLLOW | O_NONBLOCK, 0);
+
+	/* FIXME: check that we're a regular file still. */
 
 	if (-1 != *filefd || ENOENT == errno)
 		return 1;
@@ -306,7 +342,6 @@ rsync_uploader(int fd, int rootfd, size_t *idx,
 	off_t		 offs;
 	int		 c;
 
-	LOG4(sess, "uploader: %zu (filefd: %d)", *idx, *filefd);
 again:
 	/*
 	 * If we invoke the uploader without a file currently open, then
@@ -336,7 +371,7 @@ again:
 
 		if (*idx == flsz) {
 			assert(-1 == *filefd);
-			LOG4(sess, "uploader: finished");
+			LOG4(sess, "uploader: phase complete");
 			if ( ! io_write_int(sess, fd, -1)) {
 				ERRX1(sess, "io_write_int: index");
 				return -1;
@@ -352,7 +387,6 @@ again:
 	 */
 
 	if (-1 != *filefd) {
-		LOG4(sess, "%s: uploader prepping", fl[*idx].path);
 		if (-1 == fstat(*filefd, &st)) {
 			WARN(sess, "%s: fstat", fl[*idx].path);
 			close(*filefd);
