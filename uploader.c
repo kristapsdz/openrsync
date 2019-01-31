@@ -31,12 +31,6 @@
 
 #include "extern.h"
 
-struct	upload {
-	char		*buf;
-	size_t		 bufsz;
-	size_t		 bufpos;
-};
-
 /*
  * Log a directory by emitting the file and a trailing slash, just to
  * show the operator that we're a directory.
@@ -327,22 +321,33 @@ prep_file(int fd, int rootfd, int *filefd,
 	return -1;
 }
 
+static int
+finished(struct upload *u, 
+	struct sess *sess, int *fileinfd, int *fileoutfd)
+{
+
+	if ( ! io_write_int(sess, u->fdout, -1)) {
+		ERRX1(sess, "io_write_int");
+		return -1;
+	}
+
+	*fileoutfd = *fileoutfd = -1;
+	u->state = UPLOAD_FINISHED;
+	LOG4(sess, "uploader: finished");
+	return 0;
+}
+
 /*
- * Uploader routine.
- * This iterates through all available files and conditionally gets the
- * file ready for processing to check whether it's up to date.
- * If not up to date, it sends the file's information to the sender.
- * If it returns 0, that means that we've processed all files there
- * are to process.
- * If it returns >0, we should establish a POLLIN in "filefd" (assert
- * that it is not -1) and call this function when that succeeds.
- * Otherwise it returns <0, which is an error.
+ * Iterates through all available files and conditionally gets the file
+ * ready for processing to check whether it's up to date.
+ * If not up to date or empty, sends file information to the sender.
+ * If returns 0, we've processed all files there are to process.
+ * If returns >0, we're waiting for POLLIN or POLLOUT data.
+ * Otherwise returns <0, which is an error.
  */
 int
-rsync_uploader(int fd, int rootfd, struct upload **up, size_t *idx, 
-	int *filefd, const struct flist *fl, size_t flsz,
-	struct sess *sess, size_t csumlen, mode_t oumask, int *newdir,
-	int *fileoutfd)
+rsync_uploader(struct upload *u, int *fileinfd, 
+	struct sess *sess, int *fileoutfd)
 {
 	struct blkset	 blk;
 	struct stat	 st;
@@ -350,21 +355,28 @@ rsync_uploader(int fd, int rootfd, struct upload **up, size_t *idx,
 	size_t		 i, mapsz, pos, wsz;
 	off_t		 offs;
 	int		 c;
-	struct upload	*u = *up;
+
+	/* This should never get called. */
+
+	assert(UPLOAD_FINISHED != u->state);
 
 	/*
 	 * If we have an upload in progress, then keep writing until the
 	 * buffer has been fully written.
-	 * We should only have the output file descriptor working.
+	 * We must only have the output file descriptor working and also
+	 * have a valid buffer to write.
 	 */
 
-	if (NULL != u) {
+	if (UPLOAD_WRITE_LOCAL == u->state) {
+		assert(NULL != u->buf);
 		assert(-1 != *fileoutfd);
-		assert(-1 == *filefd);
+		assert(-1 == *fileinfd);
+
 		if (u->bufpos < u->bufsz) {
-			if ( ! io_write_nonblocking
-			    (sess, fd, u->buf + u->bufpos, 
-			     u->bufsz - u->bufpos, &wsz)) {
+			c = io_write_nonblocking
+				(sess, u->fdout, u->buf + u->bufpos, 
+				 u->bufsz - u->bufpos, &wsz);
+			if (0 == c) {
 				ERRX1(sess, "io_write_nonblocking");
 				return -1;
 			}
@@ -372,28 +384,24 @@ rsync_uploader(int fd, int rootfd, struct upload **up, size_t *idx,
 			if (u->bufpos < u->bufsz)
 				return 1;
 		}
-		free(u);
-		*up = NULL;
+		free(u->buf);
+		u->buf = NULL;
 		
 		/* 
-		 * If we're done, disable writing more files.
-		 * Else, reenable polling on the writer.
+		 * If we're done, disable getting this function called
+		 * again by removing its event loop triggers.
+		 * Otherwise, reenable polling on the writer.
 		 */
 
-		if (flsz == ++(*idx)) {
-			LOG4(sess, "uploader: finished");
-			if ( ! io_write_int(sess, fd, -1)) {
-				ERRX1(sess, "io_write_int: index");
-				return -1;
-			}
-			*fileoutfd = -1;
-			return 0;
+		if (u->flsz == ++u->idx) {
+			assert(-1 == *fileinfd);
+			return finished(u, sess, fileinfd, fileoutfd);
 		}
-		*fileoutfd = fd;
+
+		*fileoutfd = u->fdout;
+		u->state = UPLOAD_FIND_NEXT;
 		return 1;
 	}
-
-	assert(NULL == u);
 
 	/*
 	 * If we invoke the uploader without a file currently open, then
@@ -402,19 +410,25 @@ rsync_uploader(int fd, int rootfd, struct upload **up, size_t *idx,
 	 * This means we must have the output file descriptor working.
 	 */
 
-	if (-1 == *filefd) {
+	if (UPLOAD_FIND_NEXT == u->state) {
+		assert(-1 == *fileinfd);
 		assert(-1 != *fileoutfd);
-		for ( ; *idx < flsz; (*idx)++) {
-			if (S_ISDIR(fl[*idx].st.mode))
-				c = prep_dir(sess, oumask, 
-					rootfd, &fl[*idx], &newdir[*idx]);
-			else if (S_ISLNK(fl[*idx].st.mode))
-				c = prep_link(sess, rootfd, &fl[*idx]);
-			else if (S_ISREG(fl[*idx].st.mode))
-				c = prep_file(fd, rootfd, 
-					filefd, *idx, &fl[*idx], sess);
+
+		for ( ; u->idx < u->flsz; u->idx++) {
+			if (S_ISDIR(u->fl[u->idx].st.mode))
+				c = prep_dir(sess, u->oumask, 
+					u->rootfd, &u->fl[u->idx], 
+					&u->newdir[u->idx]);
+			else if (S_ISLNK(u->fl[u->idx].st.mode))
+				c = prep_link(sess, 
+					u->rootfd, &u->fl[u->idx]);
+			else if (S_ISREG(u->fl[u->idx].st.mode))
+				c = prep_file(u->fdout, u->rootfd, 
+					fileinfd, u->idx, 
+					&u->fl[u->idx], sess);
 			else
 				c = 0;
+
 			if (c < 0)
 				return -1;
 			else if (c > 0)
@@ -426,61 +440,75 @@ rsync_uploader(int fd, int rootfd, struct upload **up, size_t *idx,
 		 * disable polling on the output channel.
 		 */
 
-		*fileoutfd = -1;
-		if (*idx == flsz) {
-			assert(-1 == *filefd);
-			LOG4(sess, "uploader: phase complete");
-			if ( ! io_write_int(sess, fd, -1)) {
-				ERRX1(sess, "io_write_int: index");
-				return -1;
-			}
-			return 0;
+		if (u->idx == u->flsz) {
+			assert(-1 == *fileinfd);
+			return finished(u, sess, fileinfd, fileoutfd);
 		}
+
+		/* Go back to the event loop, if necessary. */
+
+		*fileoutfd = -1;
+		u->state = -1 == *fileinfd ?
+			UPLOAD_WRITE_LOCAL : UPLOAD_READ_LOCAL;
+		if (UPLOAD_READ_LOCAL == u->state)
+			return 1;
 	}
 
 	/* 
-	 * Either have a nonexistent file or an open *filefd.
-	 * If the file is already open, stat it and see if it's already
-	 * up to date, in which case close it and go to the next one.
+	 * If an input file is open, stat it and see if it's already up
+	 * to date, in which case close it and go to the next one.
 	 * Either way, we don't have a write channel open.
 	 */
 
-	assert(-1 == *fileoutfd);
+	if (UPLOAD_READ_LOCAL == u->state) {
+		assert (-1 != *fileinfd);
+		assert(-1 == *fileoutfd);
 
-	if (-1 != *filefd) {
-		if (-1 == fstat(*filefd, &st)) {
-			WARN(sess, "%s: fstat", fl[*idx].path);
-			close(*filefd);
+		if (-1 == fstat(*fileinfd, &st)) {
+			WARN(sess, "%s: fstat", u->fl[u->idx].path);
+			close(*fileinfd);
+			*fileinfd = -1;
 			return -1;
 		} else if ( ! S_ISREG(st.st_mode)) {
-			WARNX(sess, "%s: not regular", fl[*idx].path);
-			close(*filefd);
+			WARNX(sess, "%s: not regular", u->fl[u->idx].path);
+			close(*fileinfd);
+			*fileinfd = -1;
 			return -1;
 		}
-		if (st.st_size == fl[*idx].st.size &&
-		    st.st_mtime == fl[*idx].st.mtime) {
-			LOG3(sess, "%s: skipping: up to date", fl[*idx].path);
-			close(*filefd);
-			*filefd = -1;
-			*fileoutfd = fd;
-			(*idx)++;
+
+		if (st.st_size == u->fl[u->idx].st.size &&
+		    st.st_mtime == u->fl[u->idx].st.mtime) {
+			LOG3(sess, "%s: skipping: "
+				"up to date", u->fl[u->idx].path);
+			close(*fileinfd);
+			*fileinfd = -1;
+			if (++u->idx == u->flsz)
+				return finished(u, sess, 
+					fileinfd, fileoutfd);
+			*fileoutfd = u->fdout;
+			u->state = UPLOAD_FIND_NEXT;
 			return 1;
 		}
+
+		/* Fallthrough... */
+
+		u->state = UPLOAD_WRITE_LOCAL;
 	}
 
 	/* Initialies our blocks. */
 
-	LOG4(sess, "%s: uploader initialising blocks", fl[*idx].path);
+	assert(UPLOAD_WRITE_LOCAL == u->state);
 	memset(&blk, 0, sizeof(struct blkset));
-	blk.csum = csumlen;
+	blk.csum = u->csumlen;
 
-	if (-1 != *filefd && st.st_size > 0) {
+	if (-1 != *fileinfd && st.st_size > 0) {
 		mapsz = st.st_size;
 		map = mmap(NULL, mapsz, 
-			PROT_READ, MAP_SHARED, *filefd, 0);
+			PROT_READ, MAP_SHARED, *fileinfd, 0);
 		if (MAP_FAILED == map) {
-			WARN(sess, "%s: mmap", fl[*idx].path);
-			close(*filefd);
+			WARN(sess, "%s: mmap", u->fl[u->idx].path);
+			close(*fileinfd);
+			*fileinfd = -1;
 			return -1;
 		}
 
@@ -491,39 +519,36 @@ rsync_uploader(int fd, int rootfd, struct upload **up, size_t *idx,
 		if (NULL == blk.blks) {
 			ERR(sess, "calloc");
 			munmap(map, mapsz);
-			close(*filefd);
+			close(*fileinfd);
+			*fileinfd = -1;
 			return -1;
 		}
 
 		offs = 0;
 		for (i = 0; i < blk.blksz; i++) {
-			init_blk(&blk.blks[i], &blk, offs, i, map, sess);
+			init_blk(&blk.blks[i], 
+				&blk, offs, i, map, sess);
 			offs += blk.len;
 		}
 
 		munmap(map, mapsz);
-		close(*filefd);
-		*filefd = -1;
-
+		close(*fileinfd);
+		*fileinfd = -1;
 		LOG3(sess, "%s: mapped %jd B with %zu blocks",
-			fl[*idx].path, (intmax_t)blk.size, blk.blksz);
+			u->fl[u->idx].path, (intmax_t)blk.size, 
+			blk.blksz);
 	} else {
-		if (-1 != *filefd) {
-			close(*filefd);
-			*filefd = -1;
+		if (-1 != *fileinfd) {
+			close(*fileinfd);
+			*fileinfd = -1;
 		}
 		blk.len = MAX_CHUNK; /* Doesn't matter. */
-		LOG3(sess, "%s: not mapped", fl[*idx].path);
+		LOG3(sess, "%s: not mapped", u->fl[u->idx].path);
 	}
 
-	assert(-1 == *filefd);
+	assert(-1 == *fileinfd);
 
-	u = calloc(1, sizeof(struct upload));
-	if (NULL == u) {
-		ERR(sess, "calloc");
-		return -1;
-	}
-
+	u->bufpos = 0;
 	u->bufsz = 
 	     sizeof(int32_t) + /* identifier */
 	     sizeof(int32_t) + /* block count */
@@ -534,14 +559,15 @@ rsync_uploader(int fd, int rootfd, struct upload **up, size_t *idx,
 	     (sizeof(int32_t) + /* short checksum */
 	      blk.csum); /* long checksum */
 
+	/* FIXME: realloc. */
+
 	if (NULL == (u->buf = malloc(u->bufsz))) {
 		ERR(sess, "malloc");
-		free(u);
 		return -1;
 	}
 
 	pos = 0;
-	io_buffer_int(sess, u->buf, &pos, u->bufsz, *idx);
+	io_buffer_int(sess, u->buf, &pos, u->bufsz, u->idx);
 	io_buffer_int(sess, u->buf, &pos, u->bufsz, blk.blksz);
 	io_buffer_int(sess, u->buf, &pos, u->bufsz, blk.len);
 	io_buffer_int(sess, u->buf, &pos, u->bufsz, blk.csum);
@@ -557,7 +583,6 @@ rsync_uploader(int fd, int rootfd, struct upload **up, size_t *idx,
 
 	/* Reenable the output poller. */
 
-	*fileoutfd = fd;
-	*up = u;
+	*fileoutfd = u->fdout;
 	return 1;
 }
