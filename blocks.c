@@ -314,6 +314,7 @@ out:
 	return rc;
 }
 
+/* FIXME: remove. */
 void
 blkset_free(struct blkset *p)
 {

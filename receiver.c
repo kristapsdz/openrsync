@@ -1,4 +1,5 @@
 /*	$Id$ */
+
 /*
  * Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
  *
@@ -22,6 +23,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <math.h>
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,70 +33,6 @@
 #include "extern.h"
 
 /*
- * Prepare the overall block set's metadata.
- * We always have at least one block.
- * The block size is an important part of the algorithm.
- * I use the same heuristic as the reference rsync, but implemented in a
- * bit more of a straightforward way.
- * In general, the individual block length is the rounded square root of
- * the total file size.
- * The minimum block length is 700.
- */
-static void
-init_blkset(struct blkset *p, off_t sz)
-{
-	double	 v;
-
-	if (sz >= (BLOCK_SIZE_MIN * BLOCK_SIZE_MIN)) {
-		/* Simple rounded-up integer square root. */
-
-		v = sqrt(sz);
-		p->len = ceil(v);
-
-		/* 
-		 * Always be a multiple of eight.
-		 * There's no reason to do this, but rsync does.
-		 */
-
-		if ((p->len % 8) > 0)
-			p->len += 8 - (p->len % 8);
-	} else
-		p->len = BLOCK_SIZE_MIN;
-
-	p->size = sz;
-	if (0 == (p->blksz = sz / p->len))
-		p->rem = sz;
-	else
-		p->rem = sz % p->len;
-
-	/* If we have a remainder, then we need an extra block. */
-
-	if (p->rem)
-		p->blksz++;
-}
-
-/*
- * For each block, prepare the block's metadata.
- * We use the mapped "map" file to set our checksums.
- */
-static void
-init_blk(struct blk *p, const struct blkset *set, off_t offs,
-	size_t idx, const void *map, const struct sess *sess)
-{
-
-	assert(MAP_FAILED != map);
-
-	/* Block length inherits for all but the last. */
-
-	p->idx = idx;
-	p->len = idx < set->blksz - 1 ? set->len : set->rem;
-	p->offs = offs;
-
-	p->chksum_short = hash_fast(map + offs, p->len);
-	hash_slow(map + offs, p->len, p->chksum_long, sess);
-}
-
-/*
  * We need to process our directories in post-order.
  * This is because touching files within the directory will change the
  * directory file; and also, if our mode is not writable, we wouldn't be
@@ -102,8 +40,7 @@ init_blk(struct blk *p, const struct blkset *set, off_t offs,
  * Returns zero on failure, non-zero on success.
  */
 static int
-post_process_dir(struct sess *sess,
-	int root, const struct flist *f, int newdir)
+post_dir(struct sess *sess, int root, const struct flist *f, int newdir)
 {
 	struct timespec	 tv[2];
 	int		 rc;
@@ -143,430 +80,19 @@ post_process_dir(struct sess *sess,
 	return 1;
 }
 
-/*
- * Create (or not) the given directory entry.
- * If something already exists in its place, then make sure that it,
- * too, is a directory.
- * Returns zero on failure, non-zero on success.
- */
-static int
-pre_process_dir(struct sess *sess, mode_t oumask,
-	int root, const struct flist *f, int *newdir)
-{
-	struct stat	 st;
-	int	 	 rc;
-	size_t		 sz;
+struct download;
 
-	if ( ! sess->opts->recursive) {
-		WARNX(sess, "ignoring directory: %s", f->path);
-		return 1;
-	} else if (sess->opts->dry_run)
-		return 1;
+extern int
+rsync_downloader(int fd, int rootfd, struct download **pp,
+	const struct flist *fl, size_t flsz, struct sess *sess);
+extern int
+rsync_uploader(int fd, int rootfd, size_t *idx, 
+	int *filefd, const struct flist *fl, size_t flsz,
+	struct sess *sess, size_t csumlen, mode_t oumask, 
+	int *newdir);
 
-	/* First, see if the directory already exists. */
-
-	assert(-1 != root);
-	rc = fstatat(root, f->path, &st, AT_SYMLINK_NOFOLLOW);
-	if (-1 == rc) {
-		if (ENOENT != errno) {
-			WARN(sess, "fstatat: %s", f->path);
-			return 0;
-		}
-
-		/*
-		 * We want to make the directory with default
-		 * permissions (using our old umask, which we've since
-		 * unset), then adjust permissions (assuming
-		 * preserve_perms or new) afterward in case it's u-w or
-		 * something.
-		 */
-
-		if (-1 == mkdirat(root, f->path, 0777 & ~oumask)) {
-			WARN(sess, "mkdirat: %s", f->path);
-			return 0;
-		}
-		*newdir = 1;
-		LOG3(sess, "created: %s", f->path);
-		if ( ! sess->opts->server) {
-			sz = strlen(f->path);
-			assert(sz > 0);
-			LOG1(sess, "%s%s", f->path, 
-				'/' == f->path[sz - 1] ? "" : "/");
-		}
-		return 1;
-	} else if ( ! S_ISDIR(st.st_mode)) {
-		WARNX(sess, "file not directory: %s", f->path);
-		return 0;
-	}
-
-	/* FIXME: do we fchmod to have writable perms? */
-
-	LOG3(sess, "updating: %s", f->path);
-	return 1;
-}
-
-/*
- * Process a symbolic link.
- * New links are given the source's permissions and the current time.
- * Updated links retain permissions and have times automatically updated
- * unless preserve_times and/or preserve_perms are set.
- * This operates on the link itself, not the target.
- * Returns zero on failure, non-zero on success.
- */
-static int
-process_link(struct sess *sess, int root, const struct flist *f)
-{
-	int		 rc, newlink = 0;
-	char		*b;
-	struct stat	 st;
-	struct timespec	 tv[2];
-
-	if ( ! sess->opts->preserve_links) {
-		WARNX(sess, "ignoring symlink: %s", f->path);
-		return 1;
-	} else if (sess->opts->dry_run)
-		return 1;
-
-	/* See if the symlink already exists. */
-
-	assert(-1 != root);
-	rc = fstatat(root, f->path, &st, AT_SYMLINK_NOFOLLOW);
-	if (-1 == rc) {
-		if (-1 == symlinkat(f->link, root, f->path)) {
-			WARN(sess, "symlinkat: %s", f->path);
-			return 0;
-		}
-		LOG3(sess, "created: %s -> %s", f->path, f->link);
-		newlink = 1;
-	} else if ( ! S_ISLNK(st.st_mode)) {
-		WARNX(sess, "file not symlink: %s", f->path);
-		return 0;
-	} else {
-		/*
-		 * If the symbolic link already exists, then make sure
-		 * that it points to the correct place.
-		 * If not, fix it.
-		 */
-
-		b = symlinkat_read(sess, root, f->path);
-		if (NULL == b) {
-			ERRX1(sess, "symlinkat_read");
-			return 0;
-		}
-
-		if (strcmp(f->link, b)) {
-			free(b);
-			LOG3(sess, "updating: %s -> %s",
-				f->path, f->link);
-			if (-1 == unlinkat(root, f->path, 0)) {
-				WARN(sess, "unlinkat: %s", f->path);
-				return 0;
-			}
-			if (-1 == symlinkat(f->link, root, f->path)) {
-				WARN(sess, "unlinkat: %s", f->path);
-				return 0;
-			}
-		} else {
-			free(b);
-			LOG3(sess, "symlink is current: %s -> %s",
-				f->path, f->link);
-		}
-	}
-
-	/* Optionally preserve times/perms on the symlink. */
-
-	if (sess->opts->preserve_times) {
-		tv[0].tv_sec = time(NULL);
-		tv[0].tv_nsec = 0;
-		tv[1].tv_sec = f->st.mtime;
-		tv[1].tv_nsec = 0;
-		rc = utimensat(root, f->path, tv, AT_SYMLINK_NOFOLLOW);
-		if (-1 == rc) {
-			ERR(sess, "utimensat: %s", f->path);
-			return 0;
-		}
-		LOG4(sess, "%s: updated date", f->path);
-	}
-
-	if (newlink || sess->opts->preserve_perms) {
-		rc = fchmodat(root, f->path,
-			f->st.mode, AT_SYMLINK_NOFOLLOW);
-		if (-1 == rc) {
-			ERR(sess, "fchmodat: %s", f->path);
-			return 0;
-		}
-		LOG4(sess, "%s: updated mode: %o",
-			f->path, f->st.mode);
-	}
-
-	if ( ! sess->opts->server)
-		LOG1(sess, "%s", f->path);
-
-	return 1;
-}
-
-/*
- * Open the existing file (if found), the temporary file, read new data
- * (and good blocks) from the sender, reconstruct the file, and rename
- * it.
- * After opening the origin file (if found), check if it should be
- * updated at all.
- * Return zero on failure, non-zero on success.
- */
-static int
-process_file(struct sess *sess, int fdin, int fdout, int root,
-	const struct flist *f, size_t idx, size_t csumlen)
-{
-	struct blkset	*p = NULL;
-	int		 ffd = -1, rc = 0, tfd = -1, c;
-	off_t		 offs = 0;
-	struct stat	 st;
-	size_t		 i, mapsz = 0, dirlen;
-	void		*map = MAP_FAILED;
-	char		*tmpfile = NULL;
-	const char	*cp;
-	uint32_t	 hash;
-	struct timespec	 tv[2];
-	mode_t		 perm;
-	float		 stats;
-
-	/* Dry-run short circuits. */
-
-	if (sess->opts->dry_run) {
-		if ( ! sess->opts->server)
-			LOG1(sess, "%s", f->path);
-		if ( ! io_write_int(sess, fdout, idx)) {
-			ERRX1(sess, "io_write_int: index");
-			goto out;
-		} else if ( ! io_read_size(sess, fdin, &i)) {
-			ERRX1(sess, "io_read_size: send ack");
-			goto out;
-		} else if (idx != i) {
-			ERRX(sess, "wrong index value");
-			goto out;
-		}
-		return 1;
-	}
-
-	/*
-	 * Not having a file is fine: it just means that we'll need to
-	 * download the full file (i.e., have zero blocks).
-	 * If this is the case, map will stay at MAP_FAILED.
-	 * If we're recursive, then ignore the absolute indicator.
-	 */
-
-	assert(-1 != root);
-	ffd = openat(root, f->path, O_RDONLY | O_NOFOLLOW, 0);
-	if (-1 == ffd) {
-		if (ENOENT == errno)
-			WARN2(sess, "openat: %s", f->path);
-		else
-			WARN1(sess, "openat: %s", f->path);
-	}
-
-	/*
-	 * If we have a file, then we need to make sure that we have a
-	 * regular file (for now).
-	 * Here we're also going to see if we really need to do this: if
-	 * the file is up to date, we don't need new data.
-	 */
-
-	if (-1 != ffd) {
-		if (-1 == fstat(ffd, &st)) {
-			WARN(sess, "fstat: %s", f->path);
-			goto out;
-		} else if ( ! S_ISREG(st.st_mode)) {
-			WARNX(sess, "file not regular: %s", f->path);
-			goto out;
-		}
-
-		/* Skip if the size and mtime are the same. */
-
-		if (st.st_size == f->st.size &&
-		    st.st_mtime == f->st.mtime) {
-			LOG3(sess, "%s: skipping: up to date", f->path);
-			rc = 1;
-			goto out;
-		}
-		LOG3(sess, "updating: %s", f->path);
-	} else
-		LOG3(sess, "creating: %s", f->path);
-
-	/* We need this file's data: start the transfer. */
-
-	if (NULL == (p = calloc(1, sizeof(struct blkset)))) {
-		ERR(sess, "calloc");
-		goto out;
-	}
-
-	p->csum = csumlen;
-
-	/*
-	 * If open, try to map the file into memory.
-	 * If we fail doing this, then we have a problem: we don't need
-	 * the file, but we need to be able to mmap() it.
-	 */
-
-	if (-1 != ffd && st.st_size > 0) {
-		mapsz = st.st_size;
-		map = mmap(NULL, mapsz, PROT_READ, MAP_SHARED, ffd, 0);
-
-		if (MAP_FAILED == map) {
-			WARN(sess, "mmap: %s", f->path);
-			goto out;
-		}
-
-		init_blkset(p, st.st_size);
-		assert(p->blksz);
-
-		p->blks = calloc(p->blksz, sizeof(struct blk));
-		if (NULL == p->blks) {
-			ERR(sess, "calloc");
-			goto out;
-		}
-
-		for (i = 0; i < p->blksz; i++, offs += p->len)
-			init_blk(&p->blks[i], p, offs, i, map, sess);
-
-		LOG3(sess, "%s: mapped %jd B with %zu blocks",
-			f->path, (intmax_t)p->size, p->blksz);
-	} else {
-		p->len = MAX_CHUNK; /* Doesn't matter. */
-		LOG3(sess, "%s: not mapped", f->path);
-	}
-
-	/* 
-	 * Now transmit the metadata for set and blocks.
-	 * We do this now to let the server figure out which blocks to
-	 * send us in the meantime as we create our temporary files.
-	 */
-
-	if ( ! blk_send(sess, fdout, idx, p, f->path)) {
-		ERRX1(sess, "blk_send");
-		goto out;
-	} 
-	
-	/*
-	 * Open our writable temporary file.
-	 * To make this reasonably unique, make the file into a dot-file
-	 * and give it a random suffix.
-	 */
-
-	hash = arc4random();
-	if (sess->opts->recursive &&
-	    NULL != (cp = strrchr(f->path, '/'))) {
-		dirlen = cp - f->path;
-		if (asprintf(&tmpfile, "%.*s/.%s.%" PRIu32,
-		    (int)dirlen, f->path,
-		    f->path + dirlen + 1, hash) < 0) {
-			ERR(sess, "asprintf");
-			tmpfile = NULL;
-			goto out;
-		}
-	} else {
-		if (asprintf(&tmpfile, ".%s.%" PRIu32, 
-		    f->path, hash) < 0) {
-			ERR(sess, "asprintf");
-			tmpfile = NULL;
-			goto out;
-		}
-	}
-
-	/* Copy the source's mode when creating anew or with -p. */
-
-	if (-1 == ffd)
-		perm = f->st.mode;
-	else if (sess->opts->preserve_perms)
-		perm = f->st.mode;
-	else
-		perm = st.st_mode;
-
-	tfd = openat(root, tmpfile, O_RDWR|O_CREAT|O_EXCL, perm);
-	if (-1 == tfd) {
-		ERR(sess, "openat: %s", tmpfile);
-		goto out;
-	}
-
-	LOG3(sess, "%s: temporary: %s (mode %o)",
-		f->path, tmpfile, perm);
-
-	/*
-	 * Now acknowlede the block and respond to matches.
-	 * We write all of the data into "tfd", which we're going to
-	 * rename as the original file.
-	 */
-
-	if ( ! blk_send_ack(sess, fdin, p, idx)) {
-		ERRX1(sess, "blk_send_ack");
-		goto out;
-	}
-
-	c = blk_merge(sess, fdin, ffd, p, 
-		tfd, f->path, map, mapsz, &stats);
-
-	if (0 == c) {
-		ERRX1(sess, "blk_merge");
-		goto out;
-	} 
-
-	/* Optionally preserve times for the output file. */
-
-	if (sess->opts->preserve_times) {
-		tv[0].tv_sec = time(NULL);
-		tv[0].tv_nsec = 0;
-		tv[1].tv_sec = f->st.mtime;
-		tv[1].tv_nsec = 0;
-		if (-1 == futimens(tfd, tv)) {
-			ERR(sess, "futimens: %s", tmpfile);
-			goto out;
-		}
-		LOG4(sess, "%s: updated date", f->path);
-	}
-
-	/* Finally, rename the temporary to the real file. */
-
-	if (-1 == renameat(root, tmpfile, root, f->path)) {
-		ERR(sess, "renameat: %s, %s", tmpfile, f->path);
-		goto out;
-	}
-
-	/* Log the transfer. */
-
-	if ( ! sess->opts->server)
-		LOG1(sess, "%s: %.2f%% (%jd KB)", f->path, 
-			stats, (intmax_t)(f->st.size / 1024));
-
-	close(tfd);
-	tfd = -1;
-	rc = 1;
-out:
-	if (MAP_FAILED != map)
-		munmap(map, mapsz);
-	if (-1 != ffd)
-		close(ffd);
-
-	/* On failure, clean up our temporary file. */
-
-	if (-1 != tfd) {
-		close(tfd);
-		unlinkat(root, tmpfile, 0);
-	}
-
-	free(tmpfile);
-	blkset_free(p);
-	return rc;
-}
-
-/*
- * The receiver code is run on the machine that will actually write data
- * to its discs.
- * It processes all files requests and sends block hashes to the sender,
- * then waits to get the missing pieces.
- * It writes into a temporary file, then renames the temporary file.
- * Return zero on failure, non-zero on success.
- *
+/* 
  * Pledges: unveil, rpath, cpath, wpath, stdio, fattr.
- *
  * Pledges (dry-run): -cpath, -wpath, -fattr.
  * Pledges (!preserve_times): -fattr.
  */
@@ -578,10 +104,12 @@ rsync_receiver(struct sess *sess,
 	size_t		 i, flsz = 0, csum_length = CSUM_LENGTH_PHASE1,
 			 dflsz = 0;
 	char		*tofree;
-	int		 rc = 0, dfd = -1, phase = 0, c;
+	int		 rc = 0, dfd = -1, phase = 0, c, timeo;
 	int32_t	 	 ioerror;
 	int		*newdir = NULL;
 	mode_t		 oumask;
+	struct pollfd	 pfd[2];
+	struct download	*dl = NULL;
 
 	if (-1 == pledge("unveil rpath cpath wpath stdio fattr", NULL)) {
 		ERR(sess, "pledge");
@@ -619,13 +147,13 @@ rsync_receiver(struct sess *sess,
 	} else if ( ! sess->opts->server)
 		LOG1(sess, "Transfer starting: %zu files", flsz);
 
-	LOG2(sess, "receiver destination: %s", root);
+	LOG2(sess, "%s: receiver destination", root);
 
 	/*
 	 * Create the path for our destination directory, if we're not
 	 * in dry-run mode (which would otherwise crash w/the pledge).
 	 * This uses our current umask: we might set the permissions on
-	 * this directory in post_process_dir().
+	 * this directory in post_dir().
 	 */
 
 	if ( ! sess->opts->dry_run) {
@@ -633,7 +161,7 @@ rsync_receiver(struct sess *sess,
 			ERR(sess, "strdup");
 			goto out;
 		} else if (mkpath(sess, tofree) < 0) {
-			ERRX1(sess, "mkpath: %s", root);
+			ERRX1(sess, "%s: mkpath", root);
 			free(tofree);
 			goto out;
 		}
@@ -650,7 +178,7 @@ rsync_receiver(struct sess *sess,
 	if ( ! sess->opts->dry_run) {
 		dfd = open(root, O_RDONLY | O_DIRECTORY, 0);
 		if (-1 == dfd) {
-			ERR(sess, "open: %s", root);
+			ERR(sess, "%s: open", root);
 			goto out;
 		}
 	}
@@ -664,7 +192,7 @@ rsync_receiver(struct sess *sess,
 
 	if (sess->opts->del && sess->opts->recursive)
 		if ( ! flist_gen_local(sess, root, &dfl, &dflsz)) {
-			ERRX1(sess, "flist_gen_local");
+			ERRX1(sess, "%s: flist_gen_local", root);
 			goto out;
 		}
 
@@ -676,10 +204,10 @@ rsync_receiver(struct sess *sess,
 	 */
 
 	if (-1 == unveil(root, "rwc")) {
-		ERR(sess, "unveil: %s", root);
+		ERR(sess, "%s: unveil", root);
 		goto out;
 	} else if (-1 == unveil(NULL, NULL)) {
-		ERR(sess, "unveil: %s", root);
+		ERR(sess, "%s: unveil (lock down)", root);
 		goto out;
 	}
 
@@ -687,7 +215,7 @@ rsync_receiver(struct sess *sess,
 
 	if (NULL != dfl)
 		if ( ! flist_del(sess, dfd, dfl, dflsz, fl, flsz)) {
-			ERRX1(sess, "flist_del");
+			ERRX1(sess, "%s: flist_del", root);
 			goto out;
 		}
 
@@ -698,26 +226,58 @@ rsync_receiver(struct sess *sess,
 	 * til I understand the need.
 	 */
 
-	LOG2(sess, "receiver ready for phase 1 data: %s", root);
+	LOG2(sess, "%s: ready for phase 1 data", root);
 
 	if (NULL == (newdir = calloc(flsz, sizeof(int)))) {
 		ERR(sess, "calloc");
 		goto out;
 	}
 
-	for (i = 0; i < flsz; i++) {
-		if (S_ISDIR(fl[i].st.mode))
-			c = pre_process_dir(sess, oumask,
-				dfd, &fl[i], &newdir[i]);
-		else if (S_ISLNK(fl[i].st.mode))
-			c = process_link(sess, dfd, &fl[i]);
-		else if (S_ISREG(fl[i].st.mode))
-			c = process_file(sess, fdin, fdout,
-				dfd, &fl[i], i, csum_length);
-		else
-			c = 1;
-		if ( ! c)
+	pfd[0].fd = fdin;
+	pfd[1].fd = -1;
+	pfd[0].events = pfd[1].events = POLLIN;
+
+	i = 0;
+	for (;;) {
+		timeo = (i == flsz || -1 != pfd[1].fd) ? INFTIM : 0;
+		c = poll(pfd, 2, timeo);
+		if (-1 == c) {
+			ERR(sess, "poll");
 			goto out;
+		} else if ((pfd[0].revents & (POLLERR|POLLNVAL))) {
+			ERRX(sess, "poll: bad fd");
+			goto out;
+		} else if ((pfd[1].revents & (POLLERR|POLLNVAL))) {
+			ERRX(sess, "poll: bad fd");
+			goto out;
+		} else if ((pfd[0].revents & POLLHUP)) {
+			ERRX(sess, "poll: hangup");
+			goto out;
+		} else if ((pfd[1].revents & POLLHUP)) {
+			ERRX(sess, "poll: hangup");
+			goto out;
+		}
+		if (i < flsz || POLLIN & pfd[1].revents) {
+			c = rsync_uploader(fdout, dfd, &i, 
+				&pfd[1].fd, fl, flsz, sess, 
+				csum_length, oumask, newdir);
+			if (c < 0) {
+				ERRX1(sess, "rsync_uploader");
+				goto out;
+			}
+		}
+		if (POLLIN & pfd[0].revents) {
+			/* FIXME: we might get multiplexed messages... */
+			c = rsync_downloader
+				(fdin, dfd, &dl, fl, flsz, sess);
+			if (c < 0) {
+				ERRX1(sess, "rsync_downloader");
+				goto out;
+			} else if (0 == c) {
+				phase = 1;
+				break;
+			}
+		} 
 	}
 
 	/* Fix up the directory permissions and times post-order. */
@@ -727,9 +287,7 @@ rsync_receiver(struct sess *sess,
 		for (i = 0; i < flsz; i++) {
 			if ( ! S_ISDIR(fl[i].st.mode))
 				continue;
-			c = post_process_dir(sess,
-				dfd, &fl[i], newdir[i]);
-			if ( ! c)
+			if ( ! post_dir(sess, dfd, &fl[i], newdir[i]))
 				goto out;
 		}
 
