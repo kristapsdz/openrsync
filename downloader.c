@@ -324,16 +324,16 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 			goto out;
 		}
 		if ((ssz = write(p->fd, buf, sz)) < 0) {
-			ERR(sess, "write: temporary file");
+			ERR(sess, "%s: write", p->fname);
 			goto out;
 		} else if ((size_t)ssz != sz) {
-			ERRX(sess, "write: short write");
+			ERRX(sess, "%s: short write", p->fname);
 			goto out;
 		}
 
 		p->total += sz;
 		p->downloaded += sz;
-		LOG4(sess, "%s: received %zu B block", f->path, sz);
+		LOG4(sess, "%s: received %zu B block", p->fname, sz);
 		MD4_Update(&p->ctx, buf, sz);
 		free(buf);
 		return 1;
@@ -342,7 +342,7 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 		if (tok >= p->blk.blksz) {
 			ERRX(sess, "%s: token not in block "
 				"set: %zu (have %zu blocks)", 
-				f->path, tok, p->blk.blksz);
+				p->fname, tok, p->blk.blksz);
 			goto out;
 		}
 		sz = tok == p->blk.blksz - 1 ? p->blk.rem : p->blk.len;
@@ -358,21 +358,21 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 
 		assert(MAP_FAILED != p->map);
 		if ((ssz = write(p->fd, buf, sz)) < 0) {
-			ERR(sess, "write: temporary file");
+			ERR(sess, "%s: write", p->fname);
 			goto out;
 		} else if ((size_t)ssz != sz) {
-			ERRX(sess, "write: short write");
+			ERRX(sess, "%s: short write", p->fname);
 			goto out;
 		}
 
 		p->total += sz;
-		LOG4(sess, "%s: copied %zu B", f->path, sz);
+		LOG4(sess, "%s: copied %zu B", p->fname, sz);
 		MD4_Update(&p->ctx, buf, sz);
 		return 1;
 	}
 
 	assert(0 == rawtok);
-	LOG4(sess, "%s: finished", f->path);
+	LOG4(sess, "%s: finished", p->fname);
 
 	/* 
 	 * Make sure our resulting MD4 hashes match.
@@ -388,7 +388,7 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 		ERRX1(sess, "io_read_buf: data blocks hash");
 		goto out;
 	} else if (memcmp(md, ourmd, MD4_DIGEST_LENGTH)) {
-		ERRX(sess, "%s: hash does not match", f->path);
+		ERRX(sess, "%s: hash does not match", p->fname);
 		goto out;
 	}
 
