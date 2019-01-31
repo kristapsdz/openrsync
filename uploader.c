@@ -31,6 +31,12 @@
 
 #include "extern.h"
 
+struct	upload {
+	char		*buf;
+	size_t		 bufsz;
+	size_t		 bufpos;
+};
+
 /*
  * Log a directory by emitting the file and a trailing slash, just to
  * show the operator that we're a directory.
@@ -333,26 +339,71 @@ prep_file(int fd, int rootfd, int *filefd,
  * Otherwise it returns <0, which is an error.
  */
 int
-rsync_uploader(int fd, int rootfd, size_t *idx, 
+rsync_uploader(int fd, int rootfd, struct upload **up, size_t *idx, 
 	int *filefd, const struct flist *fl, size_t flsz,
-	struct sess *sess, size_t csumlen, mode_t oumask, 
-	int *newdir)
+	struct sess *sess, size_t csumlen, mode_t oumask, int *newdir,
+	int *fileoutfd)
 {
 	struct blkset	 blk;
 	struct stat	 st;
 	void		*map;
-	size_t		 i, mapsz;
+	size_t		 i, mapsz, pos, wsz;
 	off_t		 offs;
 	int		 c;
+	struct upload	*u = *up;
 
-again:
+	/*
+	 * If we have an upload in progress, then keep writing until the
+	 * buffer has been fully written.
+	 * We should only have the output file descriptor working.
+	 */
+
+	if (NULL != u) {
+		assert(-1 != *fileoutfd);
+		assert(-1 == *filefd);
+		if (u->bufpos < u->bufsz) {
+			if ( ! io_write_nonblocking
+			    (sess, fd, u->buf + u->bufpos, 
+			     u->bufsz - u->bufpos, &wsz)) {
+				ERRX1(sess, "io_write_nonblocking");
+				return -1;
+			}
+			u->bufpos += wsz;
+			if (u->bufpos < u->bufsz)
+				return 1;
+		}
+		free(u);
+		*up = NULL;
+		
+		/* 
+		 * If we're done, disable writing more files.
+		 * Else, reenable polling on the writer.
+		 */
+
+		if (flsz == ++(*idx)) {
+			LOG4(sess, "uploader: finished");
+			if ( ! io_write_int(sess, fd, -1)) {
+				ERRX1(sess, "io_write_int: index");
+				return -1;
+			}
+			*fileoutfd = -1;
+			return 0;
+		}
+		*fileoutfd = fd;
+		return 1;
+	}
+
+	assert(NULL == u);
+
 	/*
 	 * If we invoke the uploader without a file currently open, then
 	 * we iterate through til the next available regular file and
 	 * start the opening process.
+	 * This means we must have the output file descriptor working.
 	 */
 
 	if (-1 == *filefd) {
+		assert(-1 != *fileoutfd);
 		for ( ; *idx < flsz; (*idx)++) {
 			if (S_ISDIR(fl[*idx].st.mode))
 				c = prep_dir(sess, oumask, 
@@ -370,8 +421,12 @@ again:
 				break;
 		}
 
-		/* We've finished all of our files. */
+		/* 
+		 * Whether we've finished writing files or not, we
+		 * disable polling on the output channel.
+		 */
 
+		*fileoutfd = -1;
 		if (*idx == flsz) {
 			assert(-1 == *filefd);
 			LOG4(sess, "uploader: phase complete");
@@ -387,7 +442,10 @@ again:
 	 * Either have a nonexistent file or an open *filefd.
 	 * If the file is already open, stat it and see if it's already
 	 * up to date, in which case close it and go to the next one.
+	 * Either way, we don't have a write channel open.
 	 */
+
+	assert(-1 == *fileoutfd);
 
 	if (-1 != *filefd) {
 		if (-1 == fstat(*filefd, &st)) {
@@ -404,8 +462,9 @@ again:
 			LOG3(sess, "%s: skipping: up to date", fl[*idx].path);
 			close(*filefd);
 			*filefd = -1;
+			*fileoutfd = fd;
 			(*idx)++;
-			goto again;
+			return 1;
 		}
 	}
 
@@ -457,25 +516,48 @@ again:
 		LOG3(sess, "%s: not mapped", fl[*idx].path);
 	}
 
-	/* Send our blocks. */
-
-	if ( ! blk_send(sess, fd, *idx, &blk, fl[*idx].path)) {
-		ERRX1(sess, "%s: blk_send", fl[*idx].path);
-		free(blk.blks);
-		return -1;
-	} 
-
-	/* Proceed to next index. */
-
 	assert(-1 == *filefd);
-	free(blk.blks);
-	if (flsz == ++(*idx)) {
-		LOG4(sess, "uploader: finished");
-		if ( ! io_write_int(sess, fd, -1)) {
-			ERRX1(sess, "io_write_int: index");
-			return -1;
-		}
-		return 0;
+
+	u = calloc(1, sizeof(struct upload));
+	if (NULL == u) {
+		ERR(sess, "calloc");
+		return -1;
 	}
+
+	u->bufsz = 
+	     sizeof(int32_t) + /* identifier */
+	     sizeof(int32_t) + /* block count */
+	     sizeof(int32_t) + /* block length */
+	     sizeof(int32_t) + /* checksum length */
+	     sizeof(int32_t) + /* block remainder */
+	     blk.blksz * 
+	     (sizeof(int32_t) + /* short checksum */
+	      blk.csum); /* long checksum */
+
+	if (NULL == (u->buf = malloc(u->bufsz))) {
+		ERR(sess, "malloc");
+		free(u);
+		return -1;
+	}
+
+	pos = 0;
+	io_buffer_int(sess, u->buf, &pos, u->bufsz, *idx);
+	io_buffer_int(sess, u->buf, &pos, u->bufsz, blk.blksz);
+	io_buffer_int(sess, u->buf, &pos, u->bufsz, blk.len);
+	io_buffer_int(sess, u->buf, &pos, u->bufsz, blk.csum);
+	io_buffer_int(sess, u->buf, &pos, u->bufsz, blk.rem);
+	for (i = 0; i < blk.blksz; i++) {
+		io_buffer_int(sess, u->buf, &pos, u->bufsz, 
+			blk.blks[i].chksum_short);
+		io_buffer_buf(sess, u->buf, &pos, u->bufsz, 
+			blk.blks[i].chksum_long, blk.csum);
+	}
+	assert(pos == u->bufsz);
+	free(blk.blks);
+
+	/* Reenable the output poller. */
+
+	*fileoutfd = fd;
+	*up = u;
 	return 1;
 }

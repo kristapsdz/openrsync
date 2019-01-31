@@ -169,6 +169,7 @@ struct	sess {
 	rsync_errx((_sess), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
 
 struct download;
+struct upload;
 
 __BEGIN_DECLS
 
@@ -220,6 +221,8 @@ int		  io_write_byte(struct sess *, int, uint8_t);
 int		  io_write_int(struct sess *, int, int32_t);
 int		  io_write_line(struct sess *, int, const char *);
 int		  io_write_long(struct sess *, int, int64_t);
+int		  io_write_nonblocking(struct sess *, int, 
+			const void *, size_t, size_t *);
 
 void		  io_buffer_int(struct sess *, void *, 
 			size_t *, size_t, int32_t);
@@ -245,8 +248,9 @@ int		  rsync_socket(const struct opts *, const struct fargs *);
 int		  rsync_server(const struct opts *, size_t, char *[]);
 int		  rsync_downloader(int, int, struct download **, 
 			const struct flist *, size_t, struct sess *, int *);
-int		  rsync_uploader(int, int, size_t *, int *, const struct flist *, 
-			size_t, struct sess *, size_t, mode_t, int *);
+int		  rsync_uploader(int, int, struct upload **,
+			size_t *, int *, const struct flist *, 
+			size_t, struct sess *, size_t, mode_t, int *, int *);
 
 struct blkset	 *blk_recv(struct sess *, int, const char *);
 int		  blk_recv_ack(struct sess *,
