@@ -447,62 +447,44 @@ out:
 }
 
 /*
- * Symmetrise blk_recv_ack().
+ * Symmetrise blk_recv_ack(), except w/o the leading identifier.
  * Return zero on failure, non-zero on success.
  */
 int
-blk_send_ack(struct sess *sess, int fd,
-	const struct blkset *blocks, size_t idx)
+blk_send_ack(struct sess *sess, int fd, struct blkset *p)
 {
-	size_t	 sz, pos = 0;
-	int32_t	 rem, len, blksz, nidx, csum;
-	int	 rc = 0;
-	char	*buf;
+	char	 buf[16];
+	size_t	 pos = 0, sz;
 
-	/* Read all at once into a buffer. */
+	/* Put the entire send routine into a buffer. */
 
-	sz = sizeof(int32_t) + /* read ack */
-	     sizeof(int32_t) + /* block count */
-	     sizeof(int32_t) + /* block size */
+	sz = sizeof(int32_t) + /* block count */
+	     sizeof(int32_t) + /* block length */
 	     sizeof(int32_t) + /* checksum length */
 	     sizeof(int32_t); /* block remainder */
-	if (NULL == (buf = malloc(sz))) {
-		ERR(sess, "malloc");
-		return 0;
-	}
+	assert(sz <= sizeof(buf));
 
 	if ( ! io_read_buf(sess, fd, buf, sz)) {
-		ERRX1(sess, "io_read_buf: block ack");
-		free(buf);
+		ERRX1(sess, "io_read_buf: block prologue");
 		return 0;
 	}
 
-	/* Extract from buffer. */
-
-	io_unbuffer_int(sess, buf, &pos, sz, &nidx);
-	io_unbuffer_int(sess, buf, &pos, sz, &blksz);
-	io_unbuffer_int(sess, buf, &pos, sz, &len);
-	io_unbuffer_int(sess, buf, &pos, sz, &csum);
-	io_unbuffer_int(sess, buf, &pos, sz, &rem);
-	assert(pos == sz);
-
-	/* Query. */
-
-	if (nidx < 0 || (size_t)nidx != idx)
-		ERRX1(sess, "read ack: indices don't match");
-	else if (blksz < 0 || (size_t)blksz != blocks->blksz)
-		ERRX1(sess, "read ack: block counts don't match");
-	else if (len < 0 || (size_t)len != blocks->len)
-		ERRX1(sess, "read ack: block sizes don't match");
-	else if (csum < 0 || (size_t)csum != blocks->csum)
-		ERRX1(sess, "read ack: checksum lengths don't match");
-	else if (rem < 0 || (size_t)rem != blocks->rem)
-		ERRX1(sess, "read ack: block remainders don't match");
+	if ( ! io_unbuffer_size(sess, buf, &pos, sz, &p->blksz))
+		ERRX1(sess, "io_unbuffer_size: block count");
+	else if ( ! io_unbuffer_size(sess, buf, &pos, sz, &p->len))
+		ERRX1(sess, "io_unbuffer_size: block length");
+	else if ( ! io_unbuffer_size(sess, buf, &pos, sz, &p->csum))
+		ERRX1(sess, "io_unbuffer_size: block checksum");
+	else if ( ! io_unbuffer_size(sess, buf, &pos, sz, &p->rem))
+		ERRX1(sess, "io_unbuffer_size: block remainder");
+	else if (p->len && p->rem >= p->len)
+		ERRX1(sess, "non-zero length is less than remainder");
+	else if (0 == p->csum || p->csum > 16)
+		ERRX1(sess, "inappropriate checksum length");
 	else
-		rc = 1;
+		return 1;
 
-	free(buf);
-	return rc;
+	return 0;
 }
 
 /*
@@ -676,7 +658,7 @@ blk_send(struct sess *sess, int fd, size_t idx,
 	assert(pos == sz);
 
 	if ( ! io_write_buf(sess, fd, buf, sz)) {
-		ERRX1(sess, "io_write_buf: buffer");
+		ERRX1(sess, "io_write_buf: block prologue");
 		goto out;
 	}
 

@@ -522,6 +522,21 @@ io_unbuffer_int(struct sess *sess, const void *buf,
 }
 
 int
+io_unbuffer_size(struct sess *sess, const void *buf, 
+	size_t *bufpos, size_t bufsz, size_t *val)
+{
+	int32_t	oval;
+
+	io_unbuffer_int(sess, buf, bufpos, bufsz, &oval);
+	if (oval < 0) {
+		ERRX(sess, "io_unbuffer_size: negative value");
+		return 0;
+	}
+	*val = oval;
+	return 1;
+}
+
+int
 io_read_byte(struct sess *sess, int fd, uint8_t *val)
 {
 
