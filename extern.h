@@ -168,6 +168,8 @@ struct	sess {
 #define ERRX(_sess, _fmt, ...) \
 	rsync_errx((_sess), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
 
+struct download;
+
 __BEGIN_DECLS
 
 void		  rsync_log(struct sess *,
@@ -239,6 +241,10 @@ int		  rsync_sender(struct sess *, int, int, size_t, char **);
 int		  rsync_client(const struct opts *, int, const struct fargs *);
 int		  rsync_socket(const struct opts *, const struct fargs *);
 int		  rsync_server(const struct opts *, size_t, char *[]);
+int		  rsync_downloader(int, int, struct download **, 
+			const struct flist *, size_t, struct sess *);
+int		  rsync_uploader(int, int, size_t *, int *, const struct flist *, 
+			size_t, struct sess *, size_t, mode_t, int *);
 
 struct blkset	 *blk_recv(struct sess *, int, const char *);
 int		  blk_recv_ack(struct sess *,
