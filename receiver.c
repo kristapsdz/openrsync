@@ -44,6 +44,7 @@ post_dir(struct sess *sess, int root, const struct flist *f, int newdir)
 {
 	struct timespec	 tv[2];
 	int		 rc;
+	struct stat	 st;
 
 	/* We already warned about the directory in pre_process_dir(). */
 
@@ -52,29 +53,48 @@ post_dir(struct sess *sess, int root, const struct flist *f, int newdir)
 	else if (sess->opts->dry_run)
 		return 1;
 
-	/* XXX: re-check that this is a directory? */
+	if (-1 == fstatat(root, f->path, &st, AT_SYMLINK_NOFOLLOW)) {
+		ERR(sess, "%s: fstatat", f->path);
+		return 0;
+	} else if ( ! S_ISDIR(st.st_mode)) {
+		WARNX(sess, "%s: not a directory", f->path);
+		return 0;
+	}
 
-	if (sess->opts->preserve_times) {
+	/* 
+	 * Update the modification time if we're a new directory *or* if
+	 * we're preserving times and the time has changed.
+	 */
+
+	if (newdir || 
+	    (sess->opts->preserve_times && 
+	     st.st_mtime != f->st.mtime)) {
 		tv[0].tv_sec = time(NULL);
 		tv[0].tv_nsec = 0;
 		tv[1].tv_sec = f->st.mtime;
 		tv[1].tv_nsec = 0;
 		rc = utimensat(root, f->path, tv, 0);
 		if (-1 == rc) {
-			ERR(sess, "utimensat: %s", f->path);
+			ERR(sess, "%s: utimensat", f->path);
 			return 0;
 		}
 		LOG4(sess, "%s: updated date", f->path);
 	}
 
-	if (newdir || sess->opts->preserve_perms) {
+	/*
+	 * Update the mode if we're a new directory *or* if we're
+	 * preserving modes and it has changed.
+	 */
+
+	if (newdir || 
+	    (sess->opts->preserve_perms &&
+	     st.st_mode != f->st.mode)) {
 		rc = fchmodat(root, f->path, f->st.mode, 0);
 		if (-1 == rc) {
-			ERR(sess, "fchmodat: %s", f->path);
+			ERR(sess, "%s: fchmodat", f->path);
 			return 0;
 		}
-		LOG4(sess, "%s: updated mode: %o",
-			f->path, f->st.mode);
+		LOG4(sess, "%s: updated mode", f->path);
 	}
 
 	return 1;
