@@ -261,7 +261,7 @@ prep_dir(struct sess *sess, mode_t oumask,
 		WARN(sess, "%s: fstatat", f->path);
 		return -1;
 	} else if (-1 != rc && ! S_ISDIR(st.st_mode)) {
-		WARNX(sess, "%s: not directory", f->path);
+		WARNX(sess, "%s: not a directory", f->path);
 		return -1;
 	} else if (-1 != rc) {
 		/* 
@@ -323,6 +323,9 @@ prep_file(int fd, int rootfd, int *filefd,
 
 /*
  * Uploader routine.
+ * This iterates through all available files and conditionally gets the
+ * file ready for processing to check whether it's up to date.
+ * If not up to date, it sends the file's information to the sender.
  * If it returns 0, that means that we've processed all files there
  * are to process.
  * If it returns >0, we should establish a POLLIN in "filefd" (assert
@@ -353,7 +356,7 @@ again:
 		for ( ; *idx < flsz; (*idx)++) {
 			if (S_ISDIR(fl[*idx].st.mode))
 				c = prep_dir(sess, oumask, 
-					rootfd, &fl[*idx], newdir);
+					rootfd, &fl[*idx], &newdir[*idx]);
 			else if (S_ISLNK(fl[*idx].st.mode))
 				c = prep_link(sess, rootfd, &fl[*idx]);
 			else if (S_ISREG(fl[*idx].st.mode))
