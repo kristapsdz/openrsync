@@ -228,6 +228,8 @@ void		  io_buffer_buf(struct sess *, void *,
 
 void		  io_unbuffer_int(struct sess *, const void *, 
 			size_t *, size_t, int32_t *);
+int		  io_unbuffer_size(struct sess *, const void *, 
+			size_t *, size_t, size_t *);
 void		  io_unbuffer_buf(struct sess *, const void *, 
 			size_t *, size_t, void *, size_t);
 
@@ -253,8 +255,7 @@ int		  blk_match(struct sess *, int,
 			const struct blkset *, const char *);
 int		  blk_send(struct sess *, int, size_t,
 			const struct blkset *, const char *);
-int		  blk_send_ack(struct sess *, int,
-			const struct blkset *, size_t);
+int		  blk_send_ack(struct sess *, int, struct blkset *);
 int		  blk_merge(struct sess *, int, int,
 			const struct blkset *, int, const char *,
 			const void *, size_t, float *);
