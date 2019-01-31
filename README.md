@@ -300,6 +300,36 @@ The receiver side is managed in
 and the sender in
 [sender.c](https://github.com/kristapsdz/openrsync/blob/master/sender.c).
 
+The receiver side technically has two functions: not only must it upload
+block metadata to the sender, it must also handle data writes as they
+are sent by the sender.
+The rsync protocol is designed so that the sender receives block
+requests and continuously sends data to the receiver.
+
+To accomplish this, the receiver multitasks as the *uploader* and
+*downloader*.  These roles are implemented in
+[uploader.c](https://github.com/kristapsdz/openrsync/blob/master/uploader.c).
+and
+[downloader.c](https://github.com/kristapsdz/openrsync/blob/master/downloader.c),
+respectively.
+The multitasking takes place by a finite state machine driven by data
+coming from the sender and files on disc are they are ready to be
+checksummed and uploaded.
+
+The uploader scans through the list of files and asynchronously opens
+files to process blocks.
+While it waits for the files to open, it relinquishes control to the
+event loop.
+When files are available, it hashes and checksums blocks and uploads to
+the sender.
+
+The downloader waits on data from the sender.
+When data is ready (and prefixed by the file it will update), the
+downloader asynchronously opens the existing file to perform any block
+copying.
+When the file is available for reading, it then continues to read data
+from the sender and copy from the existing file.
+
 ## Differences from rsync
 
 The design of rsync involves another mode running alongside the
@@ -308,8 +338,8 @@ This is implemented as another process
 [fork(2)](https://man.openbsd.org/fork.2)ed from the receiver, and
 communicating with the receiver and sender.
 
-The purpose of the generator seems to be responding to file write
-requests.  In openrsync, this is accomplished by the receiver itself.
+In openrsync, the generator and receiver are one process, and an event
+loop is used for speedy responses to read and write requests.
 
 # Security
 
