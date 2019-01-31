@@ -117,7 +117,7 @@ rsync_receiver(struct sess *sess,
 	int32_t	 	 ioerror;
 	int		*newdir = NULL;
 	mode_t		 oumask;
-	struct pollfd	 pfd[2];
+	struct pollfd	 pfd[3];
 	struct download	*dl = NULL;
 
 	if (-1 == pledge("unveil rpath cpath wpath stdio fattr", NULL)) {
@@ -245,75 +245,62 @@ rsync_receiver(struct sess *sess,
 	/* Initialise poll events to listen from the sender. */
 
 	pfd[0].fd = fdin;
-	pfd[1].fd = -1;
-	pfd[0].events = pfd[1].events = POLLIN;
+	pfd[1].fd = pfd[2].fd = -1;
+	pfd[0].events = pfd[1].events = pfd[2].events = POLLIN;
 
 	for (i = 0;;) {
 		/*
-		 * If we've sent all of our block requests, so "i" is
-		 * set to the file list length, then we wait to receive
-		 * until the phase changes.
-		 * If we're waiting for a local file to open so we can
-		 * mmap it, so "i" is a valid file and pfd[1].fd is
-		 * valid, then wait for that perpetually.
-		 * Otherwise, we don't wait at all so that the uploader
-		 * can get the next file sent upstream.
+		 * The only time we don't block is when we're scanning
+		 * through our file list to upload to the scanner.
+		 * This is when i < flsz and we have no pfd[1].fd.
 		 */
 
 		timeo = (i == flsz || -1 != pfd[1].fd) ? INFTIM : 0;
 
-		if (-1 == (c = poll(pfd, 2, timeo))) {
+		if (-1 == (c = poll(pfd, 3, timeo))) {
 			ERR(sess, "poll");
 			goto out;
-		} else if ((pfd[0].revents & (POLLERR|POLLNVAL))) {
+		} 
+		if ((pfd[0].revents & (POLLERR|POLLNVAL)) ||
+		    (pfd[1].revents & (POLLERR|POLLNVAL)) ||
+		    (pfd[2].revents & (POLLERR|POLLNVAL))) {
 			ERRX(sess, "poll: bad fd");
 			goto out;
-		} else if ((pfd[1].revents & (POLLERR|POLLNVAL))) {
-			ERRX(sess, "poll: bad fd");
-			goto out;
-		} else if ((pfd[0].revents & POLLHUP)) {
-			ERRX(sess, "poll: hangup");
-			goto out;
-		} else if ((pfd[1].revents & POLLHUP)) {
+		} 
+		if ((pfd[0].revents & POLLHUP) ||
+		    (pfd[1].revents & POLLHUP) ||
+		    (pfd[2].revents & POLLHUP)) {
 			ERRX(sess, "poll: hangup");
 			goto out;
 		}
 
 		/*
-		 * We run the uploader if we have files left to examine
-		 * (if "i" is less than the file list) or if we have a
-		 * file that we've opened and is read to mmap.
+		 * If we have a read event and we're multiplexing, we
+		 * might just have error messages in the pipe.
+		 * It's important to flush these out so that we don't
+		 * clog the pipe.
+		 * Unset our polling status if there's nothing that
+		 * remains in the pipe.
 		 */
 
-		if (i < flsz || POLLIN & pfd[1].revents) {
-			c = rsync_uploader(fdout, dfd, &i, 
-				&pfd[1].fd, fl, flsz, sess, 
-				csum_length, oumask, newdir);
-			if (c < 0) {
-				ERRX1(sess, "rsync_uploader");
+		if (POLLIN & pfd[0].revents && sess->mplex_reads) {
+			if ( ! io_read_flush(sess, fdin)) {
+				ERRX1(sess, "io_read_flush");
 				goto out;
-			}
+			} 
+			if (0 == sess->mplex_read_remain)
+				pfd[0].revents &= ~POLLIN;
 		}
 
 		/* 
-		 * We run the downloader if there are reads coming from
-		 * the sender.
-		 * These reads may just be multiplexed log messages, so
-		 * let's check for that before passing to the downloader.
-		 * We would otherwise block after flushing the log
-		 * message and waiting for data.
+		 * We need to run the downloader when we either have
+		 * read events from the sender or an asynchronous local
+		 * open is ready.
 		 */
 
-		if (POLLIN & pfd[0].revents) {
-			if (sess->mplex_reads) {
-				if ( ! io_read_flush(sess, fdin)) {
-					ERRX1(sess, "io_read_flush");
-					goto out;
-				} else if (0 == sess->mplex_read_remain)
-					continue;
-			}
-			c = rsync_downloader
-				(fdin, dfd, &dl, fl, flsz, sess);
+		if (POLLIN & pfd[0].revents || POLLIN & pfd[2].revents) {
+			c = rsync_downloader(fdin, dfd, 
+				&dl, fl, flsz, sess, &pfd[2].fd);
 			if (c < 0) {
 				ERRX1(sess, "rsync_downloader");
 				goto out;
@@ -333,6 +320,22 @@ rsync_receiver(struct sess *sess,
 			 * go into the second phase.
 			 */
 		} 
+
+		/*
+		 * We run the uploader if we have files left to examine
+		 * (i < flsz) or if we have a file that we've opened and
+		 * is read to mmap.
+		 */
+
+		if (i < flsz || POLLIN & pfd[1].revents) {
+			c = rsync_uploader(fdout, dfd, &i, 
+				&pfd[1].fd, fl, flsz, sess, 
+				csum_length, oumask, newdir);
+			if (c < 0) {
+				ERRX1(sess, "rsync_uploader");
+				goto out;
+			}
+		}
 	}
 
 	/* Fix up the directory permissions and times post-order. */

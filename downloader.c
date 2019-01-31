@@ -142,7 +142,8 @@ download_free(struct download *p, int rootfd, int cleanup)
  */
 int
 rsync_downloader(int fd, int rootfd, struct download **pp,
-	const struct flist *fl, size_t flsz, struct sess *sess)
+	const struct flist *fl, size_t flsz, struct sess *sess, 
+	int *ofd)
 {
 	int32_t		 idx, rawtok;
 	uint32_t	 hash;
@@ -203,6 +204,7 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 		 * We do this in a non-blocking way, so if the open
 		 * succeeds, then we'll go reentrant til the file is
 		 * readable and we can mmap() it.
+		 * Set the file descriptor that we want to wait for.
 		 */
 
 		f = &fl[idx];
@@ -212,8 +214,10 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 		if (-1 == p->ofd && ENOENT != errno) {
 			ERR(sess, "%s: openat", f->path);
 			goto out;
-		} else if (-1 != p->ofd)
+		} else if (-1 != p->ofd) {
+			*ofd = p->ofd;
 			return 1;
+		}
 
 		/* Fall-through: there's no file. */
 	}
@@ -230,10 +234,15 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 
 	if (NULL == p->fname) {
 		if (-1 != p->ofd) {
+			assert(-1 != *ofd);
+			*ofd = -1;
 			if (-1 == fstat(p->ofd, &st)) {
 				ERR(sess, "%s: fstat", f->path);
 				goto out;
 			}
+
+			/* FIXME: make sure we're a regular file. */
+
 			p->mapsz = st.st_size;
 			p->map = mmap(NULL, p->mapsz, 
 				PROT_READ, MAP_SHARED, p->ofd, 0);
@@ -241,7 +250,8 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 				ERR(sess, "%s: mmap", f->path);
 				goto out;
 			}
-		}
+		} else
+			assert(-1 == *ofd);
 
 		/* Create the temporary file. */
 

@@ -244,7 +244,7 @@ int		  rsync_client(const struct opts *, int, const struct fargs *);
 int		  rsync_socket(const struct opts *, const struct fargs *);
 int		  rsync_server(const struct opts *, size_t, char *[]);
 int		  rsync_downloader(int, int, struct download **, 
-			const struct flist *, size_t, struct sess *);
+			const struct flist *, size_t, struct sess *, int *);
 int		  rsync_uploader(int, int, size_t *, int *, const struct flist *, 
 			size_t, struct sess *, size_t, mode_t, int *);
 
