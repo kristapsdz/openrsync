@@ -143,33 +143,8 @@ struct	sess {
 	int		   mplex_writes; /* multiplexing writes? */
 };
 
-enum	uploadst {
-	UPLOAD_FIND_NEXT = 0, /* find next to upload to sender */
-	UPLOAD_WRITE_LOCAL, /* wait to write to sender */
-	UPLOAD_READ_LOCAL, /* wait to read from local file */
-	UPLOAD_FINISHED /* nothing more to do in phase */
-};
-
-/*
- * Used to keep track of data flowing from the receiver to the sender.
- * This is managed by the receiver process.
- */
-struct	upload {
-	enum uploadst	    state;
-	char		   *buf; /* if not NULL, pending upload */
-	size_t		    bufsz; /* size of buf */
-	size_t		    bufpos; /* position in buf */
-	size_t		    idx; /* current transfer index */
-	mode_t		    oumask; /* umask for creating files */
-	int		    rootfd; /* destination directory */
-	size_t		    csumlen; /* checksum length */
-	int		    fdout; /* write descriptor to sender */
-	const struct flist *fl; /* file list */
-	size_t		    flsz; /* size of file list */
-	int		   *newdir; /* non-zero if mkdir'd */
-};
-
 struct	download;
+struct	upload;
 
 #define LOG0(_sess, _fmt, ...) \
 	rsync_log((_sess), __FILE__, __LINE__, -1, (_fmt), ##__VA_ARGS__)
@@ -275,10 +250,14 @@ int		  rsync_downloader(struct download *,
 			struct sess *, int *);
 int		  rsync_uploader(struct upload *, 
 			int *, struct sess *, int *);
+int		  rsync_uploader_tail(struct upload *, struct sess *);
 
 struct download	 *download_alloc(struct sess *, int,
 			const struct flist *, size_t, int);
 void		  download_free(struct download *);
+struct upload	 *upload_alloc(struct sess *, int, int, size_t, 
+			const struct flist *, size_t, mode_t);
+void		  upload_free(struct upload *);
 
 struct blkset	 *blk_recv(struct sess *, int, const char *);
 int		  blk_recv_ack(struct sess *,

@@ -31,6 +31,32 @@
 
 #include "extern.h"
 
+enum	uploadst {
+	UPLOAD_FIND_NEXT = 0, /* find next to upload to sender */
+	UPLOAD_WRITE_LOCAL, /* wait to write to sender */
+	UPLOAD_READ_LOCAL, /* wait to read from local file */
+	UPLOAD_FINISHED /* nothing more to do in phase */
+};
+
+/*
+ * Used to keep track of data flowing from the receiver to the sender.
+ * This is managed by the receiver process.
+ */
+struct	upload {
+	enum uploadst	    state;
+	char		   *buf; /* if not NULL, pending upload */
+	size_t		    bufsz; /* size of buf */
+	size_t		    bufpos; /* position in buf */
+	size_t		    idx; /* current transfer index */
+	mode_t		    oumask; /* umask for creating files */
+	int		    rootfd; /* destination directory */
+	size_t		    csumlen; /* checksum length */
+	int		    fdout; /* write descriptor to sender */
+	const struct flist *fl; /* file list */
+	size_t		    flsz; /* size of file list */
+	int		   *newdir; /* non-zero if mkdir'd */
+};
+
 /*
  * Log a directory by emitting the file and a trailing slash, just to
  * show the operator that we're a directory.
@@ -292,6 +318,75 @@ pre_dir(struct sess *sess, mode_t oumask,
 }
 
 /*
+ * We need to process our directories in post-order.
+ * This is because touching files within the directory will change the
+ * directory file; and also, if our mode is not writable, we wouldn't be
+ * able to write to that directory!
+ * Returns zero on failure, non-zero on success.
+ */
+static int
+post_dir(struct sess *sess, 
+	int root, const struct flist *f, int newdir)
+{
+	struct timespec	 tv[2];
+	int		 rc;
+	struct stat	 st;
+
+	/* We already warned about the directory in pre_process_dir(). */
+
+	if ( ! sess->opts->recursive)
+		return 1;
+	else if (sess->opts->dry_run)
+		return 1;
+
+	if (-1 == fstatat(root, f->path, &st, AT_SYMLINK_NOFOLLOW)) {
+		ERR(sess, "%s: fstatat", f->path);
+		return 0;
+	} else if ( ! S_ISDIR(st.st_mode)) {
+		WARNX(sess, "%s: not a directory", f->path);
+		return 0;
+	}
+
+	/* 
+	 * Update the modification time if we're a new directory *or* if
+	 * we're preserving times and the time has changed.
+	 */
+
+	if (newdir || 
+	    (sess->opts->preserve_times && 
+	     st.st_mtime != f->st.mtime)) {
+		tv[0].tv_sec = time(NULL);
+		tv[0].tv_nsec = 0;
+		tv[1].tv_sec = f->st.mtime;
+		tv[1].tv_nsec = 0;
+		rc = utimensat(root, f->path, tv, 0);
+		if (-1 == rc) {
+			ERR(sess, "%s: utimensat", f->path);
+			return 0;
+		}
+		LOG4(sess, "%s: updated date", f->path);
+	}
+
+	/*
+	 * Update the mode if we're a new directory *or* if we're
+	 * preserving modes and it has changed.
+	 */
+
+	if (newdir || 
+	    (sess->opts->preserve_perms &&
+	     st.st_mode != f->st.mode)) {
+		rc = fchmodat(root, f->path, f->st.mode, 0);
+		if (-1 == rc) {
+			ERR(sess, "%s: fchmodat", f->path);
+			return 0;
+		}
+		LOG4(sess, "%s: updated mode", f->path);
+	}
+
+	return 1;
+}
+
+/*
  * Return <0 on failure, 0 on success w/nothing to be done, >0 on
  * success and the file needs attention.
  */
@@ -335,6 +430,45 @@ finished(struct upload *u,
 	u->state = UPLOAD_FINISHED;
 	LOG4(sess, "uploader: finished");
 	return 0;
+}
+
+struct upload *
+upload_alloc(struct sess *sess, int rootfd, int fdout, 
+	size_t csumlen, const struct flist *fl, size_t flsz,
+	mode_t oumask)
+{
+	struct upload	*p;
+
+	if (NULL == (p = calloc(1, sizeof(struct upload)))) {
+		ERR(sess, "calloc");
+		return NULL;
+	}
+
+	p->state = UPLOAD_FIND_NEXT;
+	p->oumask = oumask;
+	p->rootfd = rootfd;
+	p->csumlen = csumlen;
+	p->fdout = fdout;
+	p->fl = fl;
+	p->flsz = flsz;
+	p->newdir = calloc(flsz, sizeof(int));
+	if (NULL == p->newdir) {
+		ERR(sess, "calloc");
+		free(p);
+		return NULL;
+	}
+	return p;
+}
+
+void
+upload_free(struct upload *p)
+{
+
+	if (NULL == p)
+		return;
+	free(p->newdir);
+	free(p->buf);
+	free(p);
 }
 
 /*
@@ -594,5 +728,27 @@ rsync_uploader(struct upload *u, int *fileinfd,
 
 	*fileoutfd = u->fdout;
 	free(blk.blks);
+	return 1;
+}
+
+int
+rsync_uploader_tail(struct upload *u, struct sess *sess)
+{
+	size_t	 i;
+
+	/* Fix up the directory permissions and times post-order. */
+
+	if ( ! sess->opts->preserve_times &&
+	     ! sess->opts->preserve_perms)
+		return 1;
+
+	for (i = 0; i < u->flsz; i++) {
+		if ( ! S_ISDIR(u->fl[i].st.mode))
+			continue;
+		if ( ! post_dir(sess, 
+		    u->rootfd, &u->fl[i], u->newdir[i]))
+			return 0;
+	}
+
 	return 1;
 }
