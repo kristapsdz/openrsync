@@ -208,8 +208,10 @@ signals an end of transmission.
 If a phase change occurs, the sender must write back the -1 constant
 integer value then re-start the request.
 .Pp
-If this is a dry-run scenario, the sender may then write back the index
-(integer) to skip the block exchange.
+If this is a dry-run scenario
+.Pq Fl n ,
+the sender may then write back the index (integer) to skip the block
+exchange.
 .Pp
 Otherwise, a block exchange occurs:
 .Pp
@@ -302,6 +304,9 @@ exit prior to sending per-file data.
 .Pp
 After the second phase has completed and prior to writing the
 end-of-data signal, the client receiver reads statistics.
+This is only performed in the verbose
+.Pq Fl v
+invocation.
 .Pp
 .Bl -enum -compact
 .It
@@ -358,9 +363,11 @@ in the file list
 prior to receiving the file list, the receiver in server mode does not
 send the constant zero integer
 .It
-the sender sends post-transfer statistics when in server mode
+the sender conditionally sends post-transfer statistics when in server
+mode
 .It
-the receiver does not receive statistics when in server mode
+the receiver conditionally does not receive statistics when in server
+mode
 .It
 when in server mode
 .Em and
