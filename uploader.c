@@ -140,7 +140,7 @@ init_blk(struct blk *p, const struct blkset *set, off_t offs,
  * Return <0 on failure 0 on success.
  */
 static int
-prep_link(struct sess *sess, int root, const struct flist *f)
+pre_link(struct sess *sess, int root, const struct flist *f)
 {
 	int		 rc, newlink = 0;
 	char		*b;
@@ -242,7 +242,7 @@ prep_link(struct sess *sess, int root, const struct flist *f)
  * Return <0 on failure 0 on success.
  */
 static int
-prep_dir(struct sess *sess, mode_t oumask,
+pre_dir(struct sess *sess, mode_t oumask,
 	int rootfd, const struct flist *f, int *newdir)
 {
 	struct stat	 st;
@@ -297,7 +297,7 @@ prep_dir(struct sess *sess, mode_t oumask,
  * success and the file needs attention.
  */
 static int
-prep_file(int fd, int rootfd, int *filefd, 
+pre_file(int fd, int rootfd, int *filefd, 
 	size_t idx, const struct flist *f, struct sess *sess)
 {
 
@@ -425,14 +425,14 @@ rsync_uploader(struct upload *u, int *fileinfd,
 
 		for ( ; u->idx < u->flsz; u->idx++) {
 			if (S_ISDIR(u->fl[u->idx].st.mode))
-				c = prep_dir(sess, u->oumask, 
+				c = pre_dir(sess, u->oumask, 
 					u->rootfd, &u->fl[u->idx], 
 					&u->newdir[u->idx]);
 			else if (S_ISLNK(u->fl[u->idx].st.mode))
-				c = prep_link(sess, 
+				c = pre_link(sess, 
 					u->rootfd, &u->fl[u->idx]);
 			else if (S_ISREG(u->fl[u->idx].st.mode))
-				c = prep_file(u->fdout, u->rootfd, 
+				c = pre_file(u->fdout, u->rootfd, 
 					fileinfd, u->idx, 
 					&u->fl[u->idx], sess);
 			else

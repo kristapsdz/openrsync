@@ -302,6 +302,10 @@ int		  rsync_downloader(struct download *,
 int		  rsync_uploader(struct upload *, 
 			int *, struct sess *, int *);
 
+struct download	 *download_alloc(struct sess *, int,
+			const struct flist *, size_t, int);
+void		  download_free(struct download *);
+
 struct blkset	 *blk_recv(struct sess *, int, const char *);
 int		  blk_recv_ack(struct sess *,
 			int, const struct blkset *, int32_t);
