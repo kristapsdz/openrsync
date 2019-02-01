@@ -66,7 +66,7 @@ rsync_child(const struct opts *opts, int fd, const struct fargs *f)
 
 	execvp(args[0], args);
 
-	ERR(&sess, "execvp: %s", args[0]);
+	ERR(&sess, "%s: execvp", args[0]);
 	exit(EXIT_FAILURE);
 	/* NOTREACHED */
 }

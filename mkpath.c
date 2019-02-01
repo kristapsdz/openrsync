@@ -60,12 +60,12 @@ mkpath(struct sess *sess, char *path)
 		if (stat(path, &sb)) {
 			if (errno != ENOENT || (mkdir(path, 0777) &&
 			    errno != EEXIST)) {
-				ERR(sess, "stat: %s", path);
+				ERR(sess, "%s: stat", path);
 				return (-1);
 			}
 		} else if (!S_ISDIR(sb.st_mode)) {
 			errno = ENOTDIR;
-			ERR(sess, "stat: %s", path);
+			ERR(sess, "%s: stat", path);
 			return (-1);
 		}
 

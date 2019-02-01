@@ -175,7 +175,7 @@ prep_link(struct sess *sess, int root, const struct flist *f)
 		LOG3(sess, "%s: creating "
 			"symlink: %s", f->path, f->link);
 		if (-1 == symlinkat(f->link, root, f->path)) {
-			WARN(sess, "symlinkat: %s", f->path);
+			WARN(sess, "%s: symlinkat", f->path);
 			return -1;
 		}
 		newlink = 1;
