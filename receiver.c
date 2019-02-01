@@ -46,6 +46,7 @@ enum	pfdt {
  * directory file; and also, if our mode is not writable, we wouldn't be
  * able to write to that directory!
  * Returns zero on failure, non-zero on success.
+ * FIXME: put in uploader.c.
  */
 static int
 post_dir(struct sess *sess, int root, const struct flist *f, int newdir)
@@ -372,23 +373,17 @@ rsync_receiver(struct sess *sess,
 		}
 	}
 
-	/* If we're the client, read server statistics. */
+	/* Process server statistics and say good-bye. */
 
-	if ( ! sess->opts->server &&
-	     ! sess_stats_recv(sess, fdin)) {
+	if ( ! sess_stats_recv(sess, fdin)) {
 		ERRX1(sess, "sess_stats_recv");
 		goto out;
-	}
-
-	/* Final "goodbye" message. */
-
-	if ( ! io_write_int(sess, fdout, -1)) {
-		ERRX1(sess, "io_write_int: update complete");
+	} else if ( ! io_write_int(sess, fdout, -1)) {
+		ERRX1(sess, "io_write_int");
 		goto out;
 	}
 
 	LOG2(sess, "receiver finished updating");
-
 	rc = 1;
 out:
 	if (-1 != dfd)
