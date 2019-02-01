@@ -47,7 +47,7 @@ io_read_check(struct sess *sess, int fd)
  * Write buffer to non-blocking descriptor.
  * Returns zero on failure, non-zero on success (zero or more bytes).
  */
-int
+static int
 io_write_nonblocking(struct sess *sess,
 	int fd, const void *buf, size_t bsz, size_t *sz)
 {
@@ -90,7 +90,7 @@ io_write_nonblocking(struct sess *sess,
  * Blocking write of the full size of the buffer.
  * Returns 0 on failure, non-zero on success (all bytes written).
  */
-int
+static int
 io_write_blocking(struct sess *sess,
 	int fd, const void *buf, size_t sz)
 {
@@ -123,9 +123,13 @@ io_write_buf(struct sess *sess, int fd, const void *buf, size_t sz)
 {
 	int32_t	 tag, tagbuf;
 	size_t	 wsz;
+	int	 c;
 
-	if ( ! sess->mplex_writes)
-		return io_write_blocking(sess, fd, buf, sz);
+	if ( ! sess->mplex_writes) {
+		c = io_write_blocking(sess, fd, buf, sz);
+		sess->total_write += sz;
+		return c;
+	}
 
 	while (sz > 0) {
 		wsz = sz & 0xFFFFFF;
@@ -139,6 +143,7 @@ io_write_buf(struct sess *sess, int fd, const void *buf, size_t sz)
 			ERRX1(sess, "io_write_blocking");
 			return 0;
 		}
+		sess->total_write += wsz;
 		sz -= wsz;
 		buf += wsz;
 	}
@@ -168,7 +173,7 @@ io_write_line(struct sess *sess, int fd, const char *line)
  * Read buffer from non-blocking descriptor.
  * Returns zero on failure, non-zero on success (zero or more bytes).
  */
-int
+static int
 io_read_nonblocking(struct sess *sess,
 	int fd, void *buf, size_t bsz, size_t *sz)
 {
@@ -209,9 +214,11 @@ io_read_nonblocking(struct sess *sess,
 
 /*
  * Blocking read of the full size of the buffer.
+ * This can be called from either the error type message or a regular
+ * message---or for that matter, multiplexed or not.
  * Returns 0 on failure, non-zero on success (all bytes read).
  */
-int
+static int
 io_read_blocking(struct sess *sess,
 	int fd, void *buf, size_t sz)
 {
@@ -317,12 +324,15 @@ int
 io_read_buf(struct sess *sess, int fd, void *buf, size_t sz)
 {
 	size_t	 rsz;
+	int	 c;
 
 	/* If we're not multiplexing, read directly. */
 
 	if ( ! sess->mplex_reads) {
 		assert(0 == sess->mplex_read_remain);
-		return io_read_blocking(sess, fd, buf, sz);
+		c = io_read_blocking(sess, fd, buf, sz);
+		sess->total_read += sz;
+		return c;
 	}
 
 	while (sz > 0) {
@@ -343,6 +353,7 @@ io_read_buf(struct sess *sess, int fd, void *buf, size_t sz)
 			sz -= rsz;
 			sess->mplex_read_remain -= rsz;
 			buf += rsz;
+			sess->total_read += rsz;
 			continue;
 		}
 

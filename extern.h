@@ -138,7 +138,9 @@ struct	sess {
 	int32_t		   seed; /* checksum seed */
 	int32_t		   lver; /* local version */
 	int32_t		   rver; /* remote version */
+	uint64_t	   total_read; /* non-logging wire/reads */
 	uint64_t	   total_size; /* total file size */
+	uint64_t	   total_write; /* non-logging wire/writes */
 	int		   mplex_reads; /* multiplexing reads? */
 	size_t		   mplex_read_remain; /* remaining bytes */
 	int		   mplex_writes; /* multiplexing writes? */
@@ -223,8 +225,6 @@ int		  io_write_byte(struct sess *, int, uint8_t);
 int		  io_write_int(struct sess *, int, int32_t);
 int		  io_write_line(struct sess *, int, const char *);
 int		  io_write_long(struct sess *, int, int64_t);
-int		  io_write_nonblocking(struct sess *, int, 
-			const void *, size_t, size_t *);
 
 void		  io_buffer_int(struct sess *, void *, 
 			size_t *, size_t, int32_t);
@@ -237,9 +237,6 @@ int		  io_unbuffer_size(struct sess *, const void *,
 			size_t *, size_t, size_t *);
 void		  io_unbuffer_buf(struct sess *, const void *, 
 			size_t *, size_t, void *, size_t);
-
-int		  io_read_blocking(struct sess *, int, void *, size_t);
-int		  io_read_nonblocking(struct sess *, int, void *, size_t, size_t *);
 
 void		  rsync_child(const struct opts *, int, const struct fargs *)
 			__attribute__((noreturn));

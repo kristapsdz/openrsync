@@ -36,6 +36,7 @@ stats_log(struct sess *sess,
 	const char	*tru = "B", *twu = "B", *tsu = "B";
 	int		 trsz = 0, twsz = 0, tssz = 0;
 
+	assert(sess->opts->verbose);
 	if (sess->opts->server)
 		return;
 
@@ -94,58 +95,67 @@ stats_log(struct sess *sess,
 }
 
 /*
- * TODO.
+ * At the end of transmission, we write our statistics if we're the
+ * server, then log only if we're not the server.
+ * Either way, only do this if we're in verbose mode.
+ * Returns zero on failure, non-zero on success.
  */
 int
 sess_stats_send(struct sess *sess, int fd)
 {
-	uint64_t tread, twrite;
+	uint64_t tw, tr, ts;
 
-	tread = 10;
-	twrite = 20;
+	if (0 == sess->opts->verbose)
+		return 1;
+
+	tw = sess->total_write;
+	tr = sess->total_read;
+	ts = sess->total_size;
 
 	if (sess->opts->server) {
-		if ( ! io_write_long(sess, fd, tread)) {
+		if ( ! io_write_long(sess, fd, tr)) {
 			ERRX1(sess, "io_write_long");
 			return 0;
-		} else if ( ! io_write_long(sess, fd, twrite)) {
+		} else if ( ! io_write_long(sess, fd, tw)) {
 			ERRX1(sess, "io_write_long");
 			return 0;
-		} else if ( ! io_write_long(sess, fd, sess->total_size)) {
+		} else if ( ! io_write_long(sess, fd, ts)) {
 			ERRX1(sess, "io_write_long");
 			return 0;
 		}
 	}
 
-	stats_log(sess, tread, twrite, sess->total_size);
+	stats_log(sess, tr, tw, ts);
 	return 1;
 }
 
 /*
  * At the end of the transmission, we have some statistics to read.
+ * Only do this (1) if we're in verbose mode and (2) if we're the
+ * server.
+ * Then log the findings.
  * Return zero on failure, non-zero on success.
  */
 int
 sess_stats_recv(struct sess *sess, int fd)
 {
-	uint64_t tread, twrite, tsize;
+	uint64_t tr, tw, ts;
 
-	if (sess->opts->server)
+	if (sess->opts->server || 0 == sess->opts->verbose)
 		return 1;
 
-	if ( ! io_read_ulong(sess, fd, &tread)) {
+	if ( ! io_read_ulong(sess, fd, &tw)) {
 		ERRX1(sess, "io_read_ulong");
 		return 0;
-	} else if ( ! io_read_ulong(sess, fd, &twrite)) {
+	} else if ( ! io_read_ulong(sess, fd, &tr)) {
 		ERRX1(sess, "io_read_ulong");
 		return 0;
-	} else if ( ! io_read_ulong(sess, fd, &tsize)) {
+	} else if ( ! io_read_ulong(sess, fd, &ts)) {
 		ERRX1(sess, "io_read_ulong");
 		return 0;
 	}
 
-	/* Note we flip around read/write. */
-	stats_log(sess, twrite, tread, tsize);
+	stats_log(sess, tr, tw, ts);
 	return 1;
 }
 
