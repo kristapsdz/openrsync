@@ -24,6 +24,14 @@ so on).
 
 - Easy: print more statistics, such as transfer times and rates.
 
+- Easy: tighten the [pledge(2)](https://man.openbsd.org/pledge.2) and 
+  [unveil(2)](https://man.openbsd.org/unveil.2) to work with **-n**, as
+  it does not touch files.
+
+- Easy: find the shared path for all input files and
+  [unveil(2)](https://man.openbsd.org/unveil.2) only the shared path
+  instead of each one.
+
 - Medium: have the log messages when multiplex writing (server mode) is
   enabled by flushed out through the multiplex channel.
   Right now, they're emitted on `stderr` just like with the client.
