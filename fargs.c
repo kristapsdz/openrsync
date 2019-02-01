@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "md4.h"
 #include "extern.h"
 
 #define	RSYNC_PATH 	"rsync"

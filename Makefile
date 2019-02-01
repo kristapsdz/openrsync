@@ -52,6 +52,4 @@ uninstall:
 clean:
 	rm -f $(ALLOBJS) openrsync $(AFLS)
 
-$(ALLOBJS) $(AFLS): extern.h
-
-md4.o hash.o blocks.o: md4.h
+$(ALLOBJS) $(AFLS): extern.h md4.h

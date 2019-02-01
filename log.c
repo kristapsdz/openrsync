@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "md4.h"
 #include "extern.h"
 
 /*
