@@ -154,7 +154,7 @@ rsync_receiver(struct sess *sess,
 		ERR(sess, "%s: unveil", root);
 		goto out;
 	} else if (-1 == unveil(NULL, NULL)) {
-		ERR(sess, "%s: unveil (lock down)", root);
+		ERR(sess, "%s: unveil", root);
 		goto out;
 	}
 
