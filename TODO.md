@@ -4,6 +4,9 @@ Porting-until-compile is trivially easy.
 Remember that rsync has specific modes to be run as root, and
 effectively dumps arbitrary network data into your file system.
 
+This list does not include adding support for features (e.g., **-u** and
+so on).
+
 - Easy: add a hashtable to `blk_find()` in 
   [blocks.c](https://github.com/kristapsdz/openrsync/blob/master/blocks.c)
   for quickly looking up fast-hash matches.
