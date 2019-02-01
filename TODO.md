@@ -1,8 +1,20 @@
-As noted many, many times before, you are *not* actually porting
-openrsync unless some of the security features are in place.
-Porting-until-compile is trivially easy.
+This is a list of possible work projects within openrsync, rated by difficulty.
+
+First, let's get porting out of the way.
+As noted many times before, porting-to-compile is trivially easy, and
+also insufficient: any port **must** have system-specific security
+features in place.
 Remember that rsync has specific modes to be run as root, and
 effectively dumps arbitrary network data into your file system.
+On [OpenBSD](https://www.openbsd.org),
+[unveil(2)](https://man.openbsd.org/unveil.2) and
+[pledge(2)](https://man.openbsd.org/pledge.2) take care of these
+security concerns.
+All operating systems have similar facilities, but these require
+delicate programming.
+See
+[Porting](https://github.com/kristapsdz/openrsync/blob/master/README.md#porting)
+for more information.
 
 This list does not include adding support for features (e.g., **-u** and
 so on).
