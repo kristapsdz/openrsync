@@ -289,6 +289,9 @@ flist_send(struct sess *sess, int fdin,
 				return 0;
 			}
 		}
+
+		if (S_ISREG(f->st.mode))
+			sess->total_size += f->st.size;
 	}
 
 	if ( ! io_write_byte(sess, fdout, 0)) {
@@ -567,6 +570,9 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 			"size %jd, mtime %jd, mode %o",
 			ff->path, (intmax_t)ff->st.size,
 			(intmax_t)ff->st.mtime, ff->st.mode);
+
+		if (S_ISREG(ff->st.mode))
+			sess->total_size += ff->st.size;
 	}
 
 	/* Remember to order the received list. */

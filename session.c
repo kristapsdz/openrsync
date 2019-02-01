@@ -99,11 +99,10 @@ stats_log(struct sess *sess,
 int
 sess_stats_send(struct sess *sess, int fd)
 {
-	uint64_t tread, twrite, tsize;
+	uint64_t tread, twrite;
 
 	tread = 10;
 	twrite = 20;
-	tsize = 30;
 
 	if (sess->opts->server) {
 		if ( ! io_write_long(sess, fd, tread)) {
@@ -112,13 +111,13 @@ sess_stats_send(struct sess *sess, int fd)
 		} else if ( ! io_write_long(sess, fd, twrite)) {
 			ERRX1(sess, "io_write_long");
 			return 0;
-		} else if ( ! io_write_long(sess, fd, tsize)) {
+		} else if ( ! io_write_long(sess, fd, sess->total_size)) {
 			ERRX1(sess, "io_write_long");
 			return 0;
 		}
 	}
 
-	stats_log(sess, tread, twrite, tsize);
+	stats_log(sess, tread, twrite, sess->total_size);
 	return 1;
 }
 
