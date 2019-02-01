@@ -478,7 +478,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 	size_t		 flsz = 0, flmax = 0, lsz;
 	uint8_t		 flag;
 	char		 last[MAXPATHLEN];
-	int64_t		 lval; /* temporary values... */
+	uint64_t	 lval; /* temporary values... */
 	int32_t		 ival;
 
 	last[0] = '\0';
@@ -507,11 +507,8 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 
 		/* Read the file size. */
 
-		if ( ! io_read_long(sess, fd, &lval)) {
-			ERRX1(sess, "io_read_long");
-			goto out;
-		} else if (lval < 0) {
-			ERRX(sess, "negative file size");
+		if ( ! io_read_ulong(sess, fd, &lval)) {
+			ERRX1(sess, "io_read_ulong");
 			goto out;
 		}
 		ff->st.size = lval;
