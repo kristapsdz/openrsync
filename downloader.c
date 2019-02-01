@@ -29,8 +29,37 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "md4.h"
 #include "extern.h"
+#include "md4.h"
+
+enum	downloadst {
+	DOWNLOAD_READ_NEXT = 0,
+	DOWNLOAD_READ_LOCAL,
+	DOWNLOAD_READ_REMOTE
+};
+
+/*
+ * Like struct upload, but used to keep track of what we're downloading.
+ * This also is managed by the receiver process.
+ */
+struct	download {
+	enum downloadst	    state; /* state of affairs */
+	size_t	 	    idx; /* index of current file */
+	struct blkset	    blk; /* its blocks */
+	void		   *map; /* mmap of current file */
+	size_t		    mapsz; /* length of mapsz */
+	int		    ofd; /* open origin file */
+	int		    fd; /* open output file */
+	char		   *fname; /* output filename */
+	MD4_CTX	 	    ctx; /* current hashing context */
+	off_t		    downloaded; /* total downloaded */
+	off_t		    total; /* total in file */
+	const struct flist *fl; /* file list */
+	size_t		    flsz; /* size of file list */
+	int		    rootfd; /* destination directory */
+	int		    fdin; /* read descriptor from sender */
+};
+
 
 /*
  * Simply log the filename.

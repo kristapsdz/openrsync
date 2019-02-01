@@ -34,7 +34,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "md4.h"
 #include "extern.h"
 
 /* Code taken directly from mkdir(1).
