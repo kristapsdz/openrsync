@@ -303,7 +303,7 @@ prep_file(int fd, int rootfd, int *filefd,
 	if (sess->opts->dry_run) {
 		log_file(sess, f);
 		if ( ! io_write_int(sess, fd, idx)) {
-			ERRX1(sess, "io_write_int: index");
+			ERRX1(sess, "io_write_int");
 			return -1;
 		}
 		return 0;
