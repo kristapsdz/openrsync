@@ -39,7 +39,9 @@ static void
 log_file(struct sess *sess, 
 	const struct download *dl, const struct flist *f)
 {
-	float	 frac;
+	float		 frac, tot = dl->total;
+	int		 prec = 0;
+	const char	*unit = "B";
 
 	if (sess->opts->server)
 		return;
@@ -47,37 +49,49 @@ log_file(struct sess *sess,
 	frac = 0 == dl->total ? 100.0 : 
 		100.0 * dl->downloaded / dl->total;
 
-	if (dl->total > 1024 * 1024 * 1024) 
-		LOG1(sess, "%s (%.3f GB, %.1f%% downloaded)", 
-			f->path, 
-			dl->total / (1024. * 1024. * 1024.), 
-			frac);
-	else if (dl->total > 1024 * 1024)
-		LOG1(sess, "%s (%.2f MB, %.1f%% downloaded)", 
-			f->path, dl->total / (1024. * 1024.), frac);
-	else if (dl->total > 1024)
-		LOG1(sess, "%s (%.1f KB, %.1f%% downloaded)", 
-			f->path, dl->total / 1024., frac);
-	else
-		LOG1(sess, "%s (%jd B, %.1f%% downloaded)", 
-			f->path, dl->total, frac);
+	if (dl->total > 1024 * 1024 * 1024) {
+		tot = dl->total / (1024. * 1024. * 1024.);
+		prec = 3;
+		unit = "GB";
+	} else if (dl->total > 1024 * 1024) {
+		tot = dl->total / (1024. * 1024.);
+		prec = 2;
+		unit = "MB";
+	} else if (dl->total > 1024) {
+		tot = dl->total / 1024.;
+		prec = 1;
+		unit = "KB";
+	}
+
+	LOG1(sess, "%s (%.*f %s, %.1f%% downloaded)", 
+		f->path, prec, tot, unit, frac);
 }
 
 /*
- * Initialise a download context.
+ * Reinitialise a download context w/o overwriting the persistent parts
+ * of the structure (like p->fl or p->flsz) for index "idx".
  * The MD4 context is pre-seeded.
  */
 static void
-download_init(struct sess *sess, struct download *p, size_t idx)
+download_reinit(struct sess *sess, struct download *p, size_t idx)
 {
-	int32_t		 seed;
+	int32_t seed = htole32(sess->seed);
 
 	assert(DOWNLOAD_READ_NEXT == p->state);
+
 	p->idx = idx;
+	memset(&p->blk, 0, sizeof(struct blkset));
 	p->map = MAP_FAILED;
-	p->ofd = p->fd = -1;
+	p->mapsz = 0;
+	p->ofd = -1;
+	p->fd = -1;
+	p->fname = NULL;
 	MD4_Init(&p->ctx);
-	seed = htole32(sess->seed);
+	p->downloaded = p->total = 0;
+	/* Don't touch p->fl. */
+	/* Don't touch p->flsz. */
+	/* Don't touch p->rootfd. */
+	/* Don't touch p->fdin. */
 	MD4_Update(&p->ctx, &seed, sizeof(int32_t));
 }
 
@@ -87,7 +101,7 @@ download_init(struct sess *sess, struct download *p, size_t idx)
  * assuming that it has been opened in p->fd.
  */
 static void
-download_free(struct download *p, int rootfd, int cleanup)
+download_cleanup(struct download *p, int cleanup)
 {
 
 	if (MAP_FAILED != p->map) {
@@ -102,15 +116,48 @@ download_free(struct download *p, int rootfd, int cleanup)
 	}
 	if (-1 != p->fd) {
 		close(p->fd);
-		if (cleanup) {
-			assert(NULL != p->fname);
-			unlinkat(rootfd, p->fname, 0);
-		}
+		if (cleanup && NULL != p->fname) 
+			unlinkat(p->rootfd, p->fname, 0);
 		p->fd = -1;
 	}
 	free(p->fname);
 	p->fname = NULL;
 	p->state = DOWNLOAD_READ_NEXT;
+}
+
+/*
+ * Initial allocation of the download object using the file list "fl" of
+ * size "flsz", the destination "rootfd", and the sender read "fdin".
+ * Returns NULL on allocation failure.
+ */
+struct download *
+download_alloc(struct sess *sess, int fdin, 
+	const struct flist *fl, size_t flsz, int rootfd)
+{
+	struct download	*p;
+
+	if (NULL == (p = malloc(sizeof(struct download)))) {
+		ERR(sess, "malloc");
+		return NULL;
+	}
+
+	p->state = DOWNLOAD_READ_NEXT;
+	p->fl = fl;
+	p->flsz = flsz;
+	p->rootfd = rootfd;
+	p->fdin = fdin;
+	download_reinit(sess, p, 0);
+	return p;
+}
+
+void
+download_free(struct download *p)
+{
+
+	if (NULL == p)
+		return;
+	download_cleanup(p, 1);
+	free(p);
 }
 
 /*
@@ -167,7 +214,7 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 		 * the map, as block sizes are regular.
 		 */
 
-		download_init(sess, p, idx);
+		download_reinit(sess, p, idx);
 		if ( ! blk_send_ack(sess, p->fdin, &p->blk)) {
 			ERRX1(sess, "blk_send_ack");
 			goto out;
@@ -399,9 +446,9 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 	}
 
 	log_file(sess, p, f);
-	download_free(p, p->rootfd, 0);
+	download_cleanup(p, 0);
 	return 1;
 out:
-	download_free(p, p->rootfd, 1);
+	download_cleanup(p, 1);
 	return -1;
 }
