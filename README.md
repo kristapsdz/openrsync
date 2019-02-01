@@ -9,6 +9,8 @@ accepts only a subset of rsync's command-line arguments.
 However, it's at the point where more wide-spread testing is possible.
 Please read the [Installation](#Installation) notes for more about
 testing openrsync.
+If you want to hack on openrsync, see the
+[TODO](https://github.com/kristapsdz/openrsync/blob/master/TODO.md).
 
 At this time, openrsync runs only on [OpenBSD](https://www.openbsd.org).
 If you want to port to your system (e.g. Linux, FreeBSD), read the
