@@ -30,7 +30,6 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "md4.h"
 #include "extern.h"
 
 enum	pfdt {
