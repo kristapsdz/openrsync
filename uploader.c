@@ -351,8 +351,8 @@ rsync_uploader(struct upload *u, int *fileinfd,
 {
 	struct blkset	 blk;
 	struct stat	 st;
-	void		*map;
-	size_t		 i, mapsz, pos, wsz;
+	void		*map, *bufp;
+	size_t		 i, mapsz, pos, sz;
 	off_t		 offs;
 	int		 c;
 
@@ -377,23 +377,23 @@ rsync_uploader(struct upload *u, int *fileinfd,
 		 * the server side of things, then we're multiplexing
 		 * output and need to wrap this in chunks.
 		 * This is a major deficiency of rsync.
+		 * FIXME: add a "fast-path" mode that simply dumps out
+		 * the buffer non-blocking if we're not mplexing.
 		 */
 
 		if (u->bufpos < u->bufsz) {
-			wsz = MAX_CHUNK < (u->bufsz - u->bufpos) ?
+			sz = MAX_CHUNK < (u->bufsz - u->bufpos) ?
 				MAX_CHUNK : (u->bufsz - u->bufpos);
 			c = io_write_buf(sess, u->fdout, 
-				u->buf + u->bufpos, wsz);
+				u->buf + u->bufpos, sz);
 			if (0 == c) {
 				ERRX1(sess, "io_write_nonblocking");
 				return -1;
 			}
-			u->bufpos += wsz;
+			u->bufpos += sz;
 			if (u->bufpos < u->bufsz)
 				return 1;
 		}
-		free(u->buf);
-		u->buf = NULL;
 		
 		/* 
 		 * If we're done, disable getting this function called
@@ -556,9 +556,9 @@ rsync_uploader(struct upload *u, int *fileinfd,
 
 	assert(-1 == *fileinfd);
 
-	u->bufpos = 0;
-	u->bufsz = 
-	     sizeof(int32_t) + /* identifier */
+	/* Make sure the block metadata buffer is big enough. */
+
+	sz = sizeof(int32_t) + /* identifier */
 	     sizeof(int32_t) + /* block count */
 	     sizeof(int32_t) + /* block length */
 	     sizeof(int32_t) + /* checksum length */
@@ -567,14 +567,16 @@ rsync_uploader(struct upload *u, int *fileinfd,
 	     (sizeof(int32_t) + /* short checksum */
 	      blk.csum); /* long checksum */
 
-	/* FIXME: realloc. */
-
-	if (NULL == (u->buf = malloc(u->bufsz))) {
-		ERR(sess, "malloc");
-		return -1;
+	if (sz > u->bufsz) {
+		if (NULL == (bufp = realloc(u->buf, sz))) {
+			ERR(sess, "realloc");
+			return -1;
+		}
+		u->buf = bufp;
+		u->bufsz = sz;
 	}
 
-	pos = 0;
+	u->bufpos = pos = 0;
 	io_buffer_int(sess, u->buf, &pos, u->bufsz, u->idx);
 	io_buffer_int(sess, u->buf, &pos, u->bufsz, blk.blksz);
 	io_buffer_int(sess, u->buf, &pos, u->bufsz, blk.len);
@@ -587,10 +589,10 @@ rsync_uploader(struct upload *u, int *fileinfd,
 			blk.blks[i].chksum_long, blk.csum);
 	}
 	assert(pos == u->bufsz);
-	free(blk.blks);
 
-	/* Reenable the output poller. */
+	/* Reenable the output poller and clean up. */
 
 	*fileoutfd = u->fdout;
+	free(blk.blks);
 	return 1;
 }
