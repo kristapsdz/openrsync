@@ -372,10 +372,18 @@ rsync_uploader(struct upload *u, int *fileinfd,
 		assert(-1 != *fileoutfd);
 		assert(-1 == *fileinfd);
 
+		/*
+		 * Unfortunately, we need to chunk these: if we're
+		 * the server side of things, then we're multiplexing
+		 * output and need to wrap this in chunks.
+		 * This is a major deficiency of rsync.
+		 */
+
 		if (u->bufpos < u->bufsz) {
-			c = io_write_nonblocking
-				(sess, u->fdout, u->buf + u->bufpos, 
-				 u->bufsz - u->bufpos, &wsz);
+			wsz = MAX_CHUNK < (u->bufsz - u->bufpos) ?
+				MAX_CHUNK : (u->bufsz - u->bufpos);
+			c = io_write_buf(sess, u->fdout, 
+				u->buf + u->bufpos, wsz);
 			if (0 == c) {
 				ERRX1(sess, "io_write_nonblocking");
 				return -1;
