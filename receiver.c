@@ -137,7 +137,7 @@ rsync_receiver(struct sess *sess,
 
 	if ( ! sess->opts->server &&
 	     ! io_write_int(sess, fdout, 0)) {
-		ERRX1(sess, "io_write_int: zero premable");
+		ERRX1(sess, "io_write_int");
 		goto out;
 	}
 
@@ -150,7 +150,7 @@ rsync_receiver(struct sess *sess,
 		ERRX1(sess, "flist_recv");
 		goto out;
 	} else if ( ! io_read_int(sess, fdin, &ioerror)) {
-		ERRX1(sess, "io_read_int: io_error");
+		ERRX1(sess, "io_read_int");
 		goto out;
 	} else if (0 != ioerror) {
 		ERRX1(sess, "io_error is non-zero");
@@ -209,7 +209,7 @@ rsync_receiver(struct sess *sess,
 
 	if (sess->opts->del && sess->opts->recursive)
 		if ( ! flist_gen_local(sess, root, &dfl, &dflsz)) {
-			ERRX1(sess, "%s: flist_gen_local", root);
+			ERRX1(sess, "flist_gen_local");
 			goto out;
 		}
 
@@ -232,7 +232,7 @@ rsync_receiver(struct sess *sess,
 
 	if (NULL != dfl)
 		if ( ! flist_del(sess, dfd, dfl, dflsz, fl, flsz)) {
-			ERRX1(sess, "%s: flist_del", root);
+			ERRX1(sess, "flist_del");
 			goto out;
 		}
 
@@ -362,10 +362,10 @@ rsync_receiver(struct sess *sess,
 
 	if (1 == phase) {
 		if ( ! io_write_int(sess, fdout, -1)) {
-			ERRX1(sess, "io_write_int: send complete");
+			ERRX1(sess, "io_write_int");
 			goto out;
 		} else if ( ! io_read_int(sess, fdin, &ioerror)) {
-			ERRX1(sess, "io_read_int: phase ack");
+			ERRX1(sess, "io_read_int");
 			goto out;
 		} else if (-1 != ioerror) {
 			ERRX(sess, "expected phase ack");

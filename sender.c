@@ -65,7 +65,7 @@ rsync_sender(struct sess *sess, int fdin,
 		ERRX1(sess, "flist_send");
 		goto out;
 	} else if ( ! io_write_int(sess, fdout, 0)) {
-		ERRX1(sess, "io_write_int: io_error");
+		ERRX1(sess, "io_write_int");
 		goto out;
 	} else if ( ! sess->opts->server)
 		LOG1(sess, "Transfer starting: %zu files", flsz);
@@ -82,7 +82,7 @@ rsync_sender(struct sess *sess, int fdin,
 
 	if (sess->opts->server) {
 		if ( ! io_read_int(sess, fdin, &preamble)) {
-			ERRX1(sess, "io_read_int: zero premable");
+			ERRX1(sess, "io_read_int");
 			goto out;
 		} else if (0 != preamble) {
 			ERRX1(sess, "preamble value must be zero");
@@ -99,7 +99,7 @@ rsync_sender(struct sess *sess, int fdin,
 
 	for (;;) {
 		if ( ! io_read_int(sess, fdin, &idx)) {
-			ERRX1(sess, "io_read_int: index");
+			ERRX1(sess, "io_read_int");
 			goto out;
 		}
 
@@ -111,7 +111,7 @@ rsync_sender(struct sess *sess, int fdin,
 
 		if (-1 == idx) {
 			if ( ! io_write_int(sess, fdout, idx)) {
-				ERRX1(sess, "io_write_int: phase ack");
+				ERRX1(sess, "io_write_int");
 				goto out;
 			}
 
@@ -119,8 +119,7 @@ rsync_sender(struct sess *sess, int fdin,
 
 			if (sess->opts->server && sess->rver > 27)
 				if ( ! io_write_int(sess, fdout, idx)) {
-					ERRX1(sess, "io_write_int: "
-						"superfluous ack");
+					ERRX1(sess, "io_write_int");
 					goto out;
 				}
 
@@ -158,8 +157,7 @@ rsync_sender(struct sess *sess, int fdin,
 
 		if (sess->opts->dry_run) {
 			if ( ! io_write_int(sess, fdout, idx)) {
-				ERRX1(sess, "io_write_int: "
-					"send ack (dry-run)");
+				ERRX1(sess, "io_write_int");
 				goto out;
 			}
 			continue;
@@ -200,7 +198,7 @@ rsync_sender(struct sess *sess, int fdin,
 	/* Final "goodbye" message. */
 
 	if ( ! io_read_int(sess, fdin, &idx)) {
-		ERRX1(sess, "io_read_int: update complete");
+		ERRX1(sess, "io_read_int");
 		goto out;
 	} else if (-1 != idx) {
 		ERRX(sess, "read incorrect update complete ack");
