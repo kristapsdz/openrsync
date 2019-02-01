@@ -124,15 +124,16 @@ rsync_receiver(struct sess *sess,
 	int		 rc = 0, dfd = -1, phase = 0, c;
 	int32_t	 	 ioerror;
 	struct pollfd	 pfd[PFD__MAX];
-	struct download	*dl = NULL;
+	struct download	 dl;
 	struct upload 	 ul;
+
+	memset(&ul, 0, sizeof(struct upload));
+	memset(&dl, 0, sizeof(struct download));
 
 	if (-1 == pledge("unveil rpath cpath wpath stdio fattr", NULL)) {
 		ERR(sess, "pledge");
 		goto out;
 	}
-
-	memset(&ul, 0, sizeof(struct upload));
 
 	/* XXX: what does this do? */
 
@@ -260,6 +261,11 @@ rsync_receiver(struct sess *sess,
 		goto out;
 	}
 
+	dl.fdin = fdin;
+	dl.fl = fl;
+	dl.flsz = flsz;
+	dl.rootfd = dfd;
+
 	LOG2(sess, "%s: ready for phase 1 data", root);
 
 	for (;;) {
@@ -324,8 +330,7 @@ rsync_receiver(struct sess *sess,
 
 		if ((POLLIN & pfd[PFD_SENDER_IN].revents) || 
 		    (POLLIN & pfd[PFD_DOWNLOADER_IN].revents)) {
-			c = rsync_downloader(fdin, dfd, 
-				&dl, fl, flsz, sess, 
+			c = rsync_downloader(&dl, sess, 
 				&pfd[PFD_DOWNLOADER_IN].fd);
 			if (c < 0) {
 				ERRX1(sess, "rsync_downloader");
@@ -393,5 +398,6 @@ out:
 	flist_free(dfl, dflsz);
 	free(ul.newdir);
 	free(ul.buf);
+	/* FIXME: on error, we might have active stuff in ul/dl. */
 	return rc;
 }

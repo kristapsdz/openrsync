@@ -64,28 +64,21 @@ log_file(struct sess *sess,
 }
 
 /*
- * Allocate and initialise a download context.
+ * Initialise a download context.
  * The MD4 context is pre-seeded.
  */
-static struct download *
-download_alloc(struct sess *sess, size_t idx)
+static void
+download_init(struct sess *sess, struct download *p, size_t idx)
 {
-	struct download	*p;
 	int32_t		 seed;
 
-	p = calloc(1, sizeof(struct download));
-	if (NULL == p) {
-		ERR(sess, "calloc");
-		return NULL;
-	}
-
+	assert(DOWNLOAD_READ_NEXT == p->state);
 	p->idx = idx;
 	p->map = MAP_FAILED;
 	p->ofd = p->fd = -1;
 	MD4_Init(&p->ctx);
 	seed = htole32(sess->seed);
 	MD4_Update(&p->ctx, &seed, sizeof(int32_t));
-	return p;
 }
 
 /*
@@ -97,23 +90,27 @@ static void
 download_free(struct download *p, int rootfd, int cleanup)
 {
 
-	if (NULL == p)
-		return;
-
 	if (MAP_FAILED != p->map) {
 		assert(p->mapsz);
 		munmap(p->map, p->mapsz);
+		p->map = MAP_FAILED;
+		p->mapsz = 0;
 	}
-	if (-1 != p->ofd)
+	if (-1 != p->ofd) {
 		close(p->ofd);
-	if (-1 != p->fd)
+		p->ofd = -1;
+	}
+	if (-1 != p->fd) {
 		close(p->fd);
-	if (-1 != p->fd && cleanup) {
-		assert(NULL != p->fname);
-		unlinkat(rootfd, p->fname, 0);
+		if (cleanup) {
+			assert(NULL != p->fname);
+			unlinkat(rootfd, p->fname, 0);
+		}
+		p->fd = -1;
 	}
 	free(p->fname);
-	free(p);
+	p->fname = NULL;
+	p->state = DOWNLOAD_READ_NEXT;
 }
 
 /*
@@ -125,13 +122,10 @@ download_free(struct download *p, int rootfd, int cleanup)
  * success (more data to be read from the sender).
  */
 int
-rsync_downloader(int fd, int rootfd, struct download **pp,
-	const struct flist *fl, size_t flsz, struct sess *sess, 
-	int *ofd)
+rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 {
 	int32_t		 idx, rawtok;
 	uint32_t	 hash;
-	struct download	*p = *pp;
 	const struct flist *f;
 	size_t		 sz, dirlen, tok;
 	const char	*cp;
@@ -139,7 +133,8 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 	struct stat  	 st;
 	ssize_t		 ssz;
 	char		*buf = NULL;
-	unsigned char	 ourmd[16], md[16];
+	unsigned char	 ourmd[MD4_DIGEST_LENGTH], 
+			 md[MD4_DIGEST_LENGTH];
 	struct timespec	 tv[2];
 
 	/*
@@ -149,11 +144,11 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 	 * metadata, in which case we open our file and wait for data.
 	 */
 
-	if (NULL == p) {
-		if ( ! io_read_int(sess, fd, &idx)) {
+	if (DOWNLOAD_READ_NEXT == p->state) {
+		if ( ! io_read_int(sess, p->fdin, &idx)) {
 			ERRX1(sess, "io_read_int");
 			return -1;
-		} else if (idx >= 0 && (size_t)idx >= flsz) {
+		} else if (idx >= 0 && (size_t)idx >= p->flsz) {
 			ERRX(sess, "index out of bounds");
 			return -1;
 		} else if (idx < 0) {
@@ -172,15 +167,11 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 		 * the map, as block sizes are regular.
 		 */
 
-		if (NULL == (p = download_alloc(sess, idx))) {
-			ERRX(sess, "download_alloc");
-			return -1;
-		} else if ( ! blk_send_ack(sess, fd, &p->blk)) {
+		download_init(sess, p, idx);
+		if ( ! blk_send_ack(sess, p->fdin, &p->blk)) {
 			ERRX1(sess, "blk_send_ack");
 			goto out;
 		}
-
-		*pp = p;
 
 		/* 
 		 * Next, we want to open the existing file for using as
@@ -191,8 +182,9 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 		 * Set the file descriptor that we want to wait for.
 		 */
 
-		f = &fl[idx];
-		p->ofd = openat(rootfd, f->path, 
+		p->state = DOWNLOAD_READ_LOCAL;
+		f = &p->fl[idx];
+		p->ofd = openat(p->rootfd, f->path, 
 			O_RDONLY | O_NONBLOCK, 0);
 
 		if (-1 == p->ofd && ENOENT != errno) {
@@ -206,8 +198,7 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 		/* Fall-through: there's no file. */
 	}
 
-	assert(NULL != p);
-	f = &fl[p->idx];
+	f = &p->fl[p->idx];
 
 	/*
 	 * Next in sequence: we have an open download session but
@@ -216,7 +207,8 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 	 * original file in a nonblocking way, and we can map it.
 	 */
 
-	if (NULL == p->fname) {
+	if (DOWNLOAD_READ_LOCAL == p->state) {
+		assert(NULL == p->fname);
 		if (-1 != p->ofd) {
 			assert(-1 != *ofd);
 			*ofd = -1;
@@ -263,7 +255,7 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 		else
 			perm = f->st.mode;
 
-		p->fd = openat(rootfd, p->fname, 
+		p->fd = openat(p->rootfd, p->fname, 
 			O_WRONLY | O_CREAT | O_EXCL, perm);
 
 		if (-1 == p->fd) {
@@ -280,6 +272,7 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 		 */
 
 		LOG3(sess, "%s: temporary: %s", f->path, p->fname);
+		p->state = DOWNLOAD_READ_REMOTE;
 		return 1;
 	}
 
@@ -292,11 +285,12 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 	 * a token indicator.
 	 */
 
+	assert(DOWNLOAD_READ_REMOTE == p->state);
 	assert(NULL != p->fname);
 	assert(-1 != p->fd);
-	assert(-1 != fd);
+	assert(-1 != p->fdin);
 
-	if ( ! io_read_int(sess, fd, &rawtok)) {
+	if ( ! io_read_int(sess, p->fdin, &rawtok)) {
 		ERRX1(sess, "io_read_int");
 		goto out;
 	} 
@@ -312,7 +306,7 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 			ERR(sess, "realloc");
 			goto out;
 		}
-		if ( ! io_read_buf(sess, fd, buf, sz)) {
+		if ( ! io_read_buf(sess, p->fdin, buf, sz)) {
 			ERRX1(sess, "io_read_int");
 			goto out;
 		}
@@ -377,7 +371,7 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 
 	MD4_Final(ourmd, &p->ctx);
 
-	if ( ! io_read_buf(sess, fd, md, MD4_DIGEST_LENGTH)) {
+	if ( ! io_read_buf(sess, p->fdin, md, MD4_DIGEST_LENGTH)) {
 		ERRX1(sess, "io_read_buf");
 		goto out;
 	} else if (memcmp(md, ourmd, MD4_DIGEST_LENGTH)) {
@@ -399,17 +393,15 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 
 	/* Finally, rename the temporary to the real file. */
 
-	if (-1 == renameat(rootfd, p->fname, rootfd, f->path)) {
+	if (-1 == renameat(p->rootfd, p->fname, p->rootfd, f->path)) {
 		ERR(sess, "%s: renameat: %s", p->fname, f->path);
 		goto out;
 	}
 
 	log_file(sess, p, f);
-	download_free(p, rootfd, 0);
-	*pp = NULL;
+	download_free(p, p->rootfd, 0);
 	return 1;
 out:
-	download_free(p, rootfd, 1);
-	*pp = NULL;
+	download_free(p, p->rootfd, 1);
 	return -1;
 }

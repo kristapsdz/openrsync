@@ -144,10 +144,10 @@ struct	sess {
 };
 
 enum	uploadst {
-	UPLOAD_FIND_NEXT = 0,
-	UPLOAD_WRITE_LOCAL,
-	UPLOAD_READ_LOCAL,
-	UPLOAD_FINISHED
+	UPLOAD_FIND_NEXT = 0, /* find next to upload to sender */
+	UPLOAD_WRITE_LOCAL, /* wait to write to sender */
+	UPLOAD_READ_LOCAL, /* wait to read from local file */
+	UPLOAD_FINISHED /* nothing more to do in phase */
 };
 
 /*
@@ -169,21 +169,32 @@ struct	upload {
 	int		   *newdir; /* non-zero if mkdir'd */
 };
 
+enum	downloadst {
+	DOWNLOAD_READ_NEXT = 0,
+	DOWNLOAD_READ_LOCAL,
+	DOWNLOAD_READ_REMOTE
+};
+
 /*
  * Like struct upload, but used to keep track of what we're downloading.
  * This also is managed by the receiver process.
  */
 struct	download {
-	size_t	 	 idx; /* index of current file */
-	struct blkset	 blk; /* its blocks */
-	void		*map; /* mmap of current file */
-	size_t		 mapsz; /* length of mapsz */
-	int		 ofd; /* open origin file */
-	int		 fd; /* open output file */
-	char		*fname; /* output filename */
-	MD4_CTX	 	 ctx; /* current hashing context */
-	off_t		 downloaded; /* total downloaded */
-	off_t		 total; /* total in file */
+	enum downloadst	    state; /* state of affairs */
+	size_t	 	    idx; /* index of current file */
+	struct blkset	    blk; /* its blocks */
+	void		   *map; /* mmap of current file */
+	size_t		    mapsz; /* length of mapsz */
+	int		    ofd; /* open origin file */
+	int		    fd; /* open output file */
+	char		   *fname; /* output filename */
+	MD4_CTX	 	    ctx; /* current hashing context */
+	off_t		    downloaded; /* total downloaded */
+	off_t		    total; /* total in file */
+	const struct flist *fl; /* file list */
+	size_t		    flsz; /* size of file list */
+	int		    rootfd; /* destination directory */
+	int		    fdin; /* read descriptor from sender */
 };
 
 #define LOG0(_sess, _fmt, ...) \
@@ -210,8 +221,6 @@ struct	download {
 	rsync_err((_sess), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
 #define ERRX(_sess, _fmt, ...) \
 	rsync_errx((_sess), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
-
-struct download;
 
 __BEGIN_DECLS
 
@@ -288,8 +297,8 @@ int		  rsync_sender(struct sess *, int, int, size_t, char **);
 int		  rsync_client(const struct opts *, int, const struct fargs *);
 int		  rsync_socket(const struct opts *, const struct fargs *);
 int		  rsync_server(const struct opts *, size_t, char *[]);
-int		  rsync_downloader(int, int, struct download **, 
-			const struct flist *, size_t, struct sess *, int *);
+int		  rsync_downloader(struct download *, 
+			struct sess *, int *);
 int		  rsync_uploader(struct upload *, 
 			int *, struct sess *, int *);
 
