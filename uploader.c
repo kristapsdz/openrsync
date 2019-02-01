@@ -388,38 +388,54 @@ post_dir(struct sess *sess, const struct upload *u, size_t idx)
 }
 
 /*
+ * Try to open the file at the current index.
+ * If the file does not exist, returns with success.
  * Return <0 on failure, 0 on success w/nothing to be done, >0 on
  * success and the file needs attention.
  */
 static int
-pre_file(int fd, int rootfd, int *filefd, 
-	size_t idx, const struct flist *f, struct sess *sess)
+pre_file(const struct upload *p, int *filefd, struct sess *sess)
 {
+	const struct flist *f;
+
+	f = &p->fl[p->idx];
+	assert(S_ISREG(f->st.mode));
 
 	if (sess->opts->dry_run) {
 		log_file(sess, f);
-		if ( ! io_write_int(sess, fd, idx)) {
+		if ( ! io_write_int(sess, p->fdout, p->idx)) {
 			ERRX1(sess, "io_write_int");
 			return -1;
 		}
 		return 0;
 	}
 
-	*filefd = openat(rootfd, f->path,
+	/*
+	 * For non dry-run cases, we'll write the acknowledgement later
+	 * in the rsync_uploader() function because we need to wait for
+	 * the open() call to complete.
+	 * If the call to openat() fails with ENOENT, there's a
+	 * fast-path between here and the write function, so we won't do
+	 * any blocking between now and then.
+	 */
+
+	*filefd = openat(p->rootfd, f->path,
 		O_RDONLY | O_NOFOLLOW | O_NONBLOCK, 0);
-
-	/* FIXME: check that we're a regular file still. */
-
 	if (-1 != *filefd || ENOENT == errno)
 		return 1;
-
 	ERR(sess, "%s: openat", f->path);
 	return -1;
 }
 
+/*
+ * We've finished with all files in the set.
+ * Write the phase-change notice, mark the uploader as finished, clear
+ * the descriptors we're waiting on, and return.
+ * Returns zero on success and <0 on failure.
+ * See rsync_uploader() on why these return values are chosen.
+ */
 static int
-finished(struct upload *u, 
-	struct sess *sess, int *fileinfd, int *fileoutfd)
+finished(struct upload *u, struct sess *sess, int *fin, int *fout)
 {
 
 	if ( ! io_write_int(sess, u->fdout, -1)) {
@@ -427,16 +443,20 @@ finished(struct upload *u,
 		return -1;
 	}
 
-	*fileoutfd = *fileoutfd = -1;
+	*fin = *fout = -1;
 	u->state = UPLOAD_FINISHED;
 	LOG4(sess, "uploader: finished");
 	return 0;
 }
 
+/*
+ * Allocate an uploader object in the correct state to start.
+ * Returns NULL on failure or the pointer otherwise.
+ * On success, upload_free() must be called with the allocated pointer.
+ */
 struct upload *
 upload_alloc(struct sess *sess, int rootfd, int fdout, 
-	size_t csumlen, const struct flist *fl, size_t flsz,
-	mode_t oumask)
+	size_t clen, const struct flist *fl, size_t flsz, mode_t msk)
 {
 	struct upload	*p;
 
@@ -446,9 +466,9 @@ upload_alloc(struct sess *sess, int rootfd, int fdout,
 	}
 
 	p->state = UPLOAD_FIND_NEXT;
-	p->oumask = oumask;
+	p->oumask = msk;
 	p->rootfd = rootfd;
-	p->csumlen = csumlen;
+	p->csumlen = clen;
 	p->fdout = fdout;
 	p->fl = fl;
 	p->flsz = flsz;
@@ -461,6 +481,10 @@ upload_alloc(struct sess *sess, int rootfd, int fdout,
 	return p;
 }
 
+/*
+ * Perform all cleanups and free.
+ * Passing a NULL to this function is ok.
+ */
 void
 upload_free(struct upload *p)
 {
@@ -566,9 +590,7 @@ rsync_uploader(struct upload *u, int *fileinfd,
 				c = pre_link(sess, 
 					u->rootfd, &u->fl[u->idx]);
 			else if (S_ISREG(u->fl[u->idx].st.mode))
-				c = pre_file(u->fdout, u->rootfd, 
-					fileinfd, u->idx, 
-					&u->fl[u->idx], sess);
+				c = pre_file(u, fileinfd, sess);
 			else
 				c = 0;
 
