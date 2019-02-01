@@ -138,6 +138,7 @@ struct	sess {
 	int32_t		   seed; /* checksum seed */
 	int32_t		   lver; /* local version */
 	int32_t		   rver; /* remote version */
+	uint64_t	   total_size; /* total file size */
 	int		   mplex_reads; /* multiplexing reads? */
 	size_t		   mplex_read_remain; /* remaining bytes */
 	int		   mplex_writes; /* multiplexing writes? */
