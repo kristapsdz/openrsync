@@ -158,6 +158,7 @@ download_cleanup(struct download *p, int cleanup)
  * Initial allocation of the download object using the file list "fl" of
  * size "flsz", the destination "rootfd", and the sender read "fdin".
  * Returns NULL on allocation failure.
+ * On success, download_free() must be called with the pointer.
  */
 struct download *
 download_alloc(struct sess *sess, int fdin, 
@@ -179,6 +180,10 @@ download_alloc(struct sess *sess, int fdin,
 	return p;
 }
 
+/*
+ * Perform all cleanups (including removing stray files) and free.
+ * Passing a NULL to this function is ok.
+ */
 void
 download_free(struct download *p)
 {
