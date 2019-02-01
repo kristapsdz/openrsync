@@ -1,22 +1,11 @@
 This is a list of possible work projects within openrsync, rated by difficulty.
 
-First, let's get porting out of the way.
-As noted many times before, porting-to-compile is trivially easy, and
-also insufficient: any port **must** have system-specific security
-features in place.
-Remember that rsync has specific modes to be run as root, and
-effectively dumps arbitrary network data into your file system.
-On [OpenBSD](https://www.openbsd.org),
-[unveil(2)](https://man.openbsd.org/unveil.2) and
-[pledge(2)](https://man.openbsd.org/pledge.2) take care of these
-security concerns.
-All operating systems have similar facilities, but these require
-delicate programming.
-See
-[Porting](https://github.com/kristapsdz/openrsync/blob/master/README.md#porting)
-for more information.
+First, porting: see
+[Porting](https://github.com/kristapsdz/openrsync/blob/master/README.md#Portability)
+for information on this topic.
+I've included the specific security porting topics below.
 
-This list does not include adding support for features (e.g., **-u** and
+This list also does not include adding support for features (e.g., **-u** and
 so on).
 
 - Easy: add a hashtable to `blk_find()` in 
@@ -46,6 +35,9 @@ so on).
   [Capsicum](https://wiki.freebsd.org/Capsicum).
   Without this in place, you're exposing your file-system to whatever is
   coming down over the wire.
+  This is certainly possible, as openrsync makes exclusive use of the "at"
+  functions (e.g., [openat(2)](https://man.openbsd.org/openat.2)) for working
+  with files.
 
 - Hard: the same, but for Linux.
 
