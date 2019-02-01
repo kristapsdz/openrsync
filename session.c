@@ -24,52 +24,19 @@
 #include "extern.h"
 
 /*
- * TODO.
+ * Accept how much we've read, written, and file-size, and print them in
+ * a human-readable fashion (with GB, MB, etc. prefixes).
+ * This only prints as the client.
  */
-int
-sess_stats_send(struct sess *sess, int fd)
+static void
+stats_log(struct sess *sess, size_t tread, size_t twrite, size_t tsize)
 {
-
-	assert(sess->opts->server);
-
-	if ( ! io_write_int(sess, fd, 10)) {
-		ERRX1(sess, "io_write_int: total read");
-		return 0;
-	} else if ( ! io_write_int(sess, fd, 20)) {
-		ERRX1(sess, "io_write_int: total write");
-		return 0;
-	} else if ( ! io_write_int(sess, fd, 30)) {
-		ERRX1(sess, "io_write_int: total size");
-		return 0;
-	}
-
-	return 1;
-}
-
-/*
- * At the end of the transmission, we have some statistics to read.
- * Return zero on failure, non-zero on success.
- */
-int
-sess_stats_recv(struct sess *sess, int fd)
-{
-	size_t	 	 tread, twrite, tsize;
 	float		 tr, tw, ts;
 	const char	*tru = "B", *twu = "B", *tsu = "B";
 	int		 trsz = 0, twsz = 0, tssz = 0;
 
-	assert( ! sess->opts->server);
-
-	if ( ! io_read_size(sess, fd, &tread)) {
-		ERRX1(sess, "io_read_size: total read");
-		return 0;
-	} else if ( ! io_read_size(sess, fd, &twrite)) {
-		ERRX1(sess, "io_read_size: total write");
-		return 0;
-	} else if ( ! io_read_size(sess, fd, &tsize)) {
-		ERRX1(sess, "io_read_size: total size");
-		return 0;
-	}
+	if (sess->opts->server)
+		return;
 
 	if (tread >= 1024 * 1024 * 1024) {
 		tr = tread / (1024.0 * 1024.0 * 1024.0);
@@ -123,6 +90,62 @@ sess_stats_recv(struct sess *sess, int fd)
 		trsz, tr, tru, 
 		twsz, tw, twu, 
 		tssz, ts, tsu);
+}
+
+/*
+ * TODO.
+ */
+int
+sess_stats_send(struct sess *sess, int fd)
+{
+	size_t	 tread, twrite, tsize;
+
+	tread = 10;
+	twrite = 20;
+	tsize = 30;
+
+	if (sess->opts->server) {
+		if ( ! io_write_int(sess, fd, tread)) {
+			ERRX1(sess, "io_write_int");
+			return 0;
+		} else if ( ! io_write_int(sess, fd, twrite)) {
+			ERRX1(sess, "io_write_int");
+			return 0;
+		} else if ( ! io_write_int(sess, fd, tsize)) {
+			ERRX1(sess, "io_write_int");
+			return 0;
+		}
+	}
+
+	stats_log(sess, tread, twrite, tsize);
+	return 1;
+}
+
+/*
+ * At the end of the transmission, we have some statistics to read.
+ * Return zero on failure, non-zero on success.
+ */
+int
+sess_stats_recv(struct sess *sess, int fd)
+{
+	size_t	 	 tread, twrite, tsize;
+
+	if (sess->opts->server)
+		return 1;
+
+	if ( ! io_read_size(sess, fd, &tread)) {
+		ERRX1(sess, "io_read_size");
+		return 0;
+	} else if ( ! io_read_size(sess, fd, &twrite)) {
+		ERRX1(sess, "io_read_size");
+		return 0;
+	} else if ( ! io_read_size(sess, fd, &tsize)) {
+		ERRX1(sess, "io_read_size");
+		return 0;
+	}
+
+	/* Note we flip around read/write. */
+	stats_log(sess, twrite, tread, tsize);
 	return 1;
 }
 
