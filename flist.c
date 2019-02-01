@@ -100,7 +100,7 @@ flist_dedupe(struct sess *sess, struct flist **fl, size_t *sz)
 		if (0 == strcmp(f->path, fnext->path)) {
 			new[j++] = *f;
 			i++;
-			WARNX(sess, "duplicate path: %s (%s)",
+			WARNX(sess, "%s: duplicate path: %s",
 				f->wpath, f->path);
 			free(fnext->path);
 			free(fnext->link);
@@ -108,8 +108,8 @@ flist_dedupe(struct sess *sess, struct flist **fl, size_t *sz)
 			continue;
 		}
 
-		ERRX(sess, "duplicate working path for "
-			"possibly different file: %s: %s, %s",
+		ERRX(sess, "%s: duplicate working path for "
+			"possibly different file: %s, %s",
 			f->wpath, f->path, fnext->path);
 		free(new);
 		return 0;
@@ -150,20 +150,20 @@ flist_fts_check(struct sess *sess, FTSENT *ent)
 		return 1;
 
 	if (FTS_DC == ent->fts_info) {
-		WARNX(sess, "directory cycle: %s", ent->fts_path);
+		WARNX(sess, "%s: directory cycle", ent->fts_path);
 	} else if (FTS_DNR == ent->fts_info) {
 		errno = ent->fts_errno;
-		WARN(sess, "unreadable directory: %s", ent->fts_path);
+		WARN(sess, "%s: unreadable directory", ent->fts_path);
 	} else if (FTS_DOT == ent->fts_info) {
-		WARNX(sess, "skipping dot-file: %s", ent->fts_path);
+		WARNX(sess, "%s: skipping dot-file", ent->fts_path);
 	} else if (FTS_ERR == ent->fts_info) {
 		errno = ent->fts_errno;
 		WARN(sess, "%s", ent->fts_path);
 	} else if (FTS_DEFAULT == ent->fts_info) {
-		WARNX(sess, "skipping special: %s", ent->fts_path);
+		WARNX(sess, "%s: skipping special", ent->fts_path);
 	} else if (FTS_NS == ent->fts_info) {
 		errno = ent->fts_errno;
-		WARN(sess, "could not stat: %s", ent->fts_path);
+		WARN(sess, "%s: could not stat", ent->fts_path);
 	}
 
 	return 0;
@@ -246,30 +246,31 @@ flist_send(struct sess *sess, int fdin,
 
 		flag = FLIST_NAME_LONG;
 
-		LOG3(sess, "sending file metadata: %s "
-			"(size %jd, mtime %jd, mode %o)",
+		LOG3(sess, "%s: sending file metadata: "
+			"size %jd, mtime %jd, mode %o",
 			fn, (intmax_t)f->st.size,
 			(intmax_t)f->st.mtime, f->st.mode);
 
 		/* Now write to the wire. */
+		/* FIXME: buffer this. */
 
 		if ( ! io_write_byte(sess, fdout, flag)) {
-			ERRX1(sess, "io_write_byte: flags");
+			ERRX1(sess, "io_write_byte");
 			return 0;
 		} else if ( ! io_write_int(sess, fdout, fnlen)) {
-			ERRX1(sess, "io_write_int: filename length");
+			ERRX1(sess, "io_write_int");
 			return 0;
 		} else if ( ! io_write_buf(sess, fdout, fn, fnlen)) {
-			ERRX1(sess, "io_write_buf: filename");
+			ERRX1(sess, "io_write_buf");
 			return 0;
 		} else if ( ! io_write_long(sess, fdout, f->st.size)) {
-			ERRX1(sess, "io_write_long: file size");
+			ERRX1(sess, "io_write_long");
 			return 0;
 		} else if ( ! io_write_int(sess, fdout, f->st.mtime)) {
-			ERRX1(sess, "io_write_int: file mtime");
+			ERRX1(sess, "io_write_int");
 			return 0;
 		} else if ( ! io_write_int(sess, fdout, f->st.mode)) {
-			ERRX1(sess, "io_write_int: file mode");
+			ERRX1(sess, "io_write_int");
 			return 0;
 		}
 
@@ -280,18 +281,18 @@ flist_send(struct sess *sess, int fdin,
 			fn = f->link;
 			fnlen = strlen(f->link);
 			if ( ! io_write_int(sess, fdout, fnlen)) {
-				ERRX1(sess, "io_write_int: link size");
+				ERRX1(sess, "io_write_int");
 				return 0;
 			}
 			if ( ! io_write_buf(sess, fdout, fn, fnlen)) {
-				ERRX1(sess, "io_write_int: link");
+				ERRX1(sess, "io_write_int");
 				return 0;
 			}
 		}
 	}
 
 	if ( ! io_write_byte(sess, fdout, 0)) {
-		ERRX1(sess, "io_write_byte: zero flag");
+		ERRX1(sess, "io_write_byte");
 		return 0;
 	}
 
@@ -324,8 +325,7 @@ flist_recv_name(struct sess *sess, int fd,
 
 	if (FLIST_NAME_SAME & flags) {
 		if ( ! io_read_byte(sess, fd, &bval)) {
-			ERRX1(sess, "io_read_byte: "
-				"filename partial length");
+			ERRX1(sess, "io_read_byte");
 			return 0;
 		}
 		partial = bval;
@@ -335,14 +335,12 @@ flist_recv_name(struct sess *sess, int fd,
 
 	if (FLIST_NAME_LONG & flags) {
 		if ( ! io_read_size(sess, fd, &pathlen)) {
-			ERRX1(sess, "io_read_size: "
-				"filename length");
+			ERRX1(sess, "io_read_size");
 			return 0;
 		}
 	} else {
 		if ( ! io_read_byte(sess, fd, &bval)) {
-			ERRX1(sess, "io_read_byte: "
-				"filename length");
+			ERRX1(sess, "io_read_byte");
 			return 0;
 		}
 		pathlen = bval;
@@ -367,7 +365,7 @@ flist_recv_name(struct sess *sess, int fd,
 		memcpy(f->path, last, partial);
 
 	if ( ! io_read_buf(sess, fd, f->path + partial, pathlen)) {
-		ERRX1(sess, "io_read_buf: filename");
+		ERRX1(sess, "io_read_buf");
 		return 0;
 	}
 
@@ -381,8 +379,8 @@ flist_recv_name(struct sess *sess, int fd,
 	    (len > 2 && 0 == strcmp(f->path + len - 3, "/..")) ||
 	    (len > 2 && 0 == strncmp(f->path, "../", 3)) ||
 	    0 == strcmp(f->path, "..")) {
-		ERRX(sess, "security violation: "
-			"backtracking pathname: %s", f->path);
+		ERRX(sess, "%s: security violation: "
+			"backtracking pathname", f->path);
 		return 0;
 	}
 
@@ -487,7 +485,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 
 	for (;;) {
 		if ( ! io_read_byte(sess, fd, &flag)) {
-			ERRX1(sess, "io_read_byte: flags");
+			ERRX1(sess, "io_read_byte");
 			goto out;
 		} else if (0 == flag)
 			break;
@@ -510,7 +508,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 		/* Read the file size. */
 
 		if ( ! io_read_long(sess, fd, &lval)) {
-			ERRX1(sess, "io_read_long: file size");
+			ERRX1(sess, "io_read_long");
 			goto out;
 		} else if (lval < 0) {
 			ERRX(sess, "negative file size");
@@ -522,7 +520,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 
 		if ( ! (FLIST_TIME_SAME & flag)) {
 			if ( ! io_read_int(sess, fd, &ival)) {
-				ERRX1(sess, "io_read_int: file mtime");
+				ERRX1(sess, "io_read_int");
 				goto out;
 			}
 			ff->st.mtime = ival;
@@ -536,7 +534,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 
 		if ( ! (FLIST_MODE_SAME & flag)) {
 			if ( ! io_read_int(sess, fd, &ival)) {
-				ERRX1(sess, "io_read_int: file mode");
+				ERRX1(sess, "io_read_int");
 				goto out;
 			}
 			ff->st.mode = ival;
@@ -551,7 +549,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 		if (S_ISLNK(ff->st.mode) &&
 		    sess->opts->preserve_links) {
 			if ( ! io_read_size(sess, fd, &lsz)) {
-				ERRX1(sess, "io_read_size: link size");
+				ERRX1(sess, "io_read_size");
 				goto out;
 			} else if (0 == lsz) {
 				ERRX(sess, "empty link name");
@@ -563,13 +561,13 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 				goto out;
 			}
 			if ( ! io_read_buf(sess, fd, ff->link, lsz)) {
-				ERRX1(sess, "io_read_buf: link");
+				ERRX1(sess, "io_read_buf");
 				goto out;
 			}
 		}
 
-		LOG3(sess, "received file metadata: %s "
-			"(size %jd, mtime %jd, mode %o)",
+		LOG3(sess, "%s: received file metadata: "
+			"size %jd, mtime %jd, mode %o",
 			ff->path, (intmax_t)ff->st.size,
 			(intmax_t)ff->st.mtime, ff->st.mode);
 	}
@@ -615,7 +613,7 @@ flist_gen_dirent(struct sess *sess, char *root,
 	 */
 
 	if (-1 == lstat(root, &st)) {
-		ERR(sess, "lstat: %s", root);
+		ERR(sess, "%s: lstat", root);
 		return 0;
 	} else if (S_ISREG(st.st_mode)) {
 		if ( ! flist_realloc(sess, fl, sz, max)) {
@@ -629,13 +627,13 @@ flist_gen_dirent(struct sess *sess, char *root,
 			ERRX1(sess, "flist_append");
 			return 0;
 		} else if (-1 == unveil(root, "r")) {
-			ERR(sess, "unveil: %s", root);
+			ERR(sess, "%s: unveil", root);
 			return 0;
 		}
 		return 1;
 	} else if (S_ISLNK(st.st_mode)) {
 		if ( ! sess->opts->preserve_links) {
-			WARNX(sess, "skipping symlink: %s", root);
+			WARNX(sess, "%s: skipping symlink", root);
 			return 1;
 		} else if ( ! flist_realloc(sess, fl, sz, max)) {
 			ERRX1(sess, "flist_realloc");
@@ -648,12 +646,12 @@ flist_gen_dirent(struct sess *sess, char *root,
 			ERRX1(sess, "flist_append");
 			return 0;
 		} else if (-1 == unveil(root, "r")) {
-			ERR(sess, "unveil: %s", root);
+			ERR(sess, "%s: unveil", root);
 			return 0;
 		}
 		return 1;
 	} else if ( ! S_ISDIR(st.st_mode)) {
-		WARNX(sess, "skipping special: %s", root);
+		WARNX(sess, "%s: skipping special", root);
 		return 1;
 	}
 
@@ -702,8 +700,8 @@ flist_gen_dirent(struct sess *sess, char *root,
 		assert(NULL != ent->fts_statp);
 		if (S_ISLNK(ent->fts_statp->st_mode) &&
 		    ! sess->opts->preserve_links) {
-			WARNX(sess, "skipping "
-				"symlink: %s", ent->fts_path);
+			WARNX(sess, "%s: skipping "
+				"symlink", ent->fts_path);
 			continue;
 		}
 
@@ -751,7 +749,7 @@ flist_gen_dirent(struct sess *sess, char *root,
 		ERR(sess, "fts_read");
 		goto out;
 	} else if (-1 == unveil(root, "r")) {
-		ERR(sess, "unveil: %s", root);
+		ERR(sess, "%s: unveil", root);
 		goto out;
 	}
 
@@ -816,7 +814,7 @@ flist_gen_files(struct sess *sess, size_t argc,
 		if ('\0' == argv[i][0])
 			continue;
 		if (-1 == lstat(argv[i], &st)) {
-			ERR(sess, "lstat: %s", argv[i]);
+			ERR(sess, "%s: lstat", argv[i]);
 			goto out;
 		}
 
@@ -828,16 +826,16 @@ flist_gen_files(struct sess *sess, size_t argc,
 		 */
 
 		if (S_ISDIR(st.st_mode)) {
-			WARNX(sess, "skipping directory: %s", argv[i]);
+			WARNX(sess, "%s: skipping directory", argv[i]);
 			continue;
 		} else if (S_ISLNK(st.st_mode)) {
 			if ( ! sess->opts->preserve_links) {
-				WARNX(sess, "skipping "
-					"symlink: %s", argv[i]);
+				WARNX(sess, "%s: skipping "
+					"symlink", argv[i]);
 				continue;
 			}
 		} else if ( ! S_ISREG(st.st_mode)) {
-			WARNX(sess, "skipping special: %s", argv[i]);
+			WARNX(sess, "%s: skipping special", argv[i]);
 			continue;
 		}
 
@@ -847,7 +845,7 @@ flist_gen_files(struct sess *sess, size_t argc,
 		/* Add this file to our file-system worldview. */
 
 		if (-1 == unveil(argv[i], "r")) {
-			ERR(sess, "unveil: %s", argv[i]);
+			ERR(sess, "%s: unveil", argv[i]);
 			goto out;
 		} else if ( ! flist_append(sess, f, &st, argv[i])) {
 			ERRX1(sess, "flist_append");
@@ -1054,7 +1052,7 @@ flist_del(struct sess *sess, int root,
 			if (k < wantsz)
 				continue;
 
-			LOG1(sess, "deleting: %s", have[j].wpath);
+			LOG1(sess, "%s: deleting", have[j].wpath);
 
 			if (sess->opts->dry_run)
 				continue;
@@ -1063,7 +1061,7 @@ flist_del(struct sess *sess, int root,
 			fl = S_ISDIR(have[j].st.mode) ? AT_REMOVEDIR : 0;
 			if (-1 == unlinkat(root, have[j].wpath, fl) &&
 			    ENOENT != errno) {
-				ERR(sess, "unlinkat: %s", have[j].wpath);
+				ERR(sess, "%s: unlinkat", have[j].wpath);
 				return 0;
 			}
 		}

@@ -48,13 +48,13 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 	sess.lver = RSYNC_PROTOCOL;
 
 	if ( ! io_write_int(&sess, fd, sess.lver)) {
-		ERRX1(&sess, "io_write_int: version");
+		ERRX1(&sess, "io_write_int");
 		goto out;
 	} else if ( ! io_read_int(&sess, fd, &sess.rver)) {
-		ERRX1(&sess, "io_read_int: version");
+		ERRX1(&sess, "io_read_int");
 		goto out;
 	} else if ( ! io_read_int(&sess, fd, &sess.seed)) {
-		ERRX1(&sess, "io_read_int: seed");
+		ERRX1(&sess, "io_read_int");
 		goto out;
 	}
 

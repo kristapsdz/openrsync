@@ -306,14 +306,14 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 
 	(void)snprintf(buf, sizeof(buf), "@RSYNCD: %d", sess.lver);
 	if ( ! io_write_line(&sess, sd, buf)) {
-		ERRX1(&sess, "io_write_line: rsyncd version");
+		ERRX1(&sess, "io_write_line");
 		goto out;
 	}
 
 	LOG2(&sess, "requesting module: %s, %s", f->module, f->host);
 
 	if ( ! io_write_line(&sess, sd, f->module)) {
-		ERRX1(&sess, "io_write_line: rsyncd module");
+		ERRX1(&sess, "io_write_line");
 		goto out;
 	}
 
@@ -328,8 +328,7 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 	for (;;) {
 		for (i = 0; i < sizeof(buf); i++) {
 			if ( ! io_read_byte(&sess, sd, &byte)) {
-				ERRX1(&sess, "io_read_byte: "
-					"rsyncd preamble line");
+				ERRX1(&sess, "io_read_byte");
 				goto out;
 			}
 			if ('\n' == (buf[i] = byte))
@@ -375,11 +374,11 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 
 	for ( ; NULL != args[i]; i++)
 		if ( ! io_write_line(&sess, sd, args[i])) {
-			ERRX1(&sess, "io_write_line: arguments");
+			ERRX1(&sess, "io_write_line");
 			goto out;
 		}
 	if ( ! io_write_byte(&sess, sd, '\n')) {
-		ERRX1(&sess, "io_write_line: argument terminator");
+		ERRX1(&sess, "io_write_line");
 		goto out;
 	}
 
@@ -391,7 +390,7 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 	/* Protocol exchange: get the random seed. */
 
 	if ( ! io_read_int(&sess, sd, &sess.seed)) {
-		ERRX1(&sess, "io_read_int: seed");
+		ERRX1(&sess, "io_read_int");
 		goto out;
 	}
 

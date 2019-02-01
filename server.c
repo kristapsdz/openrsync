@@ -74,13 +74,13 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 	sess.seed = arc4random();
 
 	if ( ! io_read_int(&sess, fdin, &sess.rver)) {
-		ERRX1(&sess, "io_read_int: version");
+		ERRX1(&sess, "io_read_int");
 		goto out;
 	} else if ( ! io_write_int(&sess, fdout, sess.lver)) {
-		ERRX1(&sess, "io_write_int: version");
+		ERRX1(&sess, "io_write_int");
 		goto out;
 	} else if ( ! io_write_int(&sess, fdout, sess.seed)) {
-		ERRX1(&sess, "io_write_int: seed");
+		ERRX1(&sess, "io_write_int");
 		goto out;
 	}
 
