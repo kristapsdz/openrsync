@@ -29,9 +29,10 @@
  * This only prints as the client.
  */
 static void
-stats_log(struct sess *sess, size_t tread, size_t twrite, size_t tsize)
+stats_log(struct sess *sess, 
+	uint64_t tread, uint64_t twrite, uint64_t tsize)
 {
-	float		 tr, tw, ts;
+	double		 tr, tw, ts;
 	const char	*tru = "B", *twu = "B", *tsu = "B";
 	int		 trsz = 0, twsz = 0, tssz = 0;
 
@@ -84,9 +85,9 @@ stats_log(struct sess *sess, size_t tread, size_t twrite, size_t tsize)
 		ts = tsize;
 
 	LOG1(sess, "Transfer complete: "
-		"%.*f %s sent, "
-		"%.*f %s read, "
-		"%.*f %s file size",
+		"%.*lf %s sent, "
+		"%.*lf %s read, "
+		"%.*lf %s file size",
 		trsz, tr, tru, 
 		twsz, tw, twu, 
 		tssz, ts, tsu);
@@ -98,21 +99,21 @@ stats_log(struct sess *sess, size_t tread, size_t twrite, size_t tsize)
 int
 sess_stats_send(struct sess *sess, int fd)
 {
-	size_t	 tread, twrite, tsize;
+	uint64_t tread, twrite, tsize;
 
 	tread = 10;
 	twrite = 20;
 	tsize = 30;
 
 	if (sess->opts->server) {
-		if ( ! io_write_int(sess, fd, tread)) {
-			ERRX1(sess, "io_write_int");
+		if ( ! io_write_long(sess, fd, tread)) {
+			ERRX1(sess, "io_write_long");
 			return 0;
-		} else if ( ! io_write_int(sess, fd, twrite)) {
-			ERRX1(sess, "io_write_int");
+		} else if ( ! io_write_long(sess, fd, twrite)) {
+			ERRX1(sess, "io_write_long");
 			return 0;
-		} else if ( ! io_write_int(sess, fd, tsize)) {
-			ERRX1(sess, "io_write_int");
+		} else if ( ! io_write_long(sess, fd, tsize)) {
+			ERRX1(sess, "io_write_long");
 			return 0;
 		}
 	}
@@ -128,19 +129,19 @@ sess_stats_send(struct sess *sess, int fd)
 int
 sess_stats_recv(struct sess *sess, int fd)
 {
-	size_t	 	 tread, twrite, tsize;
+	uint64_t tread, twrite, tsize;
 
 	if (sess->opts->server)
 		return 1;
 
-	if ( ! io_read_size(sess, fd, &tread)) {
-		ERRX1(sess, "io_read_size");
+	if ( ! io_read_ulong(sess, fd, &tread)) {
+		ERRX1(sess, "io_read_ulong");
 		return 0;
-	} else if ( ! io_read_size(sess, fd, &twrite)) {
-		ERRX1(sess, "io_read_size");
+	} else if ( ! io_read_ulong(sess, fd, &twrite)) {
+		ERRX1(sess, "io_read_ulong");
 		return 0;
-	} else if ( ! io_read_size(sess, fd, &tsize)) {
-		ERRX1(sess, "io_read_size");
+	} else if ( ! io_read_ulong(sess, fd, &tsize)) {
+		ERRX1(sess, "io_read_ulong");
 		return 0;
 	}
 
