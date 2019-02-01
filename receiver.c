@@ -40,75 +40,6 @@ enum	pfdt {
 	PFD__MAX
 };
 
-/*
- * We need to process our directories in post-order.
- * This is because touching files within the directory will change the
- * directory file; and also, if our mode is not writable, we wouldn't be
- * able to write to that directory!
- * Returns zero on failure, non-zero on success.
- * FIXME: put in uploader.c.
- */
-static int
-post_dir(struct sess *sess, int root, const struct flist *f, int newdir)
-{
-	struct timespec	 tv[2];
-	int		 rc;
-	struct stat	 st;
-
-	/* We already warned about the directory in pre_process_dir(). */
-
-	if ( ! sess->opts->recursive)
-		return 1;
-	else if (sess->opts->dry_run)
-		return 1;
-
-	if (-1 == fstatat(root, f->path, &st, AT_SYMLINK_NOFOLLOW)) {
-		ERR(sess, "%s: fstatat", f->path);
-		return 0;
-	} else if ( ! S_ISDIR(st.st_mode)) {
-		WARNX(sess, "%s: not a directory", f->path);
-		return 0;
-	}
-
-	/* 
-	 * Update the modification time if we're a new directory *or* if
-	 * we're preserving times and the time has changed.
-	 */
-
-	if (newdir || 
-	    (sess->opts->preserve_times && 
-	     st.st_mtime != f->st.mtime)) {
-		tv[0].tv_sec = time(NULL);
-		tv[0].tv_nsec = 0;
-		tv[1].tv_sec = f->st.mtime;
-		tv[1].tv_nsec = 0;
-		rc = utimensat(root, f->path, tv, 0);
-		if (-1 == rc) {
-			ERR(sess, "%s: utimensat", f->path);
-			return 0;
-		}
-		LOG4(sess, "%s: updated date", f->path);
-	}
-
-	/*
-	 * Update the mode if we're a new directory *or* if we're
-	 * preserving modes and it has changed.
-	 */
-
-	if (newdir || 
-	    (sess->opts->preserve_perms &&
-	     st.st_mode != f->st.mode)) {
-		rc = fchmodat(root, f->path, f->st.mode, 0);
-		if (-1 == rc) {
-			ERR(sess, "%s: fchmodat", f->path);
-			return 0;
-		}
-		LOG4(sess, "%s: updated mode", f->path);
-	}
-
-	return 1;
-}
-
 /* 
  * Pledges: unveil, rpath, cpath, wpath, stdio, fattr.
  * Pledges (dry-run): -cpath, -wpath, -fattr.
@@ -118,15 +49,14 @@ rsync_receiver(struct sess *sess,
 	int fdin, int fdout, const char *root)
 {
 	struct flist	*fl = NULL, *dfl = NULL;
-	size_t		 i, j, flsz = 0, dflsz = 0;
+	size_t		 i, flsz = 0, dflsz = 0;
 	char		*tofree;
 	int		 rc = 0, dfd = -1, phase = 0, c;
 	int32_t	 	 ioerror;
 	struct pollfd	 pfd[PFD__MAX];
 	struct download	*dl = NULL;
-	struct upload 	 ul;
-
-	memset(&ul, 0, sizeof(struct upload));
+	struct upload 	*ul = NULL;
+	mode_t		 oumask;
 
 	if (-1 == pledge("unveil rpath cpath wpath stdio fattr", NULL)) {
 		ERR(sess, "pledge");
@@ -190,7 +120,7 @@ rsync_receiver(struct sess *sess,
 	 * Then open the directory iff we're not in dry_run.
 	 */
 
-	ul.oumask = umask(0);
+	oumask = umask(0);
 
 	if ( ! sess->opts->dry_run) {
 		dfd = open(root, O_RDONLY | O_DIRECTORY, 0);
@@ -248,14 +178,10 @@ rsync_receiver(struct sess *sess,
 	pfd[PFD_DOWNLOADER_IN].events = POLLIN;
 	pfd[PFD_SENDER_OUT].events = POLLOUT;
 
-	ul.rootfd = dfd;
-	ul.csumlen = CSUM_LENGTH_PHASE1;
-	ul.fdout = fdout;
-	ul.fl = fl;
-	ul.flsz = flsz;
-	ul.newdir = calloc(flsz, sizeof(int));
-	if (NULL == ul.newdir) {
-		ERR(sess, "calloc");
+	ul = upload_alloc(sess, dfd, fdout, 
+		CSUM_LENGTH_PHASE1, fl, flsz, oumask);
+	if (NULL == ul) {
+		ERRX1(sess, "upload_alloc");
 		goto out;
 	}
 
@@ -273,11 +199,11 @@ rsync_receiver(struct sess *sess,
 			goto out;
 		} 
 
-		for (j = 0; j < PFD__MAX; j++) 
-			if (pfd[j].revents & (POLLERR|POLLNVAL)) {
+		for (i = 0; i < PFD__MAX; i++) 
+			if (pfd[i].revents & (POLLERR|POLLNVAL)) {
 				ERRX(sess, "poll: bad fd");
 				goto out;
-			} else if (pfd[j].revents & POLLHUP) {
+			} else if (pfd[i].revents & POLLHUP) {
 				ERRX(sess, "poll: hangup");
 				goto out;
 			}
@@ -309,7 +235,7 @@ rsync_receiver(struct sess *sess,
 
 		if ((POLLIN & pfd[PFD_UPLOADER_IN].revents) ||
 		    (POLLOUT & pfd[PFD_SENDER_OUT].revents)) {
-			c = rsync_uploader(&ul, 
+			c = rsync_uploader(ul, 
 				&pfd[PFD_UPLOADER_IN].fd, 
 				sess, &pfd[PFD_SENDER_OUT].fd);
 			if (c < 0) {
@@ -352,17 +278,6 @@ rsync_receiver(struct sess *sess,
 		} 
 	}
 
-	/* Fix up the directory permissions and times post-order. */
-
-	if (sess->opts->preserve_times ||
-	    sess->opts->preserve_perms)
-		for (i = 0; i < flsz; i++) {
-			if ( ! S_ISDIR(fl[i].st.mode))
-				continue;
-			if ( ! post_dir(sess, dfd, &fl[i], ul.newdir[i]))
-				goto out;
-		}
-
 	/* Properly close us out by progressing through the phases. */
 
 	if (1 == phase) {
@@ -376,6 +291,16 @@ rsync_receiver(struct sess *sess,
 			ERRX(sess, "expected phase ack");
 			goto out;
 		}
+	}
+
+	/*
+	 * Now all of our transfers are complete, so we can fix up our
+	 * directory permissions.
+	 */
+
+	if ( ! rsync_uploader_tail(ul, sess)) {
+		ERRX1(sess, "rsync_uploader_tail");
+		goto out;
 	}
 
 	/* Process server statistics and say good-bye. */
@@ -393,10 +318,9 @@ rsync_receiver(struct sess *sess,
 out:
 	if (-1 != dfd)
 		close(dfd);
+	upload_free(ul);
+	download_free(dl);
 	flist_free(fl, flsz);
 	flist_free(dfl, dflsz);
-	free(ul.newdir);
-	free(ul.buf);
-	download_free(dl);
 	return rc;
 }
