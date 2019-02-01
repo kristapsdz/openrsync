@@ -29,24 +29,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "extern.h"
 #include "md4.h"
-
-/*
- * Use this to keep track of what we're downloading.
- */
-struct	download {
-	size_t	 	 idx; /* index of current file */
-	struct blkset	 blk; /* its blocks */
-	void		*map; /* mmap of current file */
-	size_t		 mapsz; /* length of mapsz */
-	int		 ofd; /* open origin file */
-	int		 fd; /* open output file */
-	char		*fname; /* output filename */
-	MD4_CTX	 	 ctx; /* current hashing context */
-	off_t		 downloaded; /* total downloaded */
-	off_t		 total; /* total in file */
-};
+#include "extern.h"
 
 /*
  * Simply log the filename.

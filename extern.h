@@ -169,6 +169,23 @@ struct	upload {
 	int		   *newdir; /* non-zero if mkdir'd */
 };
 
+/*
+ * Like struct upload, but used to keep track of what we're downloading.
+ * This also is managed by the receiver process.
+ */
+struct	download {
+	size_t	 	 idx; /* index of current file */
+	struct blkset	 blk; /* its blocks */
+	void		*map; /* mmap of current file */
+	size_t		 mapsz; /* length of mapsz */
+	int		 ofd; /* open origin file */
+	int		 fd; /* open output file */
+	char		*fname; /* output filename */
+	MD4_CTX	 	 ctx; /* current hashing context */
+	off_t		 downloaded; /* total downloaded */
+	off_t		 total; /* total in file */
+};
+
 #define LOG0(_sess, _fmt, ...) \
 	rsync_log((_sess), __FILE__, __LINE__, -1, (_fmt), ##__VA_ARGS__)
 #define LOG1(_sess, _fmt, ...) \
