@@ -166,12 +166,16 @@ init_blk(struct blk *p, const struct blkset *set, off_t offs,
  * Return <0 on failure 0 on success.
  */
 static int
-pre_link(struct sess *sess, int root, const struct flist *f)
+pre_link(struct upload *p, struct sess *sess)
 {
 	int		 rc, newlink = 0;
 	char		*b;
 	struct stat	 st;
 	struct timespec	 tv[2];
+	const struct flist *f;
+
+	f = &p->fl[p->idx];
+	assert(S_ISLNK(f->st.mode));
 
 	if ( ! sess->opts->preserve_links) {
 		WARNX(sess, "%s: ignoring symlink", f->path);
@@ -183,8 +187,8 @@ pre_link(struct sess *sess, int root, const struct flist *f)
 
 	/* See if the symlink already exists. */
 
-	assert(-1 != root);
-	rc = fstatat(root, f->path, &st, AT_SYMLINK_NOFOLLOW);
+	assert(-1 != p->rootfd);
+	rc = fstatat(p->rootfd, f->path, &st, AT_SYMLINK_NOFOLLOW);
 	if (-1 != rc && ! S_ISLNK(st.st_mode)) {
 		WARNX(sess, "%s: not a symlink", f->path);
 		return -1;
@@ -196,18 +200,21 @@ pre_link(struct sess *sess, int root, const struct flist *f)
 	/*
 	 * If the symbolic link already exists, then make sure that it
 	 * points to the correct place.
+	 * FIXME: does symlinkat() set permissions on the link using the
+	 * destination file or the default umask?
+	 * Do we need a fchmod in here as well?
 	 */
 
 	if (-1 == rc) {
 		LOG3(sess, "%s: creating "
 			"symlink: %s", f->path, f->link);
-		if (-1 == symlinkat(f->link, root, f->path)) {
+		if (-1 == symlinkat(f->link, p->rootfd, f->path)) {
 			WARN(sess, "%s: symlinkat", f->path);
 			return -1;
 		}
 		newlink = 1;
 	} else {
-		b = symlinkat_read(sess, root, f->path);
+		b = symlinkat_read(sess, p->rootfd, f->path);
 		if (NULL == b) {
 			ERRX1(sess, "%s: symlinkat_read", f->path);
 			return -1;
@@ -217,11 +224,11 @@ pre_link(struct sess *sess, int root, const struct flist *f)
 			b = NULL;
 			LOG3(sess, "%s: updating "
 				"symlink: %s", f->path, f->link);
-			if (-1 == unlinkat(root, f->path, 0)) {
+			if (-1 == unlinkat(p->rootfd, f->path, 0)) {
 				WARN(sess, "%s: unlinkat", f->path);
 				return -1;
 			}
-			if (-1 == symlinkat(f->link, root, f->path)) {
+			if (-1 == symlinkat(f->link, p->rootfd, f->path)) {
 				WARN(sess, "%s: symlinkat", f->path);
 				return -1;
 			}
@@ -237,7 +244,8 @@ pre_link(struct sess *sess, int root, const struct flist *f)
 		tv[0].tv_nsec = 0;
 		tv[1].tv_sec = f->st.mtime;
 		tv[1].tv_nsec = 0;
-		rc = utimensat(root, f->path, tv, AT_SYMLINK_NOFOLLOW);
+		rc = utimensat(p->rootfd, 
+			f->path, tv, AT_SYMLINK_NOFOLLOW);
 		if (-1 == rc) {
 			ERR(sess, "%s: utimensat", f->path);
 			return -1;
@@ -251,7 +259,7 @@ pre_link(struct sess *sess, int root, const struct flist *f)
 	 */
 
 	if (newlink || sess->opts->preserve_perms) {
-		rc = fchmodat(root, f->path,
+		rc = fchmodat(p->rootfd, f->path,
 			f->st.mode, AT_SYMLINK_NOFOLLOW);
 		if (-1 == rc) {
 			ERR(sess, "%s: fchmodat", f->path);
@@ -265,14 +273,19 @@ pre_link(struct sess *sess, int root, const struct flist *f)
 }
 
 /*
+ * If not found, create the destination directory in prefix order.
+ * Create directories using the existing umask.
  * Return <0 on failure 0 on success.
  */
 static int
-pre_dir(struct sess *sess, mode_t oumask,
-	int rootfd, const struct flist *f, int *newdir)
+pre_dir(const struct upload *p, struct sess *sess)
 {
 	struct stat	 st;
 	int	 	 rc;
+	const struct flist *f;
+
+	f = &p->fl[p->idx];
+	assert(S_ISDIR(f->st.mode));
 
 	if ( ! sess->opts->recursive) {
 		WARNX(sess, "%s: ignoring directory", f->path);
@@ -282,8 +295,8 @@ pre_dir(struct sess *sess, mode_t oumask,
 		return 0;
 	}
 
-	assert(-1 != rootfd);
-	rc = fstatat(rootfd, f->path, &st, AT_SYMLINK_NOFOLLOW);
+	assert(-1 != p->rootfd);
+	rc = fstatat(p->rootfd, f->path, &st, AT_SYMLINK_NOFOLLOW);
 	if (-1 == rc && ENOENT != errno) {
 		WARN(sess, "%s: fstatat", f->path);
 		return -1;
@@ -308,12 +321,12 @@ pre_dir(struct sess *sess, mode_t oumask,
 	 */
 
 	LOG3(sess, "%s: creating directory", f->path);
-	if (-1 == mkdirat(rootfd, f->path, 0777 & ~oumask)) {
+	if (-1 == mkdirat(p->rootfd, f->path, 0777 & ~p->oumask)) {
 		WARN(sess, "%s: mkdirat", f->path);
 		return -1;
 	}
 
-	*newdir = 1;
+	p->newdir[p->idx] = 1;
 	log_dir(sess, f);
 	return 0;
 }
@@ -583,12 +596,9 @@ rsync_uploader(struct upload *u, int *fileinfd,
 
 		for ( ; u->idx < u->flsz; u->idx++) {
 			if (S_ISDIR(u->fl[u->idx].st.mode))
-				c = pre_dir(sess, u->oumask, 
-					u->rootfd, &u->fl[u->idx], 
-					&u->newdir[u->idx]);
+				c = pre_dir(u, sess);
 			else if (S_ISLNK(u->fl[u->idx].st.mode))
-				c = pre_link(sess, 
-					u->rootfd, &u->fl[u->idx]);
+				c = pre_link(u, sess);
 			else if (S_ISREG(u->fl[u->idx].st.mode))
 				c = pre_file(u, fileinfd, sess);
 			else
