@@ -167,7 +167,7 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 
 	if (NULL == p) {
 		if ( ! io_read_int(sess, fd, &idx)) {
-			ERRX1(sess, "io_read_int: index");
+			ERRX1(sess, "io_read_int");
 			return -1;
 		} else if (idx >= 0 && (size_t)idx >= flsz) {
 			ERRX(sess, "index out of bounds");
@@ -313,7 +313,7 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 	assert(-1 != fd);
 
 	if ( ! io_read_int(sess, fd, &rawtok)) {
-		ERRX1(sess, "io_read_int: data block size");
+		ERRX1(sess, "io_read_int");
 		goto out;
 	} 
 
@@ -329,7 +329,7 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 			goto out;
 		}
 		if ( ! io_read_buf(sess, fd, buf, sz)) {
-			ERRX1(sess, "io_read_int: data block");
+			ERRX1(sess, "io_read_int");
 			goto out;
 		}
 		if ((ssz = write(p->fd, buf, sz)) < 0) {
@@ -394,7 +394,7 @@ rsync_downloader(int fd, int rootfd, struct download **pp,
 	MD4_Final(ourmd, &p->ctx);
 
 	if ( ! io_read_buf(sess, fd, md, MD4_DIGEST_LENGTH)) {
-		ERRX1(sess, "io_read_buf: data blocks hash");
+		ERRX1(sess, "io_read_buf");
 		goto out;
 	} else if (memcmp(md, ourmd, MD4_DIGEST_LENGTH)) {
 		ERRX(sess, "%s: hash does not match", p->fname);

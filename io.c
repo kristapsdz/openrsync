@@ -262,8 +262,7 @@ io_read_flush(struct sess *sess, int fd)
 	 */
 
 	if ( ! io_read_blocking(sess, fd, &tagbuf, sizeof(tagbuf))) {
-		ERRX1(sess, "io_read_blocking: "
-			"multiplex tag identifier");
+		ERRX1(sess, "io_read_blocking");
 		return 0;
 	}
 	tag = le32toh(tagbuf);
@@ -282,8 +281,7 @@ io_read_flush(struct sess *sess, int fd)
 
 	if ( ! io_read_blocking(sess, fd,
 	    mpbuf, sess->mplex_read_remain)) {
-		ERRX1(sess, "io_read_blocking: "
-			"multiplexed out-of-band data");
+		ERRX1(sess, "io_read_blocking");
 		return 0;
 	}
 	if ('\n' == mpbuf[sess->mplex_read_remain - 1])
@@ -339,8 +337,7 @@ io_read_buf(struct sess *sess, int fd, void *buf, size_t sz)
 			rsz = sess->mplex_read_remain < sz ?
 				sess->mplex_read_remain : sz;
 			if ( ! io_read_blocking(sess, fd, buf, rsz)) {
-				ERRX1(sess, "io_read_blocking: "
-					"multiplexed normal data");
+				ERRX1(sess, "io_read_blocking");
 				return 0;
 			}
 			sz -= rsz;

@@ -45,11 +45,11 @@ symlink_read(struct sess *sess, const char *path)
 		buf = pp;
 
 		if (-1 == (nsz = readlink(path, buf, sz))) {
-			ERR(sess, "readlink: %s", path);
+			ERR(sess, "%s: readlink", path);
 			free(buf);
 			return NULL;
 		} else if (0 == nsz) {
-			ERRX(sess, "empty link: %s", path);
+			ERRX(sess, "%s: empty link", path);
 			free(buf);
 			return NULL;
 		} else if ((size_t)nsz < sz)
@@ -84,11 +84,11 @@ symlinkat_read(struct sess *sess, int fd, const char *path)
 		buf = pp;
 
 		if (-1 == (nsz = readlinkat(fd, path, buf, sz))) {
-			ERR(sess, "readlinkat: %s", path);
+			ERR(sess, "%s: readlinkat", path);
 			free(buf);
 			return NULL;
 		} else if (0 == nsz) {
-			ERRX(sess, "empty link: %s", path);
+			ERRX(sess, "%s: empty link", path);
 			free(buf);
 			return NULL;
 		} else if ((size_t)nsz < sz)

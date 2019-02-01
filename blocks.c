@@ -247,10 +247,10 @@ blk_match(struct sess *sess, int fd,
 	/* Start by mapping our file into memory. */
 
 	if (-1 == (nfd = open(path, O_RDONLY, 0))) {
-		ERR(sess, "open: %s", path);
+		ERR(sess, "%s: open", path);
 		return 0;
 	} else if (-1 == fstat(nfd, &st)) {
-		ERR(sess, "fstat: %s", path);
+		ERR(sess, "%s: fstat", path);
 		close(nfd);
 		return 0;
 	}
@@ -263,7 +263,7 @@ blk_match(struct sess *sess, int fd,
 	if ((mapsz = st.st_size) > 0) {
 		map = mmap(NULL, mapsz, PROT_READ, MAP_SHARED, nfd, 0);
 		if (MAP_FAILED == map) {
-			ERR(sess, "mmap: %s", path);
+			ERR(sess, "%s: mmap", path);
 			close(nfd);
 			return 0;
 		}
