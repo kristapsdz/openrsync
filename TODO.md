@@ -17,9 +17,11 @@ so on).
   Alternatively, hash the entire file list and do it in-band during the
   file search in `flist_gen_local()`.
 
-- Easy: keep track of upload/download statistics in `struct sess` and
-  properly report those in `sess_stats_send()`,
+- Easy: keep track of rsync-mandated upload/download statistics in
+  `struct sess` and properly report those in `sess_stats_send()`,
   [session.c](https://github.com/kristapsdz/openrsync/blob/master/session.c).
+
+- Easy: print more statistics, such as transfer times and rates.
 
 - Medium: have the log messages when multiplex writing (server mode) is
   enabled by flushed out through the multiplex channel.
