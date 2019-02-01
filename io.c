@@ -425,6 +425,23 @@ io_buffer_int(struct sess *sess, void *buf,
 }
 
 int
+io_read_ulong(struct sess *sess, int fd, uint64_t *val)
+{
+	int64_t	oval;
+
+	if ( ! io_read_long(sess, fd, &oval)) {
+		ERRX(sess, "io_read_int");
+		return 0;
+	} else if (oval < 0) {
+		ERRX(sess, "io_read_size: negative value");
+		return 1;
+	}
+
+	*val = oval;
+	return 1;
+}
+
+int
 io_read_long(struct sess *sess, int fd, int64_t *val)
 {
 	int64_t	oval;
