@@ -46,6 +46,7 @@ struct	upload {
 	enum uploadst	    state;
 	char		   *buf; /* if not NULL, pending upload */
 	size_t		    bufsz; /* size of buf */
+	size_t		    bufmax; /* maximum size of buf */
 	size_t		    bufpos; /* position in buf */
 	size_t		    idx; /* current transfer index */
 	mode_t		    oumask; /* umask for creating files */
@@ -318,19 +319,19 @@ pre_dir(struct sess *sess, mode_t oumask,
 }
 
 /*
- * We need to process our directories in post-order.
- * This is because touching files within the directory will change the
- * directory file; and also, if our mode is not writable, we wouldn't be
- * able to write to that directory!
+ * Process the directory time and mode for "idx" in the file list.
  * Returns zero on failure, non-zero on success.
  */
 static int
-post_dir(struct sess *sess, 
-	int root, const struct flist *f, int newdir)
+post_dir(struct sess *sess, const struct upload *u, size_t idx)
 {
 	struct timespec	 tv[2];
 	int		 rc;
 	struct stat	 st;
+	const struct flist *f;
+
+	f = &u->fl[idx];
+	assert(S_ISDIR(f->st.mode));
 
 	/* We already warned about the directory in pre_process_dir(). */
 
@@ -339,7 +340,7 @@ post_dir(struct sess *sess,
 	else if (sess->opts->dry_run)
 		return 1;
 
-	if (-1 == fstatat(root, f->path, &st, AT_SYMLINK_NOFOLLOW)) {
+	if (-1 == fstatat(u->rootfd, f->path, &st, AT_SYMLINK_NOFOLLOW)) {
 		ERR(sess, "%s: fstatat", f->path);
 		return 0;
 	} else if ( ! S_ISDIR(st.st_mode)) {
@@ -352,14 +353,14 @@ post_dir(struct sess *sess,
 	 * we're preserving times and the time has changed.
 	 */
 
-	if (newdir || 
+	if (u->newdir[idx] || 
 	    (sess->opts->preserve_times && 
 	     st.st_mtime != f->st.mtime)) {
 		tv[0].tv_sec = time(NULL);
 		tv[0].tv_nsec = 0;
 		tv[1].tv_sec = f->st.mtime;
 		tv[1].tv_nsec = 0;
-		rc = utimensat(root, f->path, tv, 0);
+		rc = utimensat(u->rootfd, f->path, tv, 0);
 		if (-1 == rc) {
 			ERR(sess, "%s: utimensat", f->path);
 			return 0;
@@ -372,10 +373,10 @@ post_dir(struct sess *sess,
 	 * preserving modes and it has changed.
 	 */
 
-	if (newdir || 
+	if (u->newdir[idx] || 
 	    (sess->opts->preserve_perms &&
 	     st.st_mode != f->st.mode)) {
-		rc = fchmodat(root, f->path, f->st.mode, 0);
+		rc = fchmodat(u->rootfd, f->path, f->st.mode, 0);
 		if (-1 == rc) {
 			ERR(sess, "%s: fchmodat", f->path);
 			return 0;
@@ -692,7 +693,8 @@ rsync_uploader(struct upload *u, int *fileinfd,
 
 	/* Make sure the block metadata buffer is big enough. */
 
-	sz = sizeof(int32_t) + /* identifier */
+	u->bufsz = 
+	     sizeof(int32_t) + /* identifier */
 	     sizeof(int32_t) + /* block count */
 	     sizeof(int32_t) + /* block length */
 	     sizeof(int32_t) + /* checksum length */
@@ -701,13 +703,13 @@ rsync_uploader(struct upload *u, int *fileinfd,
 	     (sizeof(int32_t) + /* short checksum */
 	      blk.csum); /* long checksum */
 
-	if (sz > u->bufsz) {
-		if (NULL == (bufp = realloc(u->buf, sz))) {
+	if (u->bufsz > u->bufmax) {
+		if (NULL == (bufp = realloc(u->buf, u->bufsz))) {
 			ERR(sess, "realloc");
 			return -1;
 		}
 		u->buf = bufp;
-		u->bufsz = sz;
+		u->bufmax = u->bufsz;
 	}
 
 	u->bufpos = pos = 0;
@@ -731,24 +733,31 @@ rsync_uploader(struct upload *u, int *fileinfd,
 	return 1;
 }
 
+/*
+ * Fix up the directory permissions and times post-order.
+ * We can't fix up directory permissions in place because the server may
+ * want us to have overly-tight permissions---say, those that don't
+ * allow writing into the directory.
+ * We also need to do our directory times post-order because making
+ * files within the directory will change modification times.
+ * Returns zero on failure, non-zero on success.
+ */
 int
 rsync_uploader_tail(struct upload *u, struct sess *sess)
 {
 	size_t	 i;
 
-	/* Fix up the directory permissions and times post-order. */
 
 	if ( ! sess->opts->preserve_times &&
 	     ! sess->opts->preserve_perms)
 		return 1;
 
-	for (i = 0; i < u->flsz; i++) {
-		if ( ! S_ISDIR(u->fl[i].st.mode))
-			continue;
-		if ( ! post_dir(sess, 
-		    u->rootfd, &u->fl[i], u->newdir[i]))
-			return 0;
-	}
+	LOG2(sess, "fixing up directory times and permissions");
+
+	for (i = 0; i < u->flsz; i++)
+		if (S_ISDIR(u->fl[i].st.mode))
+			if ( ! post_dir(sess, u, i))
+				return 0;
 
 	return 1;
 }
