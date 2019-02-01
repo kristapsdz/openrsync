@@ -67,7 +67,8 @@ rsync_sender(struct sess *sess, int fdin,
 	} else if ( ! io_write_int(sess, fdout, 0)) {
 		ERRX1(sess, "io_write_int: io_error");
 		goto out;
-	}
+	} else if ( ! sess->opts->server)
+		LOG1(sess, "Transfer starting: %zu files", flsz);
 
 	/* Exit if we're the server with zero files. */
 
@@ -191,7 +192,7 @@ rsync_sender(struct sess *sess, int fdin,
 		}
 	}
 
-	if (sess->opts->server && ! sess_stats_send(sess, fdout)) {
+	if ( ! sess_stats_send(sess, fdout)) {
 		ERRX1(sess, "sess_stats_end");
 		goto out;
 	}
