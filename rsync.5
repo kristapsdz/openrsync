@@ -36,6 +36,18 @@ The
 .Qq server process
 is run either on the local or remote computer, depending upon the
 command-line given file locations.
+.Pp
+There are a number of options in the protocol that are dictated by command-line
+flags.
+These will be noted as
+.Fl n
+for dry-run,
+.Fl l
+for links,
+.Fl r
+for recursion, and
+.Fl v
+for verbose.
 .Ss Data types
 The binary protocol encodes all data in little-endian format.
 Integers are signed 32-bit, shorts are signed 16-bit, bytes are unsigned
@@ -69,8 +81,11 @@ envelope payload (arbitrary length)
 .Pp
 The first byte of the envelope header consists of a tag.
 If the tag is 7, the payload is normal data.
-Otherwise, the payload is out-of-band data, such as server messages.
-This may be discarded, but is usually shown to the operator.
+Otherwise, the payload is out-of-band server messages.
+If the tag is 1, it is an error on the sender's part and must trigger an
+exit.
+This limits message payloads to 24 bit integer size,
+.Li 0x0fffffff .
 .Pp
 The only data not using this envelope are the initial handshake between
 client and server.
@@ -89,16 +104,20 @@ So if a file is given to the sender as
 it must be sent as
 .Pa foo/bar .
 .Pp
-The file list may be cleaned of inappropriate files.
+The file list should be cleaned of inappropriate files prior to sending.
 For example, if
 .Fl l
 is not specified, symbolic links may be omitted.
 Directory entries without
 .Fl r
 may also be omitted.
+Duplicates may be omitted.
 .Pp
-The receiver must not assume that the file list is clean, and skip
-inappropriate file entries during processing.
+The receiver
+.Em must not
+assume that the file list is clean.
+It should not omit inappropriate files from the file list (which would
+affect the indexing), but may omit them during processing.
 .Pp
 Prior to be sent from sender to receiver, and upon being received, the
 file list must be lexicographically sorted such as with
@@ -135,12 +154,9 @@ Transmissions sent from client to server are not multiplexed.
 .Pp
 .Em Sender mode
 .Pp
-When the client is in sender mode, it begins by sending data on each
-file as follows.
-See
-.Sx File list
-for details.
-Prior to being sent, the file list must be lexicographically sorted.
+When the client is in sender mode, it begins by sending the
+.Sx File list .
+Prior to being sent, the file list should be lexicographically sorted.
 .Pp
 .Bl -enum -compact
 .It
@@ -158,14 +174,15 @@ file modification time (optional, time_t, integer)
 .It
 file mode (optional, mode_t, integer)
 .It
-if a symbolic link and links enabled, the link target's length (integer)
+if a symbolic link and
+.Fl l ,
+the link target's length (integer)
 .It
-if a symbolic link and links enabled, the link target (byte array)
+if a symbolic link and
+.Fl l ,
+the link target (byte array)
 .El
 .Pp
-Links are enabled only if
-.Fl l
-is passed to the executable.
 The status byte may consist of the following bits and determines which
 of the optional fields are transmitted.
 .Pp
@@ -201,19 +218,22 @@ Each of these requests starts as follows:
 file index or -1 to signal a change of phase (integer)
 .El
 .Pp
-The phase defines the long checksum size as described in the following
-setion.
 The phase starts in phase 1, then proceeds to phase 2, and phase 3
-signals an end of transmission.
+signals an end of transmission (no subsequent blocks).
 If a phase change occurs, the sender must write back the -1 constant
-integer value then re-start the request.
+integer value and increment its phase state.
 .Pp
-If this is a dry-run scenario
-.Pq Fl n ,
-the sender may then write back the index (integer) to skip the block
-exchange.
+Blocks are read as follows:
 .Pp
-Otherwise, a block exchange occurs:
+.Bl -enum -compact
+.It
+block index (integer)
+.El
+.Pp
+In
+.Pq Fl n
+mode, the sender may immediately write back the index (integer) to skip
+the following.
 .Pp
 .Bl -enum -compact
 .It
@@ -235,8 +255,8 @@ short checksum (integer)
 long checksum (bytes of checksum length)
 .El
 .Pp
-After the last block, the client must respond with a block
-acknowledgement:
+The client then compares the two files, block by block, and updates the
+server with mismatches as follows.
 .Pp
 .Bl -enum -compact
 .It
@@ -251,9 +271,7 @@ long checksum length (integer)
 remainder block length (integer)
 .El
 .Pp
-The client then compares the two files, block by block, and updates the
-server with mismatches.
-This sequence is as follows.
+Then for each block:
 .Pp
 .Bl -enum -compact
 .It
@@ -264,18 +282,15 @@ data chunk (bytes)
 block index subsequent to chunk or zero for finished (integer)
 .El
 .Pp
-Following this sequence, the sender sends an epilogue for each host it
-services.
+Following this sequence, the sender sends the followng:
 .Pp
 .Bl -enum -compact
 .It
 whole-file long checksum (16 bytes)
 .El
 .Pp
-Finally, the sender writes a constant -1 integer to signal the end of all
-data.
-No more data is sent subsequent to this message.
-.Pp
+The sender then either handles the next queued file or, if the receiver
+has written a phase change, the phase change step.
 .Em Receiver mode
 .Pp
 If in receiver mode, the inverse (write instead of read, read instead of
@@ -289,24 +304,29 @@ unknown value:
 zero value (integer)
 .El
 .Pp
-After receiving the file list (see
-.Sx File list )
-and this mystery integer, the receiver must sort the file names
+After receiving the
+.Sx File list
+and an undefined integer, the receiver must sort the file names
 lexicographically.
 The file list may contain inappropriate files, such as those containing
 links when
 .Fl l
 has not been specified.
-These may be ignored at the receiver's discretion.
+These may be ignored at the receiver's discretion, but must be part of
+the sorted file list.
 .Pp
 If there are no files in the file list at this time, the receiver must
 exit prior to sending per-file data.
 .Pp
+For file blocks, the receiver must look at each file that is not up to
+date, defined by having the same file size and timestamp, and send it to
+the server.
+Symbolic links and directory entries are never sent to the server.
+.Pp
 After the second phase has completed and prior to writing the
 end-of-data signal, the client receiver reads statistics.
-This is only performed in the verbose
-.Pq Fl v
-invocation.
+This is only performed with
+.Pq Fl v .
 .Pp
 .Bl -enum -compact
 .It
@@ -316,6 +336,21 @@ total bytes written (long)
 .It
 total size of files (long)
 .El
+.Ss Sender and receiver asynchrony
+The sender and receiver need not work in lockstep.
+The receiver may send file update requests as quickly as it parses them,
+and respond to the sender's update notices on demand.
+Similarly, the sender may read as many update requests as it can, and
+service them in any order it wishes.
+.Pp
+The sender and receiver synchronise state only at the end of phase.
+.Pp
+The reference
+.Xr rsync 1
+takes advantage of this with a two-process receiver, one for sending
+update requests (the generator) and another for receiving.
+.Xr openrsync 1
+uses an event-loop model instead.
 .Ss Server process
 The server can operate in sender or receiver mode depending upon how the
 client starts the server.
