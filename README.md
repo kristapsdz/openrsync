@@ -2,19 +2,15 @@
 
 This is a clean-room implementation of [rsync](https://rsync.samba.org/)
 with a BSD (ISC) license.
-It's compatible with a modern rsync (3.1.3 is used for testing), but
-accepts only a subset of rsync's command-line arguments.
-
-*This project is still very new and very fast-moving.*
-However, it's at the point where more wide-spread testing is possible.
-Please read the [Installation](#Installation) notes for more about
-testing openrsync.
+It's compatible with a modern rsync (3.1.3 is used for testing, but any
+supporting protocol 27 will do), but accepts only a subset of rsync's
+command-line arguments.
 If you want to hack on openrsync, see the
 [TODO](https://github.com/kristapsdz/openrsync/blob/master/TODO.md).
 
 At this time, openrsync runs only on [OpenBSD](https://www.openbsd.org).
 If you want to port to your system (e.g. Linux, FreeBSD), read the
-[Portability](#Portability) first.
+[Portability](#Portability) section first.
 
 The canonical documentation for openrsync is its manual pages.
 See
@@ -25,13 +21,15 @@ for protocol details or utility documentation in
 [openrsync(1)](https://github.com/kristapsdz/openrsync/blob/master/openrsync.1).
 If you'd like to write your own rsync implementation, the protocol
 manpages should have all the information required.
-The [Architecture](#Architecture) and [Algorithm](#Algorithm)
-information on this page serve to introduce developers to the source
-code, and are non-canonical.
 
-This repository is a read-only mirror of a private CVS repository.  I
-use it for issues and pull requests.  **Please do not make feature
-requests**: I will simply close out the issue.
+The [Architecture](#Architecture) and [Algorithm](#Algorithm) sections
+on this page serve to introduce developers to the source code.
+They are non-canonical.
+
+This repository is a read-only mirror of a private CVS repository.
+I use it for issues and pull requests.
+**Please do not make feature requests**: I will simply close out the
+issue.
 
 ## Project background
 
@@ -76,8 +74,6 @@ command-line flags available on both.
 See
 [openrsync(1)](https://github.com/kristapsdz/openrsync/blob/master/openrsync.1)
 for a listing.
-Again, see [Portability](#Portability) for non-OpenBSD system
-information.
 
 # Algorithm
 
@@ -87,22 +83,21 @@ and Paul Mackerras.
 Andrew Tridgell's PhD thesis, "[Efficient Algorithms for Sorting and
 Synchronization](https://www.samba.org/~tridge/phd_thesis.pdf)", covers the
 topics in more detail.
-
-This only gives a brief description, suitable for delving into the
-source code for more details.
+This gives a description suitable for delving into the source code.
 
 The rsync algorithm has two components: the *sender* and the *receiver*.
 The sender manages source files; the receiver manages the destination.
-In the following invocation, the source is host *remote* and the
-receiver is the localhost.
+In the following invocation, first the sender is host *remote* and the
+receiver is the localhost, then the opposite.
 
 ```
 % openrsync -lrtp remote:foo/bar ~/baz/xyzzy
+% openrsync -lrtp ~/foo/bar remote:baz/xyzzy
 ```
 
 The algorithm hinges upon a file list of names and metadata (e.g., mode,
-mtime, etc.) shared between these components.
-The file list describes all source files of the update, and is generated
+mtime, etc.) shared between components.
+The file list describes all source files of the update and is generated
 by the sender.
 The sharing is implemented in
 [flist.c](https://github.com/kristapsdz/openrsync/blob/master/flist.c).
@@ -115,25 +110,28 @@ processed before their contained files.
 Moreover, once sorted, both sender and receiver may refer to file
 entries by their position in the sorted array.
 
-(*Note*: an additional step might be to compute and exchange a hash of
-the sorted contents.  This way, both sender and receiver would know that
-the file list has not been tampered with.)
-
-After the receiver accepts the list, it iterates through each file in
+After the receiver reads the list, it iterates through each file in
 the list, passing information to the sender so that the sender may send
 back instructions to update the file.
-This is the main "update" sequence of the algorithm.
-The sender waits to receive a request for update or end of sequence
-message.
-Once the iteration is complete, the files are all up to date.
+This is called the "block exchange" and is the maintstay of the rsync
+algorithm.
+During the block exchange, the sender waits to receive a request for
+update or end of sequence message; once a request is received, it scans
+for new blocks to send to the receiver.
+
+Once the block exchange is complete, the files are all up to date.
 
 The receiver is implemented in
 [receiver.c](https://github.com/kristapsdz/openrsync/blob/master/receiver.c);
 the sender, in
 [sender.c](https://github.com/kristapsdz/openrsync/blob/master/sender.c).
+A great deal of the block exchange happens in
+[blocks.c](https://github.com/kristapsdz/openrsync/blob/master/blocks.c).
 
-The sequence is different for whether the file is a directory, symbolic
-link, or regular file.
+## Block exchange
+
+The block exchange sequence is different for whether the file is a
+directory, symbolic link, or regular file.
 
 For symbolic links, the information required by the receiver is already
 encoded in the file list metadata.
@@ -143,9 +141,7 @@ No update is requested from the sender.
 For directories, the directory is created if it does not already exist.
 No update is requested from the sender.
 
-Regular files are handled as follows, and constitute the main focus of
-the rsync algorithm.
-
+Regular files are handled as follows.
 First, the file is checked to see if it's up to date.
 This happens if the file size and last modification time are the same.
 If so, no update is requested from the sender.
