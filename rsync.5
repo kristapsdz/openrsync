@@ -151,10 +151,52 @@ receive random seed (integer)
 .Pp
 Following this, the client multiplexes when reading from the server.
 Transmissions sent from client to server are not multiplexed.
+It then enters the
+.Sx Update exchange
+protocol.
+.Ss Server process
+The server can operate in sender or receiver mode depending upon how the
+client starts the server.
+This may be directly from the parent process (when invoked for local
+files) or indirectly via a remote shell.
 .Pp
-.Em Sender mode
+When in sender mode, the server pushes data to the client.
+(This is equivalent to receiver mode for the client.)
+In receiver, the opposite is true.
 .Pp
-When the client is in sender mode, it begins by sending the
+When the server starts, regardless the mode, it first handshakes the
+client.
+This exchange is
+.Em not
+multiplexed.
+.Pp
+.Bl -enum -compact
+.It
+send local version (integer)
+.It
+receive remote version (integer)
+.It
+send random seed (integer)
+.El
+.Pp
+Following this, the server multiplexes when writing to the client.
+(Transmissions received from the client are not multiplexed.)
+It then enters the
+.Sx Update exchange
+protocol.
+.Ss Update exchange
+When the client or server is in sender mode, it begins by conditionally
+sending the exclusion list.
+At this time, this is always empty.
+.Pp
+.Bl -enum -compact
+.It
+if
+.Fl -delete
+and the client, exclusion list zero (integer)
+.El
+.Pp
+It then sends the
 .Sx File list .
 Prior to being sent, the file list should be lexicographically sorted.
 .Pp
@@ -201,15 +243,24 @@ file's.
 .El
 .Pp
 If the status byte is zero, the file-list has terminated.
-The sender then sends a constant value whose purpose is unknown.
+The sender then sends any IO error values, which for
+.Xr openrsync 1
+is always zero.
 .Pp
 .Bl -enum -compact
 .It
 constant zero (integer)
 .El
 .Pp
-Following that, it then receives data from the server regarding the
-server's copy of the same files at the destination.
+The server sender then reads the exclusion list, which is always zero.
+.Pp
+.Bl -enum -compact
+.It
+if server, constant zero (integer)
+.El
+.Pp
+Following that, the sender receives data regarding the receiver's copy
+of the file list contents.
 This data is not ordered in any way.
 Each of these requests starts as follows:
 .Pp
@@ -291,32 +342,58 @@ whole-file long checksum (16 bytes)
 .Pp
 The sender then either handles the next queued file or, if the receiver
 has written a phase change, the phase change step.
-.Em Receiver mode
 .Pp
-If in receiver mode, the inverse (write instead of read, read instead of
-write) is performed.
-The only difference is that after receiving the list of files (starting
-with the status byte) and constant zero, the receiver must read another
-unknown value:
+If the sender is the server and
+.Fl v
+has been specified, the sender must send statistics.
 .Pp
 .Bl -enum -compact
 .It
-zero value (integer)
+total bytes read (long)
+.It
+total bytes written (long)
+.It
+total size of files (long)
 .El
 .Pp
-After receiving the
+Finally, the sender must read a final constant-value integer.
+.Pp
+.Bl -enum -compact
+.It
+end-of-sequence -1 value (integer)
+.El
+.Pp
+If in receiver mode, the inverse above (write instead of read, read
+instead of write) is performed.
+.Pp
+The receiver begins by conditionally writing, then reading, the
+exclusion list count, which is always zero.
+.Pp
+.Bl -enum -compact
+.It
+if client, send zero (integer)
+.It
+if receiver and
+.Fl -delete ,
+read zero (integer)
+.El
+.Pp
+The receiver then proceeds with reading the
 .Sx File list
-and an undefined integer, the receiver must sort the file names
-lexicographically.
-The file list may contain inappropriate files, such as those containing
-links when
-.Fl l
-has not been specified.
-These may be ignored at the receiver's discretion, but must be part of
-the sorted file list.
+as already
+defined.
+Following the list, the receiver reads the IO error, which must be zero.
+.Pp
+.Bl -enum -compact
+.It
+constant zero (integer)
+.El
+.Pp
+The receiver must then sort the file names lexicographically.
 .Pp
 If there are no files in the file list at this time, the receiver must
 exit prior to sending per-file data.
+It then proceeds with the file blocks.
 .Pp
 For file blocks, the receiver must look at each file that is not up to
 date, defined by having the same file size and timestamp, and send it to
@@ -336,6 +413,13 @@ total bytes written (long)
 .It
 total size of files (long)
 .El
+.Pp
+Finally, the receiver must send the constant end-of-sequence marker.
+.Pp
+.Bl -enum -compact
+.It
+end-of-sequence -1 value (integer)
+.El
 .Ss Sender and receiver asynchrony
 The sender and receiver need not work in lockstep.
 The receiver may send file update requests as quickly as it parses them,
@@ -351,67 +435,6 @@ takes advantage of this with a two-process receiver, one for sending
 update requests (the generator) and another for receiving.
 .Xr openrsync 1
 uses an event-loop model instead.
-.Ss Server process
-The server can operate in sender or receiver mode depending upon how the
-client starts the server.
-This may be directly from the parent process (when invoked for local
-files) or indirectly via a remote shell.
-.Pp
-When in sender mode, the server pushes data to the client.
-(This is equivalent to receiver mode for the client.)
-In receiver, the opposite is true.
-.Pp
-When the server starts, regardless the mode, it first handshakes the
-client.
-This exchange is
-.Em not
-multiplexed.
-.Pp
-.Bl -enum -compact
-.It
-send local version (integer)
-.It
-receive remote version (integer)
-.It
-send random seed (integer)
-.El
-.Pp
-Following this, the server multiplexes when writing to the client.
-(Transmissions received from the client are not multiplexed.)
-It then either sends the file list (in sender mode) or receives it in
-receiver mode.
-This is described in the
-.Sx Client process
-section.
-.Pp
-There are several notable differences to the sender or receiver process
-when running in server mode.
-.Pp
-.Bl -enum -compact
-.It
-prior to the sender reading the file index (or phase change), the sender
-in server mode must read an integer that must be zero
-.It
-prior to this, the sender in server mode must exit if there are no files
-in the file list
-.It
-prior to receiving the file list, the receiver in server mode does not
-send the constant zero integer
-.It
-the sender conditionally sends post-transfer statistics when in server
-mode
-.It
-the receiver conditionally does not receive statistics when in server
-mode
-.It
-when in server mode
-.Em and
-when communicating to a client with a newer protocol (>27), the phase
-change integer (-1) must be sent twice
-.El
-.Pp
-The last note is probably a bug in the reference implementation.
-.\" The following requests should be uncommented and used where appropriate.
 .\" .Sh CONTEXT
 .\" For section 9 functions only.
 .\" .Sh RETURN VALUES
@@ -436,3 +459,9 @@ The last note is probably a bug in the reference implementation.
 .\" .Sh CAVEATS
 .Sh BUGS
 Time values are sent as 32-bit integers.
+.Pp
+When in server mode
+.Em and
+when communicating to a client with a newer protocol (>27), the phase
+change integer (-1) acknowledgement must be sent twice by the sender.
+The is probably a bug in the reference implementation.
