@@ -986,7 +986,7 @@ flist_gen_dels(struct sess *sess, const char *root,
 	if (0 == cargvs)
 		return 1;
 
-	if (NULL == (cargv = calloc(cargvs, sizeof(char *)))) {
+	if (NULL == (cargv = calloc(cargvs + 1, sizeof(char *)))) {
 		ERR(sess, "calloc");
 		return 0;
 	}
@@ -1006,6 +1006,7 @@ flist_gen_dels(struct sess *sess, const char *root,
 			cargv[0] = NULL;
 			goto out;
 		}
+		cargv[1] = NULL;
 	} else {
 		for (i = j = 0; i < wflsz; i++) {
 			if ( ! (FLSTAT_TOP_DIR & wfl[i].st.flags))
@@ -1024,6 +1025,7 @@ flist_gen_dels(struct sess *sess, const char *root,
 			j++;
 		}
 		assert(j == cargvs);
+		cargv[j] = NULL;
 	}
 
 	LOG2(sess, "delete from %zu directories", cargvs);
