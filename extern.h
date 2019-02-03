@@ -76,6 +76,9 @@ struct	flstat {
 	gid_t		 gid; /* group */
 	off_t		 size; /* size */
 	time_t		 mtime; /* modification */
+	unsigned int	 flags;
+#define	FLSTAT_TOP_DIR	 0x01 /* a top-level directory */
+
 };
 
 /*
