@@ -441,28 +441,6 @@ pre_file(const struct upload *p, int *filefd, struct sess *sess)
 }
 
 /*
- * We've finished with all files in the set.
- * Write the phase-change notice, mark the uploader as finished, clear
- * the descriptors we're waiting on, and return.
- * Returns zero on success and <0 on failure.
- * See rsync_uploader() on why these return values are chosen.
- */
-static int
-finished(struct upload *u, struct sess *sess, int *fin, int *fout)
-{
-
-	if ( ! io_write_int(sess, u->fdout, -1)) {
-		ERRX1(sess, "io_write_int");
-		return -1;
-	}
-
-	*fin = *fout = -1;
-	u->state = UPLOAD_FINISHED;
-	LOG4(sess, "uploader: finished");
-	return 0;
-}
-
-/*
  * Allocate an uploader object in the correct state to start.
  * Returns NULL on failure or the pointer otherwise.
  * On success, upload_free() must be called with the allocated pointer.
@@ -566,20 +544,15 @@ rsync_uploader(struct upload *u, int *fileinfd,
 			if (u->bufpos < u->bufsz)
 				return 1;
 		}
-		
+
 		/* 
-		 * If we're done, disable getting this function called
-		 * again by removing its event loop triggers.
-		 * Otherwise, reenable polling on the writer.
+		 * Let the UPLOAD_FIND_NEXT state handle things if we
+		 * finish, as we'll need to write a POLLOUT message and
+		 * not have a writable descriptor yet.
 		 */
 
-		if (u->flsz == ++u->idx) {
-			assert(-1 == *fileinfd);
-			return finished(u, sess, fileinfd, fileoutfd);
-		}
-
-		*fileoutfd = u->fdout;
 		u->state = UPLOAD_FIND_NEXT;
+		u->idx++;
 		return 1;
 	}
 
@@ -615,14 +588,20 @@ rsync_uploader(struct upload *u, int *fileinfd,
 		 * disable polling on the output channel.
 		 */
 
+		*fileoutfd = -1;
 		if (u->idx == u->flsz) {
 			assert(-1 == *fileinfd);
-			return finished(u, sess, fileinfd, fileoutfd);
+			if ( ! io_write_int(sess, u->fdout, -1)) {
+				ERRX1(sess, "io_write_int");
+				return -1;
+			}
+			u->state = UPLOAD_FINISHED;
+			LOG4(sess, "uploader: finished");
+			return 0;
 		}
 
 		/* Go back to the event loop, if necessary. */
 
-		*fileoutfd = -1;
 		u->state = -1 == *fileinfd ?
 			UPLOAD_WRITE_LOCAL : UPLOAD_READ_LOCAL;
 		if (UPLOAD_READ_LOCAL == u->state)
@@ -657,11 +636,9 @@ rsync_uploader(struct upload *u, int *fileinfd,
 				"up to date", u->fl[u->idx].path);
 			close(*fileinfd);
 			*fileinfd = -1;
-			if (++u->idx == u->flsz)
-				return finished(u, sess, 
-					fileinfd, fileoutfd);
 			*fileoutfd = u->fdout;
 			u->state = UPLOAD_FIND_NEXT;
+			u->idx++;
 			return 1;
 		}
 
