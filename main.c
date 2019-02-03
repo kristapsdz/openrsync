@@ -289,7 +289,7 @@ main(int argc, char *argv[])
 	struct fargs	*fargs;
 	struct option	 lopts[] = {
 		{ "delete",	no_argument,	&opts.del,	1 },
-		{ "rsync-path",	required_argument, NULL,	0 },
+		{ "rsync-path",	required_argument, NULL,	1 },
 		{ "sender",	no_argument,	&opts.sender,	1 },
 		{ "server",	no_argument,	&opts.server,	1 },
 		{ NULL,		0,		NULL,		0 }};
@@ -328,6 +328,9 @@ main(int argc, char *argv[])
 			opts.verbose++;
 			break;
 		case 0:
+			/* Non-NULL flag values (e.g., --sender). */
+			break;
+		case 1:
 			opts.rsync_path = optarg;
 			break;
 		default:
