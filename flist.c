@@ -983,24 +983,48 @@ flist_gen_dels(struct sess *sess, const char *root,
 	for (i = 0; i < wflsz; i++)
 		if (FLSTAT_TOP_DIR & wfl[i].st.flags)
 			cargvs++;
-	assert(cargvs > 0);
+	if (0 == cargvs)
+		return 1;
+
 	if (NULL == (cargv = calloc(cargvs, sizeof(char *)))) {
 		ERR(sess, "calloc");
 		return 0;
 	}
-	for (i = j = 0; i < wflsz; i++) {
-		if ( ! (FLSTAT_TOP_DIR & wfl[i].st.flags))
-			continue;
-		c = asprintf(&cargv[j], "%s/%s", root, wfl[i].wpath);
-		if (c < 0) {
+
+	/*
+	 * If we're given just a "." as the first entry, that means
+	 * we're doing a relative copy with a trailing slash.
+	 * Special-case this just for the sake of simplicity.
+	 * Otherwise, look through all top-levels.
+	 */
+
+	if (wflsz && 0 == strcmp(wfl[0].wpath, ".")) {
+		assert(1 == cargvs);
+		assert(S_ISDIR(wfl[0].st.mode));
+		if (asprintf(&cargv[0], "%s/", root) < 0) {
 			ERR(sess, "asprintf");
-			cargv[j] = NULL;
+			cargv[0] = NULL;
 			goto out;
 		}
-		LOG4(sess, "%s: will scan for delete", cargv[j]);
-		j++;
+	} else {
+		for (i = j = 0; i < wflsz; i++) {
+			if ( ! (FLSTAT_TOP_DIR & wfl[i].st.flags))
+				continue;
+			assert(S_ISDIR(wfl[i].st.mode));
+			assert(strcmp(wfl[i].wpath, "."));
+			c = asprintf(&cargv[j], 
+				"%s/%s", root, wfl[i].wpath);
+			if (c < 0) {
+				ERR(sess, "asprintf");
+				cargv[j] = NULL;
+				goto out;
+			}
+			LOG4(sess, "%s: will scan "
+				"for deletions", cargv[j]);
+			j++;
+		}
+		assert(j == cargvs);
 	}
-	assert(j == cargvs);
 
 	LOG2(sess, "delete from %zu directories", cargvs);
 
