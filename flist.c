@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <fts.h>
+#include <search.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -154,11 +155,15 @@ flist_topdirs(struct sess *sess, struct flist *fl, size_t flsz)
 			if ( ! S_ISDIR(fl[i].st.mode))
 				continue;
 			cp = strchr(fl[i].wpath, '/');
-			if (NULL == cp || '\0' == cp[1])
-				fl[i].st.flags |= FLSTAT_TOP_DIR;
+			if (NULL != cp && '\0' != cp[1]) 
+				continue;
+			fl[i].st.flags |= FLSTAT_TOP_DIR;
+			LOG4(sess, "%s: top-level", fl[i].wpath);
 		}
-	} else if (flsz)
+	} else if (flsz) {
 		fl[0].st.flags |= FLSTAT_TOP_DIR;
+		LOG4(sess, "%s: top-level", fl[0].wpath);
+	}
 }
 
 /*
@@ -605,9 +610,9 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 
 	/* Remember to order the received list. */
 
+	LOG2(sess, "received file metadata list: %zu", flsz);
 	qsort(fl, flsz, sizeof(struct flist), flist_cmp);
 	flist_topdirs(sess, fl, flsz);
-	LOG2(sess, "received file metadata list: %zu", flsz);
 	*sz = flsz;
 	*flp = fl;
 	return 1;
@@ -938,52 +943,127 @@ flist_gen(struct sess *sess, size_t argc,
 }
 
 /*
- * Generate a sorted list of files starting at (but not including)
- * "root" and descended into recursively.
+ * Generate a list of files in root to delete that are within the
+ * top-level directories stipulated by "wfl".
  * Only handles symbolic links, directories, and regular files.
- * Returns zero on failure, non-zero on success.
+ * Returns zero on failure (fl and flsz will be NULL and zero), non-zero
+ * on success.
  * On success, "fl" will need to be freed with flist_free().
  */
 int
-flist_gen_local(struct sess *sess,
-	const char *root, struct flist **fl, size_t *sz)
+flist_gen_dels(struct sess *sess, const char *root, 
+	struct flist **fl, size_t *sz,
+	const struct flist *wfl, size_t wflsz)
 {
-	char		*cargv[2];
-	int		 rc = 0;
-	FTS		*fts;
-	FTSENT		*ent;
-	struct flist	*f;
-	size_t		 max = 0, stripdir;
+	char		**cargv = NULL;
+	int		  rc = 0, c;
+	FTS		 *fts = NULL;
+	FTSENT		 *ent;
+	struct flist	 *f;
+	size_t		  cargvs = 0, i, j, max = 0, stripdir;
+	ENTRY		  hent;
+	ENTRY		 *hentp;
+	
+	*fl = NULL;
+	*sz = 0;
 
-	if (NULL == (cargv[0] = strdup(root))) {
-		ERR(sess, "strdup");
+	/* Only run this code when we're recursive. */
+
+	if ( ! sess->opts->recursive)
+		return 1;
+
+	/* 
+	 * Gather up all top-level directories for scanning.
+	 * This is stipulated by rsync's --delete behaviour, where we
+	 * only delete things in the top-level directories given on the
+	 * command line.
+	 */
+
+	assert(wflsz > 0);
+	for (i = 0; i < wflsz; i++)
+		if (FLSTAT_TOP_DIR & wfl[i].st.flags)
+			cargvs++;
+	assert(cargvs > 0);
+	if (NULL == (cargv = calloc(cargvs, sizeof(char *)))) {
+		ERR(sess, "calloc");
 		return 0;
 	}
-	cargv[1] = NULL;
+	for (i = j = 0; i < wflsz; i++) {
+		if ( ! (FLSTAT_TOP_DIR & wfl[i].st.flags))
+			continue;
+		c = asprintf(&cargv[j], "%s/%s", root, wfl[i].wpath);
+		if (c < 0) {
+			ERR(sess, "asprintf");
+			cargv[j] = NULL;
+			goto out;
+		}
+		LOG4(sess, "%s: will scan for delete", cargv[j]);
+		j++;
+	}
+	assert(j == cargvs);
 
-	/* Strip away the root, since everything is relative to it. */
-
-	stripdir = strlen(root) + 1;
+	LOG2(sess, "delete from %zu directories", cargvs);
 
 	/*
-	 * XXX: this only runs properly prior to unveil().
-	 * The caller needs to make sure that unveil() is not called
-	 * prior to this function.
+	 * Next, use the standard hcreate(3) hashtable interface to hash
+	 * all of the files that we want to synchronise.
+	 * This way, we'll be able to determine which files we want to
+	 * delete in O(n) time instead of O(n * search) time.
+	 * Plus, we can do the scan in-band and only allocate the files
+	 * we want to delete.
+	 */
+
+	if ( ! hcreate(wflsz)) {
+		ERR(sess, "hcreate");
+		goto out;
+	}
+
+	for (i = 0; i < wflsz; i++) {
+		memset(&hent, 0, sizeof(ENTRY));
+		if (NULL == (hent.key = strdup(wfl[i].wpath))) {
+			ERR(sess, "strdup");
+			goto out;
+		}
+		if (NULL == (hentp = hsearch(hent, ENTER))) {
+			ERR(sess, "hsearch");
+			goto out;
+		} else if (hentp->key != hent.key) {
+			ERRX(sess, "%s: duplicate", wfl[i].wpath);
+			free(hent.key);
+			goto out;
+		}
+	}
+
+	/* 
+	 * Now we're going to try to descend into all of the top-level
+	 * directories stipulated by the file list.
+	 * If the directories don't exist, it's ok.
 	 */
 
 	if (NULL == (fts = fts_open(cargv, FTS_PHYSICAL, NULL))) {
 		ERR(sess, "fts_open");
-		free(cargv[0]);
-		return 0;
+		goto out;
 	}
 
+	stripdir = strlen(root) + 1;
 	errno = 0;
 	while (NULL != (ent = fts_read(fts))) {
+		if (FTS_NS == ent->fts_info)
+			continue;
 		if ( ! flist_fts_check(sess, ent)) {
 			errno = 0;
 			continue;
 		} else if (stripdir >= ent->fts_pathlen)
 			continue;
+
+		/* Look up in hashtable. */
+
+		memset(&hent, 0, sizeof(ENTRY));
+		hent.key = ent->fts_path + stripdir;
+		if (NULL != hsearch(hent, FIND))
+			continue;
+
+		/* Not found: we'll delete it. */
 
 		if ( ! flist_realloc(sess, fl, sz, &max)) {
 			ERRX1(sess, "flist_realloc");
@@ -1009,95 +1089,44 @@ flist_gen_local(struct sess *sess,
 	qsort(*fl, *sz, sizeof(struct flist), flist_cmp);
 	rc = 1;
 out:
-	fts_close(fts);
-	free(cargv[0]);
+	if (NULL != fts)
+		fts_close(fts);
+	for (i = 0; i < cargvs; i++)
+		free(cargv[i]);
+	free(cargv);
+	hdestroy();
 	return rc;
 }
 
 /*
- * Given the files that the system has ("have") and what we're going to
- * update ("want"), delete all files and directories in "have" not found
- * in "want".
- * We only do this within directories that we're going to update, which
- * might include the root of the destination.
+ * Delete all files and directories in "fl".
+ * If called with a zero-length "fl", does nothing.
  * If dry_run is specified, simply write what would be done.
  * Return zero on failure, non-zero on success.
  */
 int
 flist_del(struct sess *sess, int root,
-	const struct flist *have, size_t havesz,
-	const struct flist *want, size_t wantsz)
+	const struct flist *fl, size_t flsz)
 {
-	size_t	 i, k, offs;
-	ssize_t	 j;
-	int	 fl;
+	ssize_t	 i;
+	int	 flag;
+
+	if (0 == flsz)
+		return 1;
 
 	assert(sess->opts->del);
 	assert(sess->opts->recursive);
 
-	for (i = 0; i < wantsz; i++) {
-		if ( ! S_ISDIR(want[i].st.mode))
+	for (i = flsz - 1; i >= 0; i--) {
+		LOG1(sess, "%s: deleting", fl[i].wpath);
+		if (sess->opts->dry_run)
 			continue;
-		if (NULL != strchr(want[i].wpath, '/'))
-			continue;
-
-		/*
-		 * We now have a top-level directory.
-		 * Scan backward over the files we already have to see
-		 * which ones share the same root.
-		 * Backwards so that we can catch the files in
-		 * directories first.
-		 * For each file that shares the same root, see if it
-		 * exists in the list of files to be transferred.
-		 * If not, delete it.
-		 * If we're doing a root-transfer (encoded as "."), then
-		 * consider all files to be in the root.
-		 */
-
-		offs = strcmp(want[i].wpath, ".") ?
-			strlen(want[i].wpath) : 0;
-
-		for (j = havesz - 1; j >= 0; j--) {
-			if (offs > 0) {
-				if (strncmp(have[j].wpath,
-				    want[i].wpath, offs))
-					continue;
-				if ('/' != have[j].wpath[offs])
-					continue;
-			}
-
-			/*
-			 * We have the same root.
-			 * See if this file exists in the files that are
-			 * going to be transferred.
-			 */
-
-			for (k = 0; k < wantsz; k++) {
-				if (strcmp(want[k].wpath, have[j].wpath))
-					continue;
-				break;
-			}
-
-			/*
-			 * Did we find the file?
-			 * If not, then we should delete it.
-			 */
-
-			if (k < wantsz)
-				continue;
-
-			LOG1(sess, "%s: deleting", have[j].wpath);
-
-			if (sess->opts->dry_run)
-				continue;
-
-			assert(-1 != root);
-			fl = S_ISDIR(have[j].st.mode) ? AT_REMOVEDIR : 0;
-			if (-1 == unlinkat(root, have[j].wpath, fl) &&
-			    ENOENT != errno) {
-				ERR(sess, "%s: unlinkat", have[j].wpath);
-				return 0;
-			}
+		assert(-1 != root);
+		flag = S_ISDIR(fl[i].st.mode) ? AT_REMOVEDIR : 0;
+		if (-1 == unlinkat(root, fl[i].wpath, flag) &&
+		    ENOENT != errno) {
+			ERR(sess, "%s: unlinkat", fl[i].wpath);
+			return 0;
 		}
 	}
 

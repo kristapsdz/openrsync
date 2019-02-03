@@ -38,9 +38,9 @@ rsync_sender(struct sess *sess, int fdin,
 	int fdout, size_t argc, char **argv)
 {
 	struct flist	*fl = NULL;
-	size_t		 flsz = 0, phase = 0;
+	size_t		 flsz = 0, phase = 0, excl;
 	int		 rc = 0, c;
-	int32_t		 idx, preamble;
+	int32_t		 idx;
 	struct blkset	*blks = NULL;
 
 	if (-1 == pledge("unveil stdio rpath", NULL)) {
@@ -59,16 +59,26 @@ rsync_sender(struct sess *sess, int fdin,
 		goto out;
 	}
 
-	/* Now send the file list and our mystery number. */
+	/* Client sends zero-length exclusions if deleting. */
 
+	if ( ! sess->opts->server && sess->opts->del &&
+	     ! io_write_int(sess, fdout, 0)) {
+		ERRX1(sess, "io_write_int");
+		goto out;
+	} 
+
+	/* 
+	 * Then the file list in any mode.
+	 * Finally, the IO error (always zero for us).
+	 */
+	
 	if ( ! flist_send(sess, fdin, fdout, fl, flsz)) {
 		ERRX1(sess, "flist_send");
 		goto out;
 	} else if ( ! io_write_int(sess, fdout, 0)) {
 		ERRX1(sess, "io_write_int");
 		goto out;
-	} else if ( ! sess->opts->server)
-		LOG1(sess, "Transfer starting: %zu files", flsz);
+	} 
 
 	/* Exit if we're the server with zero files. */
 
@@ -76,16 +86,20 @@ rsync_sender(struct sess *sess, int fdin,
 		WARNX(sess, "sender has empty file list: exiting");
 		rc = 1;
 		goto out;
-	}
+	} else if ( ! sess->opts->server)
+		LOG1(sess, "Transfer starting: %zu files", flsz);
 
-	/* XXX: what is this? */
+	/*
+	 * If we're the server, read our exclusion list.
+	 * This is always 0 for now.
+	 */
 
 	if (sess->opts->server) {
-		if ( ! io_read_int(sess, fdin, &preamble)) {
-			ERRX1(sess, "io_read_int");
+		if ( ! io_read_size(sess, fdin, &excl)) {
+			ERRX1(sess, "io_read_size");
 			goto out;
-		} else if (0 != preamble) {
-			ERRX1(sess, "preamble value must be zero");
+		} else if (0 != excl) {
+			ERRX1(sess, "exclusion list is non-empty");
 			goto out;
 		}
 	}

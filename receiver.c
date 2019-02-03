@@ -49,7 +49,7 @@ rsync_receiver(struct sess *sess,
 	int fdin, int fdout, const char *root)
 {
 	struct flist	*fl = NULL, *dfl = NULL;
-	size_t		 i, flsz = 0, dflsz = 0;
+	size_t		 i, flsz = 0, dflsz = 0, excl;
 	char		*tofree;
 	int		 rc = 0, dfd = -1, phase = 0, c;
 	int32_t	 	 ioerror;
@@ -63,12 +63,22 @@ rsync_receiver(struct sess *sess,
 		goto out;
 	}
 
-	/* XXX: what does this do? */
+	/* Client sends zero-length exclusions. */
 
 	if ( ! sess->opts->server &&
 	     ! io_write_int(sess, fdout, 0)) {
 		ERRX1(sess, "io_write_int");
 		goto out;
+	}
+
+	if (sess->opts->server && sess->opts->del) {
+		if ( ! io_read_size(sess, fdin, &excl)) {
+			ERRX1(sess, "io_read_size");
+			goto out;
+		} else if (0 != excl) {
+			ERRX(sess, "exclusion list is non-empty");
+			goto out;
+		}
 	}
 
 	/*
@@ -79,7 +89,11 @@ rsync_receiver(struct sess *sess,
 	if ( ! flist_recv(sess, fdin, &fl, &flsz)) {
 		ERRX1(sess, "flist_recv");
 		goto out;
-	} else if ( ! io_read_int(sess, fdin, &ioerror)) {
+	} 
+	
+	/* The IO error is sent after the file list. */
+
+	if ( ! io_read_int(sess, fdin, &ioerror)) {
 		ERRX1(sess, "io_read_int");
 		goto out;
 	} else if (0 != ioerror) {
@@ -133,15 +147,17 @@ rsync_receiver(struct sess *sess,
 	/*
 	 * Begin by conditionally getting all files we have currently
 	 * available in our destination.
-	 * XXX: do this *before* the unveil() because fts_read() doesn't
-	 * work properly afterward.
+	 * XXX: THIS IS A BUG IN OPENBSD 6.4.
+	 * For newer version of OpenBSD, this is safe to put after the
+	 * unveil.
 	 */
 
-	if (sess->opts->del && sess->opts->recursive)
-		if ( ! flist_gen_local(sess, root, &dfl, &dflsz)) {
-			ERRX1(sess, "flist_gen_local");
-			goto out;
-		}
+	if (sess->opts->del && 
+	    sess->opts->recursive &&
+	    ! flist_gen_dels(sess, root, &dfl, &dflsz, fl, flsz)) {
+		ERRX1(sess, "flist_gen_local");
+		goto out;
+	}
 
 	/*
 	 * Make our entire view of the file-system be limited to what's
@@ -160,11 +176,10 @@ rsync_receiver(struct sess *sess,
 
 	/* If we have a local set, go for the deletion. */
 
-	if (NULL != dfl)
-		if ( ! flist_del(sess, dfd, dfl, dflsz, fl, flsz)) {
-			ERRX1(sess, "flist_del");
-			goto out;
-		}
+	if ( ! flist_del(sess, dfd, dfl, dflsz)) {
+		ERRX1(sess, "flist_del");
+		goto out;
+	}
 
 	/* Initialise poll events to listen from the sender. */
 
