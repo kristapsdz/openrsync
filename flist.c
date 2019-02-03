@@ -134,6 +134,34 @@ flist_dedupe(struct sess *sess, struct flist **fl, size_t *sz)
 }
 
 /*
+ * We're now going to find our top-level directories.
+ * This only applies to recursive mode.
+ * If we have the first element as the ".", then that's the "top
+ * directory" of our transfer.
+ * Otherwise, mark up all top-level directories in the set.
+ */
+static void
+flist_topdirs(struct sess *sess, struct flist *fl, size_t flsz)
+{
+	size_t	 	 i;
+	const char	*cp;
+
+	if ( ! sess->opts->recursive)
+		return;
+
+	if (flsz && strcmp(fl[0].wpath, ".")) {
+		for (i = 0; i < flsz; i++) {
+			if ( ! S_ISDIR(fl[i].st.mode))
+				continue;
+			cp = strchr(fl[i].wpath, '/');
+			if (NULL == cp || '\0' == cp[1])
+				fl[i].st.flags |= FLSTAT_TOP_DIR;
+		}
+	} else if (flsz)
+		fl[0].st.flags |= FLSTAT_TOP_DIR;
+}
+
+/*
  * Filter through the fts() file information.
  * We want directories (pre-order), regular files, and symlinks.
  * Everything else is skipped and possibly warned about.
@@ -578,6 +606,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 	/* Remember to order the received list. */
 
 	qsort(fl, flsz, sizeof(struct flist), flist_cmp);
+	flist_topdirs(sess, fl, flsz);
 	LOG2(sess, "received file metadata list: %zu", flsz);
 	*sz = flsz;
 	*flp = fl;
@@ -896,8 +925,10 @@ flist_gen(struct sess *sess, size_t argc,
 
 	qsort(*flp, *sz, sizeof(struct flist), flist_cmp);
 
-	if (flist_dedupe(sess, flp, sz))
+	if (flist_dedupe(sess, flp, sz)) {
+		flist_topdirs(sess, *flp, *sz);
 		return 1;
+	}
 
 	ERRX1(sess, "flist_dedupe");
 	flist_free(*flp, *sz);
