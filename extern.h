@@ -201,8 +201,8 @@ void		  rsync_errx1(struct sess *, const char *,
 			size_t, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
 
-int		  flist_del(struct sess *, int, const struct flist *,
-			size_t, const struct flist *, size_t);
+int		  flist_del(struct sess *, int, 
+			const struct flist *, size_t);
 int		  flist_gen(struct sess *, size_t, char **,
 			struct flist **, size_t *);
 int		  flist_gen_local(struct sess *, const char *,
@@ -211,6 +211,9 @@ void		  flist_free(struct flist *, size_t);
 int		  flist_recv(struct sess *, int,
 			struct flist **, size_t *);
 int		  flist_send(struct sess *, int, int,
+			const struct flist *, size_t);
+int		  flist_gen_dels(struct sess *, const char *, 
+			struct flist **, size_t *,
 			const struct flist *, size_t);
 
 char		**fargs_cmdline(struct sess *, const struct fargs *);
