@@ -12,12 +12,6 @@ so on).
   [blocks.c](https://github.com/kristapsdz/openrsync/blob/master/blocks.c)
   for quickly looking up fast-hash matches.
 
-- Easy: add a hashtable to `flist_del()` in 
-  [flist.c](https://github.com/kristapsdz/openrsync/blob/master/flist.c)
-  for quick removal of existing files.
-  Alternatively, hash the entire file list and do it in-band during the
-  file search in `flist_gen_local()`.
-
 - Easy: print more statistics, such as transfer times and rates.
 
 - Easy: tighten the [pledge(2)](https://man.openbsd.org/pledge.2) and 
