@@ -32,6 +32,13 @@
 #include "extern.h"
 #include "md4.h"
 
+/*
+ * A small optimisation: have a 1 MB pre-write buffer.
+ * Disable the pre-write buffer by having this be zero.
+ * (It doesn't affect performance much.)
+ */
+#define	OBUF_SIZE	(1024 * 1024)
+
 enum	downloadst {
 	DOWNLOAD_READ_NEXT = 0,
 	DOWNLOAD_READ_LOCAL,
@@ -58,6 +65,9 @@ struct	download {
 	size_t		    flsz; /* size of file list */
 	int		    rootfd; /* destination directory */
 	int		    fdin; /* read descriptor from sender */
+	char		   *obuf; /* pre-write buffer */
+	size_t		    obufsz; /* current size of obuf */
+	size_t		    obufmax; /* max size we'll wbuffer */
 };
 
 
@@ -177,6 +187,15 @@ download_alloc(struct sess *sess, int fdin,
 	p->rootfd = rootfd;
 	p->fdin = fdin;
 	download_reinit(sess, p, 0);
+	p->obufsz = 0;
+	p->obuf = NULL;
+	p->obufmax = OBUF_SIZE;
+	if (p->obufmax &&
+  	    NULL == (p->obuf = malloc(p->obufmax))) {
+		ERR(sess, "malloc");
+		free(p);
+		return NULL;
+	}
 	return p;
 }
 
@@ -191,7 +210,79 @@ download_free(struct download *p)
 	if (NULL == p)
 		return;
 	download_cleanup(p, 1);
+	free(p->obuf);
 	free(p);
+}
+
+/*
+ * Optimisation: instead of dumping directly into the output file, keep
+ * a buffer and write as much as we can into the buffer.
+ * That way, we can avoid calling write() too much, and instead call it
+ * with big buffers.
+ * To flush the buffer w/o changing it, pass 0 as "sz".
+ * Returns zero on failure, non-zero on success.
+ */
+static int
+buf_copy(struct sess *sess, 
+	const char *buf, size_t sz, struct download *p)
+{
+	size_t	 rem, tocopy;
+	ssize_t	 ssz;
+
+	assert(p->obufsz <= p->obufmax);
+
+	/* 
+	 * Copy as much as we can.
+	 * If we've copied everything, exit.
+	 * If we have no pre-write buffer (obufmax of zero), this never
+	 * gets called, so we never buffer anything.
+	 */
+
+	if (sz && p->obufsz < p->obufmax) {
+		assert(NULL != p->obuf);
+		rem = p->obufmax - p->obufsz;
+		assert(rem > 0);
+		tocopy = rem < sz ? rem : sz;
+		memcpy(p->obuf + p->obufsz, buf, tocopy);
+		sz -= tocopy;
+		buf += tocopy;
+		p->obufsz += tocopy;
+		assert(p->obufsz <= p->obufmax);
+		if (0 == sz)
+			return 1;
+	}
+
+	/* Drain the main buffer. */
+
+	if (p->obufsz) {
+		assert(p->obufmax);
+		assert(p->obufsz <= p->obufmax);
+		assert(NULL != p->obuf);
+		if ((ssz = write(p->fd, p->obuf, p->obufsz)) < 0) {
+			ERR(sess, "%s: write", p->fname);
+			return 0;
+		} else if ((size_t)ssz != p->obufsz) {
+			ERRX(sess, "%s: short write", p->fname);
+			return 0;
+		}
+		p->obufsz = 0;
+	}
+
+	/* 
+	 * Now drain anything left.
+	 * If we have no pre-write buffer, this is it.
+	 */
+
+	if (sz) {
+		if ((ssz = write(p->fd, buf, sz)) < 0) {
+			ERR(sess, "%s: write", p->fname);
+			return 0;
+		} else if ((size_t)ssz != sz) {
+			ERRX(sess, "%s: short write", p->fname);
+			return 0;
+		}
+	}
+	return 1;
 }
 
 /*
@@ -212,7 +303,6 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 	const char	*cp;
 	mode_t		 perm;
 	struct stat  	 st;
-	ssize_t		 ssz;
 	char		*buf = NULL;
 	unsigned char	 ourmd[MD4_DIGEST_LENGTH], 
 			 md[MD4_DIGEST_LENGTH];
@@ -279,6 +369,13 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 		/* Fall-through: there's no file. */
 	}
 
+	/*
+	 * At this point, the server is sending us data and we want to
+	 * hoover it up as quickly as possible or we'll deadlock.
+	 * We want to be pulling off of f->fdin as quickly as possible,
+	 * so perform as much buffering as we can.
+	 */
+
 	f = &p->fl[p->idx];
 
 	/*
@@ -290,29 +387,45 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 
 	if (DOWNLOAD_READ_LOCAL == p->state) {
 		assert(NULL == p->fname);
-		if (-1 != p->ofd) {
-			assert(-1 != *ofd);
-			*ofd = -1;
-			if (-1 == fstat(p->ofd, &st)) {
-				ERR(sess, "%s: fstat", f->path);
-				goto out;
-			} else if (st.st_size) {
-				/* FIXME: make sure we're a regular file. */
-				p->mapsz = st.st_size;
-				p->map = mmap(NULL, p->mapsz, 
-					PROT_READ, MAP_SHARED, p->ofd, 0);
-				if (MAP_FAILED == p->map) {
-					ERR(sess, "%s: mmap", f->path);
-					goto out;
-				}
-			}
-		} else
-			assert(-1 == *ofd);
 
-		/* Create the temporary file. */
+		/* 
+		 * Try to fstat() the file descriptor if valid and make
+		 * sure that we're still a regular file.
+		 * Then, if it has non-zero size, mmap() it for hashing.
+		 */
+
+		if (-1 != p->ofd &&
+		    -1 == fstat(p->ofd, &st)) {
+			ERR(sess, "%s: fstat", f->path);
+			goto out;
+		} else if (-1 != p->ofd && ! S_ISREG(st.st_mode)) {
+			WARNX(sess, "%s: not regular", f->path);
+			goto out;
+		}
+
+		if (-1 != p->ofd && st.st_size > 0) {
+			p->mapsz = st.st_size;
+			p->map = mmap(NULL, p->mapsz, 
+				PROT_READ, MAP_SHARED, p->ofd, 0);
+			if (MAP_FAILED == p->map) {
+				ERR(sess, "%s: mmap", f->path);
+				goto out;
+			}
+		}
+
+		/* Success either way: we don't need this. */
+
+		*ofd = -1;
+
+		/* 
+		 * Create the temporary file.
+		 * Use a simple scheme of path/.FILE.RANDOM, where we
+		 * fill in RANDOM with an arc4random number.
+		 * The tricky part is getting into the directory if
+		 * we're in recursive mode.
+		 */
 
 		hash = arc4random();
-
 		if (sess->opts->recursive &&
 		    NULL != (cp = strrchr(f->path, '/'))) {
 			dirlen = cp - f->path;
@@ -325,11 +438,15 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 			    f->path, hash) < 0)
 				p->fname = NULL;
 		}
-
 		if (NULL == p->fname) {
 			ERR(sess, "asprintf");
 			goto out;
 		}
+
+		/* 
+		 * Inherit permissions from the source file if we're new
+		 * or specifically told with -p.
+		 */
 
 		if ( ! sess->opts->preserve_perms)
 			perm = -1 == p->ofd ? f->st.mode : st.st_mode;
@@ -337,7 +454,7 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 			perm = f->st.mode;
 
 		p->fd = openat(p->rootfd, p->fname, 
-			O_WRONLY | O_CREAT | O_EXCL, perm);
+			O_APPEND|O_WRONLY|O_CREAT|O_EXCL, perm);
 
 		if (-1 == p->fd) {
 			ERR(sess, "%s: openat", p->fname);
@@ -376,11 +493,6 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 		goto out;
 	} 
 
-	/* 
-	 * FIXME: we can avoid writing so much by buffering all of these
-	 * writes, then flushing them out after a certain point.
-	 */
-
 	if (rawtok > 0) {
 		sz = rawtok;
 		if (NULL == (buf = malloc(sz))) {
@@ -390,15 +502,10 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 		if ( ! io_read_buf(sess, p->fdin, buf, sz)) {
 			ERRX1(sess, "io_read_int");
 			goto out;
-		}
-		if ((ssz = write(p->fd, buf, sz)) < 0) {
-			ERR(sess, "%s: write", p->fname);
-			goto out;
-		} else if ((size_t)ssz != sz) {
-			ERRX(sess, "%s: short write", p->fname);
+		} else if ( ! buf_copy(sess, buf, sz, p)) {
+			ERRX1(sess, "buf_copy");
 			goto out;
 		}
-
 		p->total += sz;
 		p->downloaded += sz;
 		LOG4(sess, "%s: received %zu B block", p->fname, sz);
@@ -414,6 +521,8 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 			goto out;
 		}
 		sz = tok == p->blk.blksz - 1 ? p->blk.rem : p->blk.len;
+		assert(sz);
+		assert(MAP_FAILED != p->map);
 		buf = p->map + (tok * p->blk.len);
 
 		/*
@@ -425,22 +534,23 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 		 */
 
 		assert(MAP_FAILED != p->map);
-		if ((ssz = write(p->fd, buf, sz)) < 0) {
-			ERR(sess, "%s: write", p->fname);
-			goto out;
-		} else if ((size_t)ssz != sz) {
-			ERRX(sess, "%s: short write", p->fname);
+		if ( ! buf_copy(sess, buf, sz, p)) {
+			ERRX1(sess, "buf_copy");
 			goto out;
 		}
-
 		p->total += sz;
 		LOG4(sess, "%s: copied %zu B", p->fname, sz);
 		MD4_Update(&p->ctx, buf, sz);
 		return 1;
 	}
 
+	if ( ! buf_copy(sess, NULL, 0, p)) {
+		ERRX1(sess, "buf_copy");
+		goto out;
+	}
+
 	assert(0 == rawtok);
-	LOG4(sess, "%s: finished", p->fname);
+	assert(0 == p->obufsz);
 
 	/* 
 	 * Make sure our resulting MD4 hashes match.
@@ -459,6 +569,8 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 		ERRX(sess, "%s: hash does not match", p->fname);
 		goto out;
 	}
+
+	/* Conditionally adjust file modification time. */
 
 	if (sess->opts->preserve_times) {
 		tv[0].tv_sec = time(NULL);
