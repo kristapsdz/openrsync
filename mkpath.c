@@ -74,4 +74,3 @@ mkpath(struct sess *sess, char *path)
 
 	return (0);
 }
-

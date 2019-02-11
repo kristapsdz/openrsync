@@ -284,8 +284,8 @@ int
 main(int argc, char *argv[])
 {
 	struct opts	 opts;
-	pid_t	 	 child;
-	int	 	 fds[2], flags, c, st;
+	pid_t		 child;
+	int		 fds[2], flags, c, st;
 	struct fargs	*fargs;
 	struct option	 lopts[] = {
 		{ "delete",	no_argument,	&opts.del,	1 },
