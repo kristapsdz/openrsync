@@ -44,7 +44,7 @@ rsync_child(const struct opts *opts, int fd, const struct fargs *f)
 
 	/* Construct the remote shell command. */
 
-	if (NULL == (args = fargs_cmdline(&sess, f))) {
+	if ((args = fargs_cmdline(&sess, f)) == NULL) {
 		ERRX1(&sess, "fargs_cmdline");
 		exit(EXIT_FAILURE);
 	}
@@ -54,10 +54,10 @@ rsync_child(const struct opts *opts, int fd, const struct fargs *f)
 
 	/* Make sure the child's stdin is from the sender. */
 
-	if (-1 == dup2(fd, STDIN_FILENO)) {
+	if (dup2(fd, STDIN_FILENO) == -1) {
 		ERR(&sess, "dup2");
 		exit(EXIT_FAILURE);
-	} if (-1 == dup2(fd, STDOUT_FILENO)) {
+	} if (dup2(fd, STDOUT_FILENO) == -1) {
 		ERR(&sess, "dup2");
 		exit(EXIT_FAILURE);
 	}

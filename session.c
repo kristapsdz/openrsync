@@ -105,7 +105,7 @@ sess_stats_send(struct sess *sess, int fd)
 {
 	uint64_t tw, tr, ts;
 
-	if (0 == sess->opts->verbose)
+	if (sess->opts->verbose == 0)
 		return 1;
 
 	tw = sess->total_write;
@@ -141,7 +141,7 @@ sess_stats_recv(struct sess *sess, int fd)
 {
 	uint64_t tr, tw, ts;
 
-	if (sess->opts->server || 0 == sess->opts->verbose)
+	if (sess->opts->server || sess->opts->verbose == 0)
 		return 1;
 
 	if (!io_read_ulong(sess, fd, &tw)) {
