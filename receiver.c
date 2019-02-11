@@ -58,7 +58,7 @@ rsync_receiver(struct sess *sess,
 	struct upload	*ul = NULL;
 	mode_t		 oumask;
 
-	if (pledge("stdio rpath wpath cpath fattr unveil", NULL) == -1) {
+	if (pledge("stdio rpath wpath cpath fattr getpw unveil", NULL) == -1) {
 		ERR(sess, "pledge");
 		goto out;
 	}
