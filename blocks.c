@@ -635,12 +635,12 @@ blk_send(struct sess *sess, int fd, size_t idx,
 	/* Put the entire send routine into a buffer. */
 
 	sz = sizeof(int32_t) + /* identifier */
-	    sizeof(int32_t) + /* block count */
-	    sizeof(int32_t) + /* block length */
-	    sizeof(int32_t) + /* checksum length */
-	    sizeof(int32_t) + /* block remainder */
-	    p->blksz *
-	    (sizeof(int32_t) + /* short checksum */
+	   sizeof(int32_t) + /* block count */
+	   sizeof(int32_t) + /* block length */
+	   sizeof(int32_t) + /* checksum length */
+	   sizeof(int32_t) + /* block remainder */
+	   p->blksz *
+	   (sizeof(int32_t) + /* short checksum */
 		p->csum); /* long checksum */
 
 	if (NULL == (buf = malloc(sz))) {
