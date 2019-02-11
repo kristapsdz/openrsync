@@ -578,7 +578,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 				goto out;
 			}
 			ff->st.mode = ival;
-		} else if (NULL == fflast) {
+		} else if (fflast == NULL) {
 			ERRX(sess, "same mode without last entry");
 			goto out;
 		} else
@@ -587,13 +587,13 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 		/* Conditional part: gid. */
 
 		if (sess->opts->preserve_gids) {
-			if ( ! (FLIST_GID_SAME & flag)) {
-				if ( ! io_read_int(sess, fd, &ival)) {
+			if (!(FLIST_GID_SAME & flag)) {
+				if (!io_read_int(sess, fd, &ival)) {
 					ERRX1(sess, "io_read_int");
 					goto out;
 				}
 				ff->st.gid = ival;
-			} else if (NULL == fflast) {
+			} else if (fflast == NULL) {
 				ERRX(sess, "same gid "
 					"without last entry");
 				goto out;
@@ -608,12 +608,12 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 			if (!io_read_size(sess, fd, &lsz)) {
 				ERRX1(sess, "io_read_size");
 				goto out;
-			} else if (0 == lsz) {
+			} else if (lsz == 0) {
 				ERRX(sess, "empty link name");
 				goto out;
 			}
 			ff->link = calloc(lsz + 1, 1);
-			if (NULL == ff->link) {
+			if (ff->link == NULL) {
 				ERR(sess, "calloc");
 				goto out;
 			}
