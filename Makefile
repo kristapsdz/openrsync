@@ -6,6 +6,7 @@ OBJS	 = blocks.o \
 	   fargs.o \
 	   flist.o \
 	   hash.o \
+	   ids.o \
 	   io.o \
 	   log.o \
 	   md4.o \
