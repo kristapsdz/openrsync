@@ -31,10 +31,10 @@ fargs_cmdline(struct sess *sess, const struct fargs *f)
 	size_t		  i = 0, j, argsz = 0;
 	const char	 *rsync_path;
 
-	assert(NULL != f);
+	assert(f != NULL);
 	assert(f->sourcesz > 0);
 
-	if (NULL == (rsync_path = sess->opts->rsync_path))
+	if ((rsync_path = sess->opts->rsync_path) == NULL)
 		rsync_path = RSYNC_PATH;
 
 	/* Be explicit with array size. */
@@ -47,18 +47,19 @@ fargs_cmdline(struct sess *sess, const struct fargs *f)
 	argsz += f->sourcesz;
 
 	args = calloc(argsz, sizeof(char *));
-	if (NULL == args) {
+	if (args == NULL) {
 		ERR(sess, "calloc");
 		return NULL;
 	}
 
-	if (NULL != f->host) {
-		assert(NULL != f->host);
+	if (f->host != NULL) {
+		assert(f->host != NULL);
+		
 		args[i++] = "ssh";
 		args[i++] = f->host;
 		args[i++] = (char *)rsync_path;
 		args[i++] = "--server";
-		if (FARGS_RECEIVER == f->mode)
+		if (f->mode == FARGS_RECEIVER)
 			args[i++] = "--sender";
 	} else {
 		args[i++] = (char *)rsync_path;
@@ -92,7 +93,7 @@ fargs_cmdline(struct sess *sess, const struct fargs *f)
 
 	args[i++] = ".";
 
-	if (FARGS_RECEIVER == f->mode) {
+	if (f->mode == FARGS_RECEIVER) {
 		for (j = 0; j < f->sourcesz; j++)
 			args[i++] = f->sources[j];
 	} else
