@@ -268,7 +268,7 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 
 	/* Drop the DNS pledge. */
 
-	if (-1 == pledge("inet unveil rpath cpath wpath stdio fattr", NULL)) {
+	if (-1 == pledge("stdio rpath wpath cpath fattr inet unveil", NULL)) {
 		ERR(&sess, "pledge");
 		goto out;
 	}
@@ -290,7 +290,7 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 
 	/* Drop the inet pledge. */
 
-	if (-1 == pledge("unveil rpath cpath wpath stdio fattr", NULL)) {
+	if (-1 == pledge("stdio rpath wpath cpath fattr unveil", NULL)) {
 		ERR(&sess, "pledge");
 		goto out;
 	}

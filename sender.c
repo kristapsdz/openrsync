@@ -43,7 +43,7 @@ rsync_sender(struct sess *sess, int fdin,
 	int32_t		 idx;
 	struct blkset	*blks = NULL;
 
-	if (-1 == pledge("unveil stdio rpath", NULL)) {
+	if (-1 == pledge("stdio rpath unveil", NULL)) {
 		ERR(sess, "pledge");
 		return 0;
 	}
