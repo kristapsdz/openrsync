@@ -568,6 +568,18 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 		goto out;
 	}
 
+	if (sess->opts->preserve_gids) {
+		if (fchown(p->fd, -1, f->st.gid) == -1) {
+			if (errno != EPERM) {
+				ERR(sess, "%s: fchown", p->fname);
+				goto out;
+			}
+			WARNX(sess, "%s: gid not available to user: %u",
+				f->path, f->st.gid);
+		} else
+			LOG4(sess, "%s: updated gid", f->path);
+	}
+
 	/* Conditionally adjust file modification time. */
 
 	if (sess->opts->preserve_times) {
