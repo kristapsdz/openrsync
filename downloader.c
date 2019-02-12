@@ -568,14 +568,23 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 		goto out;
 	}
 
+	/* 
+	 * Conditionally adjust group id.
+	 * FIXME: remember the original file's group id and don't
+	 * reassign it if it's the same.
+	 * If we have an EPERM, report it but continue on: this just
+	 * means that we're mapping into an unknown (or disallowed)
+	 * group identifier.
+	 */
+
 	if (sess->opts->preserve_gids) {
 		if (fchown(p->fd, -1, f->st.gid) == -1) {
 			if (errno != EPERM) {
 				ERR(sess, "%s: fchown", p->fname);
 				goto out;
 			}
-			WARNX(sess, "%s: gid not available to user: %u",
-				f->path, f->st.gid);
+			WARNX(sess, "%s: gid unknown or not available "
+				"to user: %u", f->path, f->st.gid);
 		} else
 			LOG4(sess, "%s: updated gid", f->path);
 	}
