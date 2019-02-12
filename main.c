@@ -324,6 +324,7 @@ main(int argc, char *argv[])
 			opts.dry_run = 1;
 			break;
 		case 'o':
+			/* XXX: not finished yet. */
 			opts.preserve_uids = 1;
 			break;
 		case 'p':
@@ -457,7 +458,7 @@ main(int argc, char *argv[])
 		close(fds[0]);
 	return c ? EXIT_SUCCESS : EXIT_FAILURE;
 usage:
-	fprintf(stderr, "usage: %s [-glnoprtv] "
+	fprintf(stderr, "usage: %s [-glnprtv] "
 		"[-e ssh-prog] [--delete] [--rsync-path=prog] src ... dst\n",
 		getprogname());
 	return EXIT_FAILURE;
