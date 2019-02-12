@@ -31,7 +31,7 @@
  * This is the minimum size for a block of data not including those in
  * the remainder block.
  */
-#define	BLOCK_SIZE_MIN	(700)
+#define	BLOCK_SIZE_MIN  (700)
 
 /*
  * The sender and receiver use a two-phase synchronisation process.
@@ -96,17 +96,18 @@ struct	flist {
  * See struct fargs.
  */
 struct	opts {
-	int		 sender; /* --sender */
-	int		 server; /* --server */
-	int		 recursive; /* -r */
-	int		 verbose; /* -v */
-	int		 dry_run; /* -n */
-	int		 preserve_times; /* -t */
-	int		 preserve_perms; /* -p */
-	int		 preserve_links; /* -l */
-	int		 preserve_gids; /* -g */
-	int		 del; /* --delete */
-	const char	*rsync_path; /* --rsync-path */
+	int		 sender;		/* --sender */
+	int		 server;		/* --server */
+	int		 recursive;		/* -r */
+	int		 verbose;		/* -v */
+	int		 dry_run;		/* -n */
+	int		 preserve_times;	/* -t */
+	int		 preserve_perms;	/* -p */
+	int		 preserve_links;	/* -l */
+	int		 preserve_gids;		/* -g */
+	int		 del;			/* --delete */
+	char		*rsync_path;		/* --rsync-path */
+	char		*ssh_prog;		/* --rsh or -e */
 };
 
 /*
@@ -301,10 +302,11 @@ int		  sess_stats_send(struct sess *, int);
 int		  sess_stats_recv(struct sess *, int);
 
 void		  idents_free(struct ident *, size_t);
-void		  idents_gid_assign(struct sess *, 
+void		  idents_gid_assign(struct sess *,
 			struct flist *, size_t, const struct ident *, size_t);
 void		  idents_gid_remap(struct sess *, struct ident *, size_t);
-int		  idents_gid_add(struct sess *, struct ident **, size_t *, gid_t);
+int		  idents_gid_add(struct sess *, struct ident **, size_t *,
+			gid_t);
 int		  idents_recv(struct sess *, int, struct ident **, size_t *);
 int		  idents_send(struct sess *, int, const struct ident *, size_t);
 

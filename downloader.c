@@ -568,7 +568,7 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 		goto out;
 	}
 
-	/* 
+	/*
 	 * Conditionally adjust group id.
 	 * FIXME: remember the original file's group id and don't
 	 * reassign it if it's the same.
