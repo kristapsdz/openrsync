@@ -22,7 +22,7 @@
 .Nd synchronise local and remote files
 .Sh SYNOPSIS
 .Nm openrsync
-.Op Fl lnprtv
+.Op Fl glnprtv
 .Op Fl -delete
 .Op Fl -rsync-path Ar prog
 .Ar source ...
@@ -43,6 +43,15 @@ may be remote,
 but not both.
 The arguments are as follows:
 .Bl -tag -width Ds
+.It Fl g
+Set group identifier to match the source.
+Groups are matched by name: group
+.Qq kristaps
+with id 1000 on a remote server will be properly assigned group
+.Qq kristaps
+on the local machine with id 2000.
+If the sender's group is unknown on the local machine, it is used
+verbatim.
 .It Fl l
 Transfer symbolic links.
 The link is transferred as a standalone file: if the destination does
