@@ -105,6 +105,7 @@ struct	opts {
 	int		 preserve_perms;	/* -p */
 	int		 preserve_links;	/* -l */
 	int		 preserve_gids;		/* -g */
+	int		 preserve_uids;		/* -u */
 	int		 del;			/* --delete */
 	char		*rsync_path;		/* --rsync-path */
 	char		*ssh_prog;		/* --rsh or -e */
@@ -301,13 +302,15 @@ char		 *symlinkat_read(struct sess *, int, const char *);
 int		  sess_stats_send(struct sess *, int);
 int		  sess_stats_recv(struct sess *, int);
 
-void		  idents_free(struct ident *, size_t);
-void		  idents_gid_assign(struct sess *,
+int		  idents_add(struct sess *, int, struct ident **, size_t *,
+			int32_t);
+void		  idents_assign_gid(struct sess *,
 			struct flist *, size_t, const struct ident *, size_t);
-void		  idents_gid_remap(struct sess *, struct ident *, size_t);
-int		  idents_gid_add(struct sess *, struct ident **, size_t *,
-			gid_t);
+void		  idents_assign_uid(struct sess *,
+			struct flist *, size_t, const struct ident *, size_t);
+void		  idents_free(struct ident *, size_t);
 int		  idents_recv(struct sess *, int, struct ident **, size_t *);
+void		  idents_remap(struct sess *, int, struct ident *, size_t);
 int		  idents_send(struct sess *, int, const struct ident *, size_t);
 
 __END_DECLS
