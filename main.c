@@ -308,7 +308,7 @@ main(int argc, char *argv[])
 
 	memset(&opts, 0, sizeof(struct opts));
 
-	while ((c = getopt_long(argc, argv, "e:glnprtv", lopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "e:glnoprtv", lopts, NULL)) != -1) {
 		switch (c) {
 		case 'e':
 			opts.ssh_prog = optarg;
@@ -322,6 +322,9 @@ main(int argc, char *argv[])
 			break;
 		case 'n':
 			opts.dry_run = 1;
+			break;
+		case 'o':
+			opts.preserve_uids = 1;
 			break;
 		case 'p':
 			opts.preserve_perms = 1;
@@ -454,7 +457,7 @@ main(int argc, char *argv[])
 		close(fds[0]);
 	return c ? EXIT_SUCCESS : EXIT_FAILURE;
 usage:
-	fprintf(stderr, "usage: %s [-glnprtv] "
+	fprintf(stderr, "usage: %s [-glnoprtv] "
 		"[-e ssh-prog] [--delete] [--rsync-path=prog] src ... dst\n",
 		getprogname());
 	return EXIT_FAILURE;
