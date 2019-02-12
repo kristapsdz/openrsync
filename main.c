@@ -244,7 +244,7 @@ fargs_parse(size_t argc, char *argv[])
 			/* rsync://path */
 			cp += 8;
 			if (strncmp(cp, f->host, len) ||
-			    (cp[len] != '/' && cp[len] != '\0')) 
+			    (cp[len] != '/' && cp[len] != '\0'))
 				errx(EXIT_FAILURE, "different remote "
 					"host: %s", f->sources[i]);
 			memmove(f->sources[i],
@@ -260,7 +260,8 @@ fargs_parse(size_t argc, char *argv[])
 			    (cp[len] != ':' && cp[len] != '\0'))
 				errx(EXIT_FAILURE, "different remote "
 					"host: %s", f->sources[i]);
-			memmove(f->sources[i], f->sources[i] + len + 2, j - len - 1);
+			memmove(f->sources[i], f->sources[i] + len + 2,
+			    j - len - 1);
 		} else if (cp[0] == ':') {
 			/* :path */
 			memmove(f->sources[i], f->sources[i] + 1, j);
@@ -286,11 +287,18 @@ main(int argc, char *argv[])
 	int		 fds[2], c, st;
 	struct fargs	*fargs;
 	struct option	 lopts[] = {
-		{ "delete",	no_argument,	&opts.del,	1 },
-		{ "rsync-path",	required_argument, NULL,	1 },
-		{ "sender",	no_argument,	&opts.sender,	1 },
-		{ "server",	no_argument,	&opts.server,	1 },
-		{ NULL,		0,		NULL,		0 }};
+		{ "delete",	no_argument,	&opts.del,		1 },
+		{ "rsync-path",	required_argument, NULL,		1 },
+		{ "rsh",	required_argument, NULL,		'e' },
+		{ "sender",	no_argument,	&opts.sender,		1 },
+		{ "server",	no_argument,	&opts.server,		1 },
+		{ "verbose",	no_argument,	&opts.verbose,		1 },
+		{ "links",	no_argument,	&opts.preserve_links,	1 },
+		{ "dry-run",	no_argument,	&opts.dry_run,		1 },
+		{ "perms",	no_argument,	&opts.preserve_perms,	1 },
+		{ "recursive",	no_argument,	&opts.recursive,	1 },
+		{ "times",	no_argument,	&opts.preserve_times,	1 },
+		{ NULL,		0,		NULL,			0 }};
 
 	/* Global pledge. */
 
@@ -303,6 +311,7 @@ main(int argc, char *argv[])
 	while ((c = getopt_long(argc, argv, "e:glnprtv", lopts, NULL)) != -1) {
 		switch (c) {
 		case 'e':
+			opts.ssh_prog = optarg;
 			/* Ignore. */
 			break;
 		case 'g':
@@ -446,7 +455,7 @@ main(int argc, char *argv[])
 	return c ? EXIT_SUCCESS : EXIT_FAILURE;
 usage:
 	fprintf(stderr, "usage: %s [-glnprtv] "
-		"[--delete] [--rsync-path=prog] src ... dst\n",
+		"[-e ssh-prog] [--delete] [--rsync-path=prog] src ... dst\n",
 		getprogname());
 	return EXIT_FAILURE;
 }

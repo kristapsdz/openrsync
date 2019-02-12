@@ -315,7 +315,7 @@ flist_send(struct sess *sess, int fdin, int fdout, const struct flist *fl,
 			if (!io_write_int(sess, fdout, f->st.gid)) {
 				ERRX1(sess, "io_write_int");
 				goto out;
-			} 
+			}
 			if (!idents_gid_add(sess, &gids, &gidsz, f->st.gid)) {
 				ERRX1(sess, "idents_gid_add");
 				goto out;
@@ -655,7 +655,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 			sess->total_size += ff->st.size;
 	}
 
-	/* 
+	/*
 	 * Now conditionally read the group list.
 	 * We then remap all group identifiers to the local ids.
 	 */
