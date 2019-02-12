@@ -399,4 +399,5 @@ facilities are a mess, and will take an expert hand to properly secure.
 
 **rsync has specific running modes for the super-user**.
 It also pumps arbitrary data from the network onto your file-system.
-Do you want that running without specific mitigation in place?
+openrsync is about 10 000 lines of C code: do you trust me not to make
+mistakes?
