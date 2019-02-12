@@ -255,6 +255,20 @@ file's.
 .El
 .Pp
 If the status byte is zero, the file-list has terminated.
+If
+.Fl g
+has been specified, the sender sends the list of all groups encountered
+in the file list:
+.Pp
+.Bl -enum -compact
+.It
+group identifier or zero to indicate end of set (integer)
+.It
+length of group (byte)
+.It
+group name (prior length)
+.El
+.Pp
 The sender then sends any IO error values, which for
 .Xr openrsync 1
 is always zero.
