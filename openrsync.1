@@ -22,7 +22,7 @@
 .Nd synchronise local and remote files
 .Sh SYNOPSIS
 .Nm openrsync
-.Op Fl glnprtv
+.Op Fl glnoprtv
 .Op Fl -delete
 .Op Fl -rsync-path Ar prog
 .Ar source ...
@@ -59,6 +59,11 @@ not exist, it will be broken.
 .It Fl n
 Dry-run mode.
 Does not actually modify the destination.
+.It Fl o
+Set user identifier to match the source.
+This behaves like
+.Fl g
+and only works if run as root.
 .It Fl p
 Set destination file or directory permissions to match the source when
 it is updated.
