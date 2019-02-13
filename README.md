@@ -1,7 +1,7 @@
 # Introduction
 
-This is a clean-room implementation of [rsync](https://rsync.samba.org/)
-with a BSD (ISC) license.
+This is an implementation of [rsync](https://rsync.samba.org/) with a
+BSD (ISC) license.
 It's compatible with a modern rsync (3.1.3 is used for testing, but any
 supporting protocol 27 will do), but accepts only a subset of rsync's
 command-line arguments.
