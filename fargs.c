@@ -107,6 +107,8 @@ fargs_cmdline(struct sess *sess, const struct fargs *f)
 		args[i++] = "-l";
 	if (sess->opts->dry_run)
 		args[i++] = "-n";
+	if (sess->opts->preserve_uids)
+		args[i++] = "-o";
 	if (sess->opts->preserve_perms)
 		args[i++] = "-p";
 	if (sess->opts->recursive)

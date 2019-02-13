@@ -364,7 +364,7 @@ main(int argc, char *argv[])
 	 */
 
 	if (opts.server) {
-		if (pledge("stdio rpath wpath cpath fattr unveil", NULL) == -1)
+		if (pledge("stdio rpath wpath cpath fattr getpw unveil", NULL) == -1)
 			err(EXIT_FAILURE, "pledge");
 		c = rsync_server(&opts, (size_t)argc, argv);
 		return c ? EXIT_SUCCESS : EXIT_FAILURE;
