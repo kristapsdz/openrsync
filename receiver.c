@@ -44,8 +44,8 @@ int
 rsync_set_metadata(struct sess *sess, int newfile,
 	int fd, const struct flist *f, const char *path)
 {
-	uid_t		 uid;
-	gid_t		 gid;
+	uid_t		 uid = (uid_t)-1;
+	gid_t		 gid = (gid_t)-1;
 	struct timespec	 tv[2];
 
 	/*
@@ -55,10 +55,12 @@ rsync_set_metadata(struct sess *sess, int newfile,
 	 * group identifier.
 	 */
 
-	if (sess->opts->preserve_gids ||
-	    sess->opts->preserve_uids) {
-		uid = sess->opts->preserve_uids ? f->st.uid : -1;
-		gid = sess->opts->preserve_gids ? f->st.gid : -1;
+	if (getuid() == 0 && sess->opts->preserve_uids)
+		uid = f->st.uid;
+	if (sess->opts->preserve_gids)
+		gid = f->st.gid;
+
+	if (uid != (uid_t)-1 || gid != (gid_t)-1) {
 		if (fchown(fd, uid, gid) == -1) {
 			if (errno != EPERM) {
 				ERR(sess, "%s: fchown", path);
