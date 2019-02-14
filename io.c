@@ -53,6 +53,7 @@ io_write_nonblocking(struct sess *sess,
 {
 	struct pollfd	pfd;
 	ssize_t		wsz;
+	int		c;
 
 	*sz = 0;
 
@@ -62,10 +63,14 @@ io_write_nonblocking(struct sess *sess,
 	pfd.fd = fd;
 	pfd.events = POLLOUT;
 
-	if (poll(&pfd, 1, INFTIM) < 0) {
+	if ((c = poll(&pfd, 1, POLL_TIMEOUT)) == -1) {
 		ERR(sess, "poll");
 		return 0;
+	} else if (c == 0) {
+		ERRX(sess, "poll: timeout");
+		return 0;
 	}
+
 	if ((pfd.revents & (POLLERR|POLLNVAL))) {
 		ERRX(sess, "poll: bad fd");
 		return 0;
@@ -179,6 +184,7 @@ io_read_nonblocking(struct sess *sess,
 {
 	struct pollfd	pfd;
 	ssize_t		rsz;
+	int		c;
 
 	*sz = 0;
 
@@ -188,10 +194,14 @@ io_read_nonblocking(struct sess *sess,
 	pfd.fd = fd;
 	pfd.events = POLLIN;
 
-	if (poll(&pfd, 1, INFTIM) < 0) {
+	if ((c = poll(&pfd, 1, POLL_TIMEOUT)) == -1) {
 		ERR(sess, "poll");
 		return 0;
+	} else if (c == 0) {
+		ERRX(sess, "poll: timeout");
+		return 0;
 	}
+
 	if ((pfd.revents & (POLLERR|POLLNVAL))) {
 		ERRX(sess, "poll: bad fd");
 		return 0;
