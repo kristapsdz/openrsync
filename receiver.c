@@ -258,8 +258,11 @@ rsync_receiver(struct sess *sess,
 	LOG2(sess, "%s: ready for phase 1 data", root);
 
 	for (;;) {
-		if ((c = poll(pfd, PFD__MAX, INFTIM)) == -1) {
+		if ((c = poll(pfd, PFD__MAX, POLL_TIMEOUT)) == -1) {
 			ERR(sess, "poll");
+			goto out;
+		} else if (c == 0) {
+			ERRX(sess, "poll: timeout");
 			goto out;
 		}
 
