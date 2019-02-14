@@ -287,23 +287,29 @@ int
 blk_recv_ack(struct sess *sess,
 	int fd, const struct blkset *blocks, int32_t idx)
 {
+	char	 buf[20];
+	size_t	 pos = 0, sz;
 
-	/* FIXME: put into static block. */
+	sz = sizeof(int32_t) + /* index */
+	     sizeof(int32_t) + /* block count */
+	     sizeof(int32_t) + /* block length */
+	     sizeof(int32_t) + /* checksum length */
+	     sizeof(int32_t); /* block remainder */
+	assert(sz <= sizeof(buf));
 
-	if (!io_write_int(sess, fd, idx))
-		ERRX1(sess, "io_write_int");
-	else if (!io_write_int(sess, fd, blocks->blksz))
-		ERRX1(sess, "io_write_int");
-	else if (!io_write_int(sess, fd, blocks->len))
-		ERRX1(sess, "io_write_int");
-	else if (!io_write_int(sess, fd, blocks->csum))
-		ERRX1(sess, "io_write_int");
-	else if (!io_write_int(sess, fd, blocks->rem))
-		ERRX1(sess, "io_write_int");
-	else
-		return 1;
+	io_buffer_int(sess, buf, &pos, sz, idx);
+	io_buffer_int(sess, buf, &pos, sz, blocks->blksz);
+	io_buffer_int(sess, buf, &pos, sz, blocks->len);
+	io_buffer_int(sess, buf, &pos, sz, blocks->csum);
+	io_buffer_int(sess, buf, &pos, sz, blocks->rem);
+	assert(pos == sz);
 
-	return 0;
+	if (!io_write_buf(sess, fd, buf, sz)) {
+		ERRX1(sess, "io_write_buf");
+		return 0;
+	}
+
+	return 1;
 }
 
 /*
