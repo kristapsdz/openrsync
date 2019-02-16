@@ -28,6 +28,16 @@
 
 #include "extern.h"
 
+/*
+ * Use this for debugging deadlocks.
+ * All poll events will use it and catch time-outs.
+ */
+#define POLL_TIMEOUT	(INFTIM)
+
+/*
+ * A non-blocking check to see whether there's POLLIN data in fd.
+ * Returns <0 on failure, 0 if there's no data, >0 if there is.
+ */
 int
 io_read_check(struct sess *sess, int fd)
 {
@@ -40,12 +50,13 @@ io_read_check(struct sess *sess, int fd)
 		ERR(sess, "poll");
 		return -1;
 	}
-	return pfd.revents & POLLIN;
+	return (pfd.revents & POLLIN);
 }
 
 /*
  * Write buffer to non-blocking descriptor.
  * Returns zero on failure, non-zero on success (zero or more bytes).
+ * On success, fills in "sz" with the amount written.
  */
 static int
 io_write_nonblocking(struct sess *sess,
@@ -63,15 +74,15 @@ io_write_nonblocking(struct sess *sess,
 	pfd.fd = fd;
 	pfd.events = POLLOUT;
 
+	/* Poll and check for all possible errors. */
+
 	if ((c = poll(&pfd, 1, POLL_TIMEOUT)) == -1) {
 		ERR(sess, "poll");
 		return 0;
 	} else if (c == 0) {
 		ERRX(sess, "poll: timeout");
 		return 0;
-	}
-
-	if ((pfd.revents & (POLLERR|POLLNVAL))) {
+	} else if ((pfd.revents & (POLLERR|POLLNVAL))) {
 		ERRX(sess, "poll: bad fd");
 		return 0;
 	} else if ((pfd.revents & POLLHUP)) {
@@ -81,6 +92,8 @@ io_write_nonblocking(struct sess *sess,
 		ERRX(sess, "poll: unknown event");
 		return 0;
 	}
+
+	/* Now the non-blocking write. */
 
 	if ((wsz = write(fd, buf, bsz)) < 0) {
 		ERR(sess, "write");
@@ -194,21 +207,23 @@ io_read_nonblocking(struct sess *sess,
 	pfd.fd = fd;
 	pfd.events = POLLIN;
 
+	/* Poll and check for all possible errors. */
+
 	if ((c = poll(&pfd, 1, POLL_TIMEOUT)) == -1) {
 		ERR(sess, "poll");
 		return 0;
 	} else if (c == 0) {
 		ERRX(sess, "poll: timeout");
 		return 0;
-	}
-
-	if ((pfd.revents & (POLLERR|POLLNVAL))) {
+	} else if ((pfd.revents & (POLLERR|POLLNVAL))) {
 		ERRX(sess, "poll: bad fd");
 		return 0;
 	} else if (!(pfd.revents & (POLLIN|POLLHUP))) {
 		ERRX(sess, "poll: unknown event");
 		return 0;
 	}
+
+	/* Now the non-blocking read, checking for EOF. */
 
 	if ((rsz = read(fd, buf, bsz)) < 0) {
 		ERR(sess, "read");
@@ -377,6 +392,10 @@ io_read_buf(struct sess *sess, int fd, void *buf, size_t sz)
 	return 1;
 }
 
+/*
+ * Like io_write_buf(), but for a long (which is a composite type).
+ * Returns zero on failure, non-zero on success.
+ */
 int
 io_write_long(struct sess *sess, int fd, int64_t val)
 {
@@ -384,23 +403,32 @@ io_write_long(struct sess *sess, int fd, int64_t val)
 
 	/* Short-circuit: send as an integer if possible. */
 
-	if (val <= INT32_MAX && val >= 0)
-		return io_write_int(sess, fd, (int32_t)val);
+	if (val <= INT32_MAX && val >= 0) {
+		if (!io_write_int(sess, fd, (int32_t)val)) {
+			ERRX1(sess, "io_write_int");
+			return 0;
+		}
+		return 1;
+	}
 
 	/* Otherwise, pad with max integer, then send 64-bit. */
 
 	nv = htole64(val);
 
 	if (!io_write_int(sess, fd, INT32_MAX))
-		ERRX(sess, "io_write_int");
+		ERRX1(sess, "io_write_int");
 	else if (!io_write_buf(sess, fd, &nv, sizeof(int64_t)))
-		ERRX(sess, "io_write_buf");
+		ERRX1(sess, "io_write_buf");
 	else
 		return 1;
 
 	return 0;
 }
 
+/*
+ * Like io_write_buf(), but for an integer.
+ * Returns zero on failure, non-zero on success.
+ */
 int
 io_write_int(struct sess *sess, int fd, int32_t val)
 {
@@ -409,7 +437,7 @@ io_write_int(struct sess *sess, int fd, int32_t val)
 	nv = htole32(val);
 
 	if (!io_write_buf(sess, fd, &nv, sizeof(int32_t))) {
-		ERRX(sess, "io_write_buf");
+		ERRX1(sess, "io_write_buf");
 		return 0;
 	}
 	return 1;
@@ -433,7 +461,78 @@ io_buffer_buf(struct sess *sess, void *buf,
 }
 
 /*
- * Converts "val" to LE prior to io_buffer_buf().
+ * Like io_buffer_buf(), but also accomodating for multiplexing codes.
+ * This should NEVER be passed to io_write_buf(), but instead passed
+ * directly to a write operation.
+ */
+void
+io_lowbuffer_buf(struct sess *sess, void *buf,
+	size_t *bufpos, size_t buflen, const void *val, size_t valsz)
+{
+	int32_t	tagbuf;
+
+	if (0 == valsz)
+		return;
+
+	if (!sess->mplex_writes) {
+		io_buffer_buf(sess, buf, bufpos, buflen, val, valsz);
+		return;
+	}
+
+	assert(*bufpos + valsz + sizeof(int32_t) <= buflen);
+	assert(valsz == (valsz & 0xFFFFFF));
+	tagbuf = htole32((7 << 24) + valsz);
+
+	io_buffer_int(sess, buf, bufpos, buflen, tagbuf);
+	io_buffer_buf(sess, buf, bufpos, buflen, val, valsz);
+}
+
+/*
+ * Allocate the space needed for io_lowbuffer_buf() and friends.
+ * This should be called for *each* lowbuffer operation, so:
+ *   io_lowbuffer_alloc(... sizeof(int32_t));
+ *   io_lowbuffer_int(...);
+ *   io_lowbuffer_alloc(... sizeof(int32_t));
+ *   io_lowbuffer_int(...);
+ * And not sizeof(int32_t) * 2 or whatnot.
+ * Returns zero on failure, non-zero on succes.
+ */
+int
+io_lowbuffer_alloc(struct sess *sess, void **buf,
+	size_t *bufsz, size_t *bufmax, size_t sz)
+{
+	void	*pp;
+	size_t	 extra;
+
+	extra = sess->mplex_writes ? sizeof(int32_t) : 0;
+
+	if (*bufsz + sz + extra > *bufmax) {
+		pp = realloc(*buf, *bufsz + sz + extra);
+		if (pp == NULL) {
+			ERR(sess, "realloc");
+			return 0;
+		}
+		*buf = pp;
+		*bufmax = *bufsz + sz + extra;
+	}
+	*bufsz += sz + extra;
+	return 1;
+}
+
+/*
+ * Like io_lowbuffer_buf(), but for a single integer.
+ */
+void
+io_lowbuffer_int(struct sess *sess, void *buf,
+	size_t *bufpos, size_t buflen, int32_t val)
+{
+	int32_t	nv = htole32(val);
+
+	io_lowbuffer_buf(sess, buf, bufpos, buflen, &nv, sizeof(int32_t));
+}
+
+/*
+ * Like io_buffer_buf(), but for a single integer.
  */
 void
 io_buffer_int(struct sess *sess, void *buf,
@@ -444,13 +543,17 @@ io_buffer_int(struct sess *sess, void *buf,
 	io_buffer_buf(sess, buf, bufpos, buflen, &nv, sizeof(int32_t));
 }
 
+/*
+ * Like io_read_buf(), but for a long >=0.
+ * Returns zero on failure, non-zero on success.
+ */
 int
 io_read_ulong(struct sess *sess, int fd, uint64_t *val)
 {
 	int64_t	oval;
 
 	if (!io_read_long(sess, fd, &oval)) {
-		ERRX(sess, "io_read_int");
+		ERRX1(sess, "io_read_long");
 		return 0;
 	} else if (oval < 0) {
 		ERRX(sess, "io_read_size: negative value");
@@ -461,6 +564,10 @@ io_read_ulong(struct sess *sess, int fd, uint64_t *val)
 	return 1;
 }
 
+/*
+ * Like io_read_buf(), but for a long.
+ * Returns zero on failure, non-zero on success.
+ */
 int
 io_read_long(struct sess *sess, int fd, int64_t *val)
 {
@@ -470,7 +577,7 @@ io_read_long(struct sess *sess, int fd, int64_t *val)
 	/* Start with the short-circuit: read as an int. */
 
 	if (!io_read_int(sess, fd, &sval)) {
-		ERRX(sess, "io_read_int");
+		ERRX1(sess, "io_read_int");
 		return 0;
 	} else if (sval != INT32_MAX) {
 		*val = sval;
@@ -480,7 +587,7 @@ io_read_long(struct sess *sess, int fd, int64_t *val)
 	/* If the int is maximal, read as 64 bits. */
 
 	if (!io_read_buf(sess, fd, &oval, sizeof(int64_t))) {
-		ERRX(sess, "io_read_buf");
+		ERRX1(sess, "io_read_buf");
 		return 0;
 	}
 
@@ -493,6 +600,7 @@ io_read_long(struct sess *sess, int fd, int64_t *val)
  * These are transmitted as int32_t, so make sure that the value
  * transmitted is not out of range.
  * FIXME: I assume that size_t can handle int32_t's max.
+ * Returns zero on failure, non-zero on success.
  */
 int
 io_read_size(struct sess *sess, int fd, size_t *val)
@@ -500,7 +608,7 @@ io_read_size(struct sess *sess, int fd, size_t *val)
 	int32_t	oval;
 
 	if (!io_read_int(sess, fd, &oval)) {
-		ERRX(sess, "io_read_int");
+		ERRX1(sess, "io_read_int");
 		return 0;
 	} else if (oval < 0) {
 		ERRX(sess, "io_read_size: negative value");
@@ -511,13 +619,17 @@ io_read_size(struct sess *sess, int fd, size_t *val)
 	return 1;
 }
 
+/*
+ * Like io_read_buf(), but for an integer.
+ * Returns zero on failure, non-zero on success.
+ */
 int
 io_read_int(struct sess *sess, int fd, int32_t *val)
 {
 	int32_t	oval;
 
 	if (!io_read_buf(sess, fd, &oval, sizeof(int32_t))) {
-		ERRX(sess, "io_read_buf");
+		ERRX1(sess, "io_read_buf");
 		return 0;
 	}
 
@@ -542,7 +654,7 @@ io_unbuffer_buf(struct sess *sess, const void *buf,
 }
 
 /*
- * Calls io_unbuffer_buf() and converts from LE.
+ * Calls io_unbuffer_buf() and converts.
  */
 void
 io_unbuffer_int(struct sess *sess, const void *buf,
@@ -555,6 +667,9 @@ io_unbuffer_int(struct sess *sess, const void *buf,
 	*val = le32toh(oval);
 }
 
+/*
+ * Calls io_unbuffer_buf() and converts.
+ */
 int
 io_unbuffer_size(struct sess *sess, const void *buf,
 	size_t *bufpos, size_t bufsz, size_t *val)
@@ -570,23 +685,31 @@ io_unbuffer_size(struct sess *sess, const void *buf,
 	return 1;
 }
 
+/*
+ * Like io_read_buf(), but for a single byte >=0.
+ * Returns zero on failure, non-zero on success.
+ */
 int
 io_read_byte(struct sess *sess, int fd, uint8_t *val)
 {
 
 	if (!io_read_buf(sess, fd, val, sizeof(uint8_t))) {
-		ERRX(sess, "io_read_buf");
+		ERRX1(sess, "io_read_buf");
 		return 0;
 	}
 	return 1;
 }
 
+/*
+ * Like io_write_buf(), but for a single byte.
+ * Returns zero on failure, non-zero on success.
+ */
 int
 io_write_byte(struct sess *sess, int fd, uint8_t val)
 {
 
 	if (!io_write_buf(sess, fd, &val, sizeof(uint8_t))) {
-		ERRX(sess, "io_write_buf");
+		ERRX1(sess, "io_write_buf");
 		return 0;
 	}
 	return 1;
