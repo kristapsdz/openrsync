@@ -29,12 +29,6 @@
 #include "extern.h"
 
 /*
- * Use this for debugging deadlocks.
- * All poll events will use it and catch time-outs.
- */
-#define POLL_TIMEOUT	(INFTIM)
-
-/*
  * A non-blocking check to see whether there's POLLIN data in fd.
  * Returns <0 on failure, 0 if there's no data, >0 if there is.
  */
