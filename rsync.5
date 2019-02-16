@@ -40,12 +40,14 @@ command-line given file locations.
 There are a number of options in the protocol that are dictated by command-line
 flags.
 These will be noted as
-.Fl n
-for dry-run,
+.Fl D
+for devices,
 .Fl g
 for group ids,
 .Fl l
 for links,
+.Fl n
+for dry-run,
 .Fl o
 for user ids,
 .Fl r
@@ -229,6 +231,12 @@ the user id (integer)
 if
 .Fl g ,
 the group id (integer)
+.It
+if a special file and
+.Fl D ,
+the device 
+.Dq rdev
+type (integer)
 .It
 if a symbolic link and
 .Fl l ,
