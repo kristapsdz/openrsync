@@ -53,8 +53,8 @@ io_read_check(struct sess *sess, int fd)
  * On success, fills in "sz" with the amount written.
  */
 static int
-io_write_nonblocking(struct sess *sess,
-	int fd, const void *buf, size_t bsz, size_t *sz)
+io_write_nonblocking(struct sess *sess, int fd, const void *buf, size_t bsz,
+    size_t *sz)
 {
 	struct pollfd	pfd;
 	ssize_t		wsz;
@@ -103,8 +103,7 @@ io_write_nonblocking(struct sess *sess,
  * Returns 0 on failure, non-zero on success (all bytes written).
  */
 static int
-io_write_blocking(struct sess *sess,
-	int fd, const void *buf, size_t sz)
+io_write_blocking(struct sess *sess, int fd, const void *buf, size_t sz)
 {
 	size_t		wsz;
 	int		c;
@@ -305,8 +304,7 @@ io_read_flush(struct sess *sess, int fd)
 	} else if (sess->mplex_read_remain == 0)
 		return 1;
 
-	if (!io_read_blocking(sess, fd,
-	    mpbuf, sess->mplex_read_remain)) {
+	if (!io_read_blocking(sess, fd, mpbuf, sess->mplex_read_remain)) {
 		ERRX1(sess, "io_read_blocking");
 		return 0;
 	}
@@ -656,8 +654,7 @@ io_unbuffer_int(struct sess *sess, const void *buf,
 {
 	int32_t	oval;
 
-	io_unbuffer_buf(sess, buf, bufpos,
-		bufsz, &oval, sizeof(int32_t));
+	io_unbuffer_buf(sess, buf, bufpos, bufsz, &oval, sizeof(int32_t));
 	*val = le32toh(oval);
 }
 
