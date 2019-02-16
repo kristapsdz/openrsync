@@ -236,7 +236,7 @@ pre_link(struct upload *p, struct sess *sess)
 		free(b);
 	}
 
-	/* 
+	/*
 	 * Optionally preserve times/perms on the symlink.
 	 * FIXME: run rsync_set_metadata()?
 	 */

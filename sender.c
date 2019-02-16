@@ -119,7 +119,7 @@ send_dl_enqueue(struct sess *sess, struct send_dlq *q,
 	/* Validate the index. */
 		
 	if (idx < 0 || (uint32_t)idx >= flsz) {
-		ERRX(sess, "file index out of bounds: invalid %" 
+		ERRX(sess, "file index out of bounds: invalid %"
 			PRId32 " out of %zu", idx, flsz);
 		return 0;
 	} else if (S_ISDIR(fl[idx].st.mode)) {
@@ -144,7 +144,7 @@ send_dl_enqueue(struct sess *sess, struct send_dlq *q,
 	s->blks = NULL;
 	TAILQ_INSERT_TAIL(q, s, entries);
 
-	/* 
+	/*
 	 * This blocks til the full blockset has been read.
 	 * That's ok, because the most important thing is getting data
 	 * off the wire.
@@ -256,7 +256,7 @@ rsync_sender(struct sess *sess, int fdin,
 		}
 	}
 
-	/* 
+	/*
 	 * Set up our poll events.
 	 * We start by polling only in receiver requests, enabling other
 	 * poll events on demand.
@@ -301,7 +301,7 @@ rsync_sender(struct sess *sess, int fdin,
 				if (!io_read_int(sess, fdin, &idx)) {
 					ERRX1(sess, "io_read_int");
 					goto out;
-				} 
+				}
 				if (!send_dl_enqueue(sess,
 				    &sdlq, idx, fl, flsz, fdin)) {
 					ERRX1(sess, "send_dl_enqueue");
@@ -406,21 +406,21 @@ rsync_sender(struct sess *sess, int fdin,
 				 * put is in the token phase.
 				 */
 
-				sz = MIN(MAX_CHUNK, 
+				sz = MIN(MAX_CHUNK,
 					up.stat.curlen - up.stat.curpos);
-				if (!io_lowbuffer_alloc(sess, &wbuf, 
+				if (!io_lowbuffer_alloc(sess, &wbuf,
 				    &wbufsz, &wbufmax, sizeof(int32_t))) {
 					ERRX1(sess, "io_lowbuffer_alloc");
 					goto out;
 				}
 				io_lowbuffer_int(sess,
 					wbuf, &pos, wbufsz, sz);
-				if (!io_lowbuffer_alloc(sess, &wbuf, 
+				if (!io_lowbuffer_alloc(sess, &wbuf,
 				    &wbufsz, &wbufmax, sz)) {
 					ERRX1(sess, "io_lowbuffer_alloc");
 					goto out;
 				}
-				io_lowbuffer_buf(sess, wbuf, &pos, wbufsz, 
+				io_lowbuffer_buf(sess, wbuf, &pos, wbufsz,
 					up.stat.map + up.stat.curpos, sz);
 				up.stat.curpos += sz;
 				if (up.stat.curpos == up.stat.curlen)
@@ -454,7 +454,7 @@ rsync_sender(struct sess *sess, int fdin,
 
 				hash_file(up.stat.map,
 					up.stat.mapsz, filemd, sess);
-				if (!io_lowbuffer_alloc(sess, &wbuf, 
+				if (!io_lowbuffer_alloc(sess, &wbuf,
 				    &wbufsz, &wbufmax, MD4_DIGEST_LENGTH)) {
 					ERRX1(sess, "io_lowbuffer_alloc");
 					goto out;
@@ -472,7 +472,7 @@ rsync_sender(struct sess *sess, int fdin,
 				LOG3(sess, "%s: flushed %jd KB total, "
 					"%.2f%% uploaded",
 					fl[up.cur->idx].path,
-					(intmax_t)up.stat.total / 1024, 
+					(intmax_t)up.stat.total / 1024,
 					100.0 * up.stat.dirty / up.stat.total);
 				send_up_reset(&up);
 			} else if (NULL != up.cur && up.cur->idx < 0) {
@@ -495,7 +495,7 @@ rsync_sender(struct sess *sess, int fdin,
 				}
 				send_up_reset(&up);
 
-				/* 
+				/*
 				 * This is where we actually stop the
 				 * algorithm: we're already at the
 				 * second phase.
@@ -528,7 +528,7 @@ rsync_sender(struct sess *sess, int fdin,
 				    up.cur->blks, up.cur->idx)) {
 					ERRX1(sess, "blk_recv_ack");
 					goto out;
-				} 
+				}
 				LOG3(sess, "%s: primed for %jd B total",
 					fl[up.cur->idx].path,
 					(intmax_t)up.cur->blks->size);
@@ -575,7 +575,7 @@ rsync_sender(struct sess *sess, int fdin,
 
 			TAILQ_REMOVE(&sdlq, up.cur, entries);
 
-			/* 
+			/*
 			 * End of phase: enable channel to receiver.
 			 * We'll need our output buffer enabled in order
 			 * to process this event.
@@ -586,7 +586,7 @@ rsync_sender(struct sess *sess, int fdin,
 				continue;
 			}
 			
-			/* 
+			/*
 			 * Non-blocking open of file.
 			 * This will be picked up in the state machine
 			 * block of not being primed.
