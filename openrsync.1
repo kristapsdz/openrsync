@@ -22,7 +22,8 @@
 .Nd synchronise local and remote files
 .Sh SYNOPSIS
 .Nm openrsync
-.Op Fl glnoprtv
+.Op Fl Daglnoprtv
+.Op Fl e Ar prog
 .Op Fl -delete
 .Op Fl -rsync-path Ar prog
 .Ar source ...
@@ -43,6 +44,11 @@ may be remote,
 but not both.
 The arguments are as follows:
 .Bl -tag -width Ds
+.It Fl D
+Transfer FIFOs, device special files, and sockets.
+.It Fl a
+Shorthand for
+.Fl Dgloptr .
 .It Fl g
 Set group identifier to match the source.
 Groups are matched by name: group
@@ -87,6 +93,10 @@ Increase verbosity.
 Specify once for files being transferred, twice for specific status,
 thrice for per-file transfer information, and four times for per-file
 breakdowns.
+.It Fl e Ar prog
+The remote shell command to use.
+This may consist of space-separated command and arguments, such as
+.Qq ssh -l kristaps .
 .It Fl -delete
 Delete files in
 .Ar directory
@@ -101,6 +111,16 @@ Run
 on the remote host instead of the default
 .Ar rsync .
 .El
+.Pp
+By default
+.Nm
+connects to remote hosts using
+.Xr ssh 1
+and passes the arguments to
+.Xr rsync 1 .
+The destination
+.Ar directory
+must be a directory and is created if not found.
 .Pp
 A remote
 .Ar source
@@ -139,16 +159,6 @@ Updated files retain their existing permissions.
 It is an error if updated files have their file types change (e.g.,
 updating a directory with a file).
 .Pp
-At this time,
-.Ar source
-may only consist of regular files, directories
-.Pq only with Fl r ,
-or symbolic links
-.Pq only with Fl l .
-The destination
-.Ar directory
-must be a directory and is created if not found.
-.Pp
 .Nm
 is compatible with the GPL-licensed
 .Xr rsync 1
@@ -164,7 +174,21 @@ protocol version 27.
 .\" .Sh EXIT STATUS
 .\" For sections 1, 6, and 8 only.
 .Sh EXAMPLES
-All examples use
+A common invocation of
+.Nm
+is for archiving from a remote host to the local computer:
+.Pp
+.Dl % openrsync -av --delete remote:rpath /local/path
+.Pp
+This will update the contents of
+.Pa /local/path/rpath
+with those on the remote server.
+Switching remote and local wil update the remote contents instead:
+.Pp
+.Dl % openrsync -av --delete /local/path remote:rpath
+.Pp
+.Pp
+All subsequent examples use only
 .Fl t
 so that destination files inherit the source time.
 If not changed, subsequent invocations of
