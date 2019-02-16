@@ -11,6 +11,7 @@ OBJS	 = blocks.o \
 	   log.o \
 	   md4.o \
 	   mkpath.o \
+	   mktemp.o \
 	   receiver.o \
 	   sender.o \
 	   server.o \

@@ -71,13 +71,11 @@ inet_connect(struct sess *sess, int *sd,
 	 * while waiting for this to finish.
 	 */
 
-	c = connect(*sd,
-		(const struct sockaddr *)&src->sa,
-		src->salen);
+	c = connect(*sd, (const struct sockaddr *)&src->sa, src->salen);
 	if (c == -1) {
 		if (errno == ECONNREFUSED || errno == EHOSTUNREACH) {
-			WARNX(sess, "connect refused: "
-				"%s, %s", src->ip, host);
+			WARNX(sess, "connect refused: %s, %s",
+			    src->ip, host);
 			return 0;
 		}
 		ERR(sess, "connect");
@@ -124,11 +122,11 @@ inet_resolve(struct sess *sess, const char *host, size_t *sz)
 
 	if (error == EAI_AGAIN || error == EAI_NONAME) {
 		ERRX(sess, "DNS resolve error: %s: %s",
-			host, gai_strerror(error));
+		    host, gai_strerror(error));
 		return NULL;
 	} else if (error) {
 		ERRX(sess, "DNS parse error: %s: %s",
-			host, gai_strerror(error));
+		    host, gai_strerror(error));
 		return NULL;
 	}
 
@@ -170,13 +168,13 @@ inet_resolve(struct sess *sess, const char *host, size_t *sz)
 		if (res->ai_family == AF_INET) {
 			src[i].family = PF_INET;
 			inet_ntop(AF_INET,
-				&(((struct sockaddr_in *)sa)->sin_addr),
-				src[i].ip, INET6_ADDRSTRLEN);
+			    &(((struct sockaddr_in *)sa)->sin_addr),
+			    src[i].ip, INET6_ADDRSTRLEN);
 		} else {
 			src[i].family = PF_INET6;
 			inet_ntop(AF_INET6,
-				&(((struct sockaddr_in6 *)sa)->sin6_addr),
-				src[i].ip, INET6_ADDRSTRLEN);
+			    &(((struct sockaddr_in6 *)sa)->sin6_addr),
+			    src[i].ip, INET6_ADDRSTRLEN);
 		}
 
 		LOG2(sess, "DNS resolved: %s: %s", host, src[i].ip);
@@ -230,9 +228,9 @@ protocol_line(struct sess *sess, const char *host, const char *cp)
 }
 
 /*
- * Pledges: dns, inet, unveil, rpath, cpath, wpath, stdio, fattr.
+ * Pledges: dns, inet, unix, unveil, rpath, cpath, wpath, stdio, fattr, chown.
  *
- * Pledges (dry-run): -cpath, -wpath, -fattr.
+ * Pledges (dry-run): -unix, -cpath, -wpath, -fattr, -chown.
  * Pledges (!preserve_times): -fattr.
  */
 int
@@ -267,7 +265,7 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 
 	/* Drop the DNS pledge. */
 
-	if (pledge("stdio rpath wpath cpath fattr getpw inet unveil", NULL) == -1) {
+	if (pledge("stdio unix rpath wpath cpath dpath fattr chown getpw inet unveil", NULL) == -1) {
 		ERR(&sess, "pledge");
 		goto out;
 	}
@@ -288,7 +286,7 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 	}
 
 	/* Drop the inet pledge. */
-	if (pledge("stdio rpath wpath cpath fattr getpw unveil", NULL) == -1) {
+	if (pledge("stdio unix rpath wpath cpath dpath fattr chown getpw unveil", NULL) == -1) {
 		ERR(&sess, "pledge");
 		goto out;
 	}

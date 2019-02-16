@@ -30,9 +30,9 @@
  * In the former, it synchronises local files from a remote sink.
  * In the latter, the remote sink synchronses to the local files.
  *
- * Pledges: stdio, rpath, wpath, cpath, unveil, fattr.
+ * Pledges: stdio, rpath, wpath, cpath, unveil, fattr, chown.
  *
- * Pledges (dry-run): -cpath, -wpath, -fattr.
+ * Pledges (dry-run): -cpath, -wpath, -fattr, chown.
  * Pledges (!preserve_times): -fattr.
  */
 int
@@ -80,8 +80,8 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 	if (FARGS_RECEIVER != f->mode) {
 		LOG2(&sess, "client starting sender: %s",
 		    f->host == NULL ? "(local)" : f->host);
-		if (!rsync_sender(&sess, fd, fd,
-				f->sourcesz, f->sources)) {
+		if (!rsync_sender(&sess, fd, fd, f->sourcesz,
+		    f->sources)) {
 			ERRX1(&sess, "rsync_sender");
 			goto out;
 		}
