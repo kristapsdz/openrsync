@@ -16,11 +16,11 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
-#include <sys/un.h>                                                             
+#include <sys/un.h>
+
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -29,6 +29,8 @@
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
+
+#include "extern.h"
 
 #define MKTEMP_NAME	0
 #define MKTEMP_FILE	1
@@ -48,18 +50,20 @@
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
 #endif
 
-/* adapted from libc/stdio/mktemp.c */
+/*
+ * Adapted from libc/stdio/mktemp.c.
+ */
 static int
-mktemp_internalat(int pfd, char *path, int slen, int mode, int flags,
-    const char *link, mode_t dev_type, dev_t dev)
+mktemp_internalat(int pfd, char *path, int slen, int mode,
+	int flags, const char *link, mode_t dev_type, dev_t dev)
 {
-	char *start, *cp, *ep;
-	const char tempchars[] = TEMPCHARS;
-	unsigned int tries;
-	struct stat sb;
+	char 		*start, *cp, *ep;
+	const char 	 tempchars[] = TEMPCHARS;
+	unsigned int 	 tries;
+	struct stat 	 sb;
 	struct sockaddr_un sun;
-	size_t len;
-	int fd, saved_errno;
+	size_t 		 len;
+	int 		 fd, saved_errno;
 
 	len = strlen(path);
 	if (len < MIN_X || slen < 0 || (size_t)slen > len - MIN_X) {
@@ -186,66 +190,94 @@ mktemp_internalat(int pfd, char *path, int slen, int mode, int flags,
  * Returns -1 on failure.
  */
 int
-mkstempat(int fd, char *path)
+mkstempat(struct sess *sess, int fd, char *path)
 {
-	return(mktemp_internalat(fd, path, 0, MKTEMP_FILE, 0, NULL, 0, 0));
+	int	 nfd;
+
+	nfd = mktemp_internalat(fd, path, 0,
+		MKTEMP_FILE, 0, NULL, 0, 0);
+	if (nfd == -1) {
+		ERR(sess, "mktemp_internalat");
+		return -1;
+	}
+
+	return nfd;
 }
 
 /*
  * A combination of mkstemp(3) and symlinkat(2).
- * On success returns path with trailing Xs overwritten to create a unique
- * file name.
+ * On success returns path with trailing Xs overwritten to create a
+ * unique file name.
  * Returns NULL on failure.
  */
 char*
-mkstemplinkat(char *link, int fd, char *path)
+mkstemplinkat(struct sess *sess, char *link, int fd, char *path)
 {
-	if (mktemp_internalat(fd, path, 0, MKTEMP_LINK, 0, link, 0, 0) == -1)
-		return(NULL);
-	return(path);
+
+	if (mktemp_internalat(fd, path, 0,
+	    MKTEMP_LINK, 0, link, 0, 0) == -1) {
+		ERR(sess, "mktemp_internalat");
+		return NULL;
+	}
+
+	return path;
 }
 
 /*
  * A combination of mkstemp(3) and mkfifoat(2).
- * On success returns path with trailing Xs overwritten to create a unique
- * file name.
+ * On success returns path with trailing Xs overwritten to create a
+ * unique file name.
  * Returns NULL on failure.
  */
-char*
-mkstempfifoat(int fd, char *path)
+char *
+mkstempfifoat(struct sess *sess, int fd, char *path)
 {
-	if (mktemp_internalat(fd, path, 0, MKTEMP_FIFO, 0, NULL, 0, 0) == -1)
-		return(NULL);
-	return(path);
+
+	if (mktemp_internalat(fd, path, 0,
+	    MKTEMP_FIFO, 0, NULL, 0, 0) == -1) {
+		ERR(sess, "mktemp_internalat");
+		return NULL;
+	}
+
+	return path;
 }
 
 /*
  * A combination of mkstemp(3) and mknodat(2).
- * On success returns path with trailing Xs overwritten to create a unique
- * file name.
+ * On success returns path with trailing Xs overwritten to create a
+ * unique file name.
  * Returns NULL on failure.
  */
-char*
-mkstempnodat(int fd, char *path, mode_t mode, dev_t dev)
+char *
+mkstempnodat(struct sess *sess, int fd, char *path, mode_t mode, dev_t dev)
 {
-	if (mktemp_internalat(fd, path, 0, MKTEMP_NOD, 0, NULL, mode, dev) ==
-	    -1)
-		return(NULL);
-	return(path);
+
+	if (mktemp_internalat(fd, path, 0,
+	    MKTEMP_NOD, 0, NULL, mode, dev) == -1) {
+		ERR(sess, "mktemp_internalat");
+		return NULL;
+	}
+
+	return path;
 }
 
 /*
  * A combination of mkstemp(3) and bind(2) on a unix domain socket.
- * On success returns path with trailing Xs overwritten to create a unique
- * file name.
+ * On success returns path with trailing Xs overwritten to create a
+ * unique file name.
  * Returns NULL on failure.
  */
-char*
-mkstempsock(const char *root, char *path)
+char *
+mkstempsock(struct sess *sess, const char *root, char *path)
 {
-	if (mktemp_internalat(0, path, 0, MKTEMP_SOCK, 0, root, 0, 0) == -1)
-		return(NULL);
-	return(path);
+
+	if (mktemp_internalat(0, path, 0,
+	    MKTEMP_SOCK, 0, root, 0, 0) == -1) {
+		ERR(sess, "mktemp_internalat");
+		return NULL;
+	}
+
+	return path;
 }
 
 /*
@@ -256,19 +288,21 @@ mkstempsock(const char *root, char *path)
  * (excluding the final '\0').
  */
 int
-mktemplate(char **ret, const char *path, int recursive)
+mktemplate(struct sess *sess, char **ret, const char *path, int recursive)
 {
 	int		 n, dirlen;
 	const char	*cp;
 
 	if (recursive && (cp = strrchr(path, '/')) != NULL) {
 		dirlen = cp - path;
-		if ((n = asprintf(ret, "%.*s/.%s.XXXXXXXXXX", dirlen, path,
-		    path + dirlen + 1)) == -1)
-			*ret = NULL;
-	} else {
-		if ((n = asprintf(ret, ".%s.XXXXXXXXXX", path)) == -1)
-			*ret = NULL;
+		n = asprintf(ret, "%.*s/.%s.XXXXXXXXXX",
+			dirlen, path, path + dirlen + 1);
+	} else
+		n = asprintf(ret, ".%s.XXXXXXXXXX", path);
+
+	if (n < 0) {
+		ERR(sess, "asprintf");
+		*ret = NULL;
 	}
-	return(n);
+	return n;
 }

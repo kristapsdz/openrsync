@@ -413,14 +413,14 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 
 		/* Create the temporary file. */
 
-		if (mktemplate(&p->fname, f->path, sess->opts->recursive)
-		    == -1) {
-			ERR(sess, "asprintf");
+		if (mktemplate(sess, &p->fname, 
+		    f->path, sess->opts->recursive) == -1) {
+			ERRX1(sess, "mktemplate");
 			goto out;
 		}
 
-		if ((p->fd = mkstempat(p->rootfd, p->fname)) == -1) {
-			ERR(sess, "%s: openat", p->fname);
+		if ((p->fd = mkstempat(sess, p->rootfd, p->fname)) == -1) {
+			ERRX1(sess, "mkstempat");
 			goto out;
 		}
 
