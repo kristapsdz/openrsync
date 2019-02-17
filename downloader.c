@@ -419,8 +419,8 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 			goto out;
 		}
 
-		if ((p->fd = mkstempat(sess, p->rootfd, p->fname)) == -1) {
-			ERRX1(sess, "mkstempat");
+		if ((p->fd = mkstempat(p->rootfd, p->fname)) == -1) {
+			ERR(sess, "mkstempat");
 			goto out;
 		}
 
