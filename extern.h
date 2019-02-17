@@ -116,6 +116,7 @@ struct	opts {
 	int		 del;			/* --delete */
 	int		 devices;		/* --devices */
 	int		 specials;		/* --specials */
+	int		 numeric_ids;		/* --numeric-ids */
 	char		*rsync_path;		/* --rsync-path */
 	char		*ssh_prog;		/* --rsh or -e */
 };
