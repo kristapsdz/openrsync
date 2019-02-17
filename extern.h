@@ -199,9 +199,7 @@ struct	ident {
 struct	download;
 struct	upload;
 
-#ifndef MIN
-# define MIN(_x1, _x2) ((_x1) < (_x2) ? (_x1) : (_x2))
-#endif
+#define MINIMUM(a, b) (((a) < (b)) ? (a) : (b))
 
 #define LOG0(_sess, _fmt, ...) \
 	rsync_log((_sess), __FILE__, __LINE__, -1, (_fmt), ##__VA_ARGS__)
@@ -312,7 +310,7 @@ int		  rsync_server(const struct opts *, size_t, char *[]);
 int		  rsync_downloader(struct download *, struct sess *, int *);
 int		  rsync_set_metadata(struct sess *, int, int,
 			const struct flist *, const char *);
-int		  rsync_set_metadata_at(struct sess *, int, int, 
+int		  rsync_set_metadata_at(struct sess *, int, int,
 			const struct flist *, const char *);
 int		  rsync_uploader(struct upload *,
 			int *, struct sess *, int *);
