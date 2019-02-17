@@ -114,19 +114,22 @@ inet_resolve(struct sess *sess, const char *host, size_t *sz)
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = PF_UNSPEC;
-	hints.ai_socktype = SOCK_DGRAM; /* DUMMY */
+	hints.ai_socktype = SOCK_STREAM;
 
-	error = getaddrinfo(host, "873", &hints, &res0);
+	error = getaddrinfo(host, "rsync", &hints, &res0);
 
 	LOG2(sess, "resolving: %s", host);
 
 	if (error == EAI_AGAIN || error == EAI_NONAME) {
-		ERRX(sess, "DNS resolve error: %s: %s",
+		ERRX(sess, "could not resolve hostname %s: %s",
 		    host, gai_strerror(error));
 		return NULL;
+	} else if (error == EAI_SERVICE) {
+		ERRX(sess, "could not resolve service rsync: %s",
+		    gai_strerror(error));
+		return NULL;
 	} else if (error) {
-		ERRX(sess, "DNS parse error: %s: %s",
-		    host, gai_strerror(error));
+		ERRX(sess, "getaddrinfo: %s: %s", host, gai_strerror(error));
 		return NULL;
 	}
 
@@ -177,7 +180,7 @@ inet_resolve(struct sess *sess, const char *host, size_t *sz)
 			    src[i].ip, INET6_ADDRSTRLEN);
 		}
 
-		LOG2(sess, "DNS resolved: %s: %s", host, src[i].ip);
+		LOG2(sess, "hostname resolved: %s: %s", host, src[i].ip);
 		i++;
 	}
 
