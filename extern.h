@@ -342,11 +342,11 @@ void		  hash_file(const void *, size_t,
 
 int		  mkpath(struct sess *, char *);
 
-int		  mkstempat(struct sess *, int, char *);
-char		 *mkstemplinkat(struct sess *, char*, int, char *);
-char		 *mkstempfifoat(struct sess *, int, char *);
-char		 *mkstempnodat(struct sess *, int, char *, mode_t, dev_t);
-char		 *mkstempsock(struct sess *, const char *, char *);
+int		  mkstempat(int, char *);
+char		 *mkstemplinkat(char*, int, char *);
+char		 *mkstempfifoat(int, char *);
+char		 *mkstempnodat(int, char *, mode_t, dev_t);
+char		 *mkstempsock(const char *, char *);
 int		  mktemplate(struct sess *, char **, const char *, int);
 
 char		 *symlink_read(struct sess *, const char *);

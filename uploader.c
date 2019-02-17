@@ -244,8 +244,8 @@ pre_link(struct upload *p, struct sess *sess)
 			ERRX1(sess, "mktemplate");
 			return -1;
 		}
-		if (mkstemplinkat(sess, f->link, p->rootfd, temp) == NULL) {
-			ERRX1(sess, "mkstemplinkat");
+		if (mkstemplinkat(f->link, p->rootfd, temp) == NULL) {
+			ERR(sess, "mkstemplinkat");
 			free(temp);
 			return -1;
 		}
@@ -332,9 +332,9 @@ pre_dev(struct upload *p, struct sess *sess)
 			ERRX1(sess, "mktemplate");
 			return -1;
 		}
-		if (mkstempnodat(sess, p->rootfd, temp,
+		if (mkstempnodat(p->rootfd, temp,
 		    f->st.mode & (S_IFCHR|S_IFBLK), f->st.rdev) == NULL) {
-			ERRX1(sess, "mkstempnodat");
+			ERR(sess, "mkstempnodat");
 			free(temp);
 			return -1;
 		}
@@ -409,8 +409,8 @@ pre_fifo(struct upload *p, struct sess *sess)
 			ERRX1(sess, "mktemplate");
 			return -1;
 		}
-		if (mkstempfifoat(sess, p->rootfd, temp) == NULL) {
-			ERRX1(sess, "mkstempfifoat");
+		if (mkstempfifoat(p->rootfd, temp) == NULL) {
+			ERR(sess, "mkstempfifoat");
 			free(temp);
 			return -1;
 		}
@@ -485,8 +485,8 @@ pre_sock(struct upload *p, struct sess *sess)
 			ERRX1(sess, "mktemplate");
 			return -1;
 		}
-		if (mkstempsock(sess, p->root, temp) == NULL) {
-			ERRX1(sess, "mkstempsock");
+		if (mkstempsock(p->root, temp) == NULL) {
+			ERR(sess, "mkstempsock");
 			free(temp);
 			return -1;
 		}
