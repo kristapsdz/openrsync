@@ -116,7 +116,7 @@ inet_resolve(struct sess *sess, const char *host, size_t *sz)
 	hints.ai_family = PF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 
-	error = getaddrinfo(host, "rsync", &hints, &res0);
+	error = getaddrinfo(host, sess->opts->port, &hints, &res0);
 
 	LOG2(sess, "resolving: %s", host);
 
