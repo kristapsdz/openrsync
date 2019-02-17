@@ -26,6 +26,7 @@
 .Op Fl e Ar prog
 .Op Fl -delete
 .Op Fl -numeric-ids
+.Op Fl -port Ar port
 .Op Fl -rsync-path Ar prog
 .Ar source ...
 .Ar directory
@@ -112,6 +113,11 @@ With
 or
 .Fl o ,
 simply use the numeric identifier and do not map by name.
+.It Fl -port Ar port
+Specify a default port for connecting to
+.Qq rsync://
+servers.
+This is overridden by any port specified in the URL.
 .It Fl -rsync-path Ar prog
 Run
 .Ar prog
@@ -138,7 +144,7 @@ has syntax
 for connecting via
 .Xr ssh 1 ,
 or
-.Ar rsync://host/path
+.Ar rsync://host[:port]/path
 or
 .Ar host::path
 for connecting to a remote daemon.

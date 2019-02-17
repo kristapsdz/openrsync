@@ -89,10 +89,10 @@ fargs_is_daemon(const char *v)
  * Always returns the parsed and sanitised options.
  */
 static struct fargs *
-fargs_parse(size_t argc, char *argv[])
+fargs_parse(size_t argc, char *argv[], struct opts *opts)
 {
 	struct fargs	*f = NULL;
-	char		*cp;
+	char		*cp, *ccp;
 	size_t		 i, j, len = 0;
 
 	/* Allocations. */
@@ -138,7 +138,7 @@ fargs_parse(size_t argc, char *argv[])
 
 	if (f->host != NULL) {
 		if (strncasecmp(f->host, "rsync://", 8) == 0) {
-			/* rsync://host/module[/path] */
+			/* rsync://host[:port]/module[/path] */
 			f->remote = 1;
 			len = strlen(f->host) - 8 + 1;
 			memmove(f->host, f->host + 8, len);
@@ -149,6 +149,11 @@ fargs_parse(size_t argc, char *argv[])
 			f->module = cp;
 			if ((cp = strchr(f->module, '/')) != NULL)
 				*cp = '\0';
+			if ((cp = strchr(f->host, ':')) != NULL) {
+				/* host:port --> extract port */
+				*cp++ = '\0';
+				opts->port = cp;
+			}
 		} else {
 			/* host:[/path] */
 			cp = strchr(f->host, ':');
@@ -243,6 +248,15 @@ fargs_parse(size_t argc, char *argv[])
 		    strncasecmp(cp, "rsync://", 8) == 0) {
 			/* rsync://path */
 			cp += 8;
+			
+			/* 
+			 * FIXME: broken.
+			 * URIs can allow colons too.
+			 * Fix this after merge.
+			 */
+
+			if ((ccp = strchr(cp, ':')) != NULL) /* skip :port */
+				*ccp = '\0';
 			if (strncmp(cp, f->host, len) ||
 			    (cp[len] != '/' && cp[len] != '\0'))
 				errx(EXIT_FAILURE, "different remote "
@@ -287,6 +301,7 @@ main(int argc, char *argv[])
 	int		 fds[2], c, st;
 	struct fargs	*fargs;
 	struct option	 lopts[] = {
+		{ "port",	required_argument, NULL,		3 },
 		{ "rsh",	required_argument, NULL,		'e' },
 		{ "rsync-path",	required_argument, NULL,		1 },
 		{ "sender",	no_argument,	&opts.sender,		1 },
@@ -380,6 +395,9 @@ main(int argc, char *argv[])
 			fprintf(stderr, "openrsync: protocol version %u\n",
 			    RSYNC_PROTOCOL);
 			exit(0);
+		case 3:
+			opts.port = optarg;
+			break;
 		case 'h':
 		default:
 			goto usage;
@@ -393,6 +411,9 @@ main(int argc, char *argv[])
 
 	if (argc < 2)
 		goto usage;
+
+	if (opts.port == NULL)
+		opts.port = RSYNC_SERVICE;
 
 	/*
 	 * This is what happens when we're started with the "hidden"
@@ -417,7 +438,7 @@ main(int argc, char *argv[])
 	 * invoke rsync with the --server option.
 	 */
 
-	fargs = fargs_parse(argc, argv);
+	fargs = fargs_parse(argc, argv, &opts);
 	assert(fargs != NULL);
 
 	/*
@@ -496,7 +517,7 @@ main(int argc, char *argv[])
 usage:
 	fprintf(stderr, "usage: %s [-Daghlnoprtv] "
 		"[-e ssh-prog] [--delete] [--numeric-ids] "
-		"[--rsync-path=prog] src ... dst\n",
+		"[--port=port] [--rsync-path=prog] src ... dst\n",
 		getprogname());
 	return EXIT_FAILURE;
 }

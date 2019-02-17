@@ -23,6 +23,11 @@
 #define	RSYNC_PROTOCOL	(27)
 
 /*
+ * The default service (see services(5)) for rsync.
+ */
+#define RSYNC_SERVICE	"rsync"
+
+/*
  * Maximum amount of file data sent over the wire at once.
  */
 #define MAX_CHUNK	(32 * 1024)
@@ -119,6 +124,7 @@ struct	opts {
 	int		 numeric_ids;		/* --numeric-ids */
 	char		*rsync_path;		/* --rsync-path */
 	char		*ssh_prog;		/* --rsh or -e */
+	char		*port;			/* --port */
 };
 
 /*
