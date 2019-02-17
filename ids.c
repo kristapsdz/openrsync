@@ -26,7 +26,7 @@
 #include "extern.h"
 
 /*
- * Free a list of struct ident previously allocated with idents_gid_add().
+ * Free a list of struct ident previously allocated with idents_add().
  * Does nothing if the pointer is NULL.
  */
 void
@@ -86,14 +86,10 @@ idents_assign_uid(struct sess *sess, struct flist *fl, size_t flsz,
 /*
  * Given a list of identifiers from the remote host, fill in our local
  * identifiers of the same names.
- * Use the remote numeric identifier if we can't find the identifier OR
- * the identifier is zero (wheel/root).
- * FIXME: what happens if we don't find the local identifier (we should
- * really warn about this), but the remote identifier maps into a
- * different name for us?
- * These are pretty unexpected things for rsync to do.
- * Another FIXME because we shouldn't let that happen even though the
- * reference rsync does.
+ * Use the remote numeric identifier if we can't find the identifier OR the
+ * identifier is zero (wheel/root).
+ * FIXME: we should at least warn when we can't find an identifier, use
+ * the numeric id, and that numeric id is assigned to a different user.
  */
 void
 idents_remap(struct sess *sess, int isgid, struct ident *ids, size_t idsz)
@@ -102,6 +98,15 @@ idents_remap(struct sess *sess, int isgid, struct ident *ids, size_t idsz)
 	struct group	*grp;
 	struct passwd	*usr;
 	int32_t		 id;
+
+	if (sess->opts->numeric_ids) {
+		for (i = 0; i < idsz; i++) {
+			assert(ids[i].id != 0);
+			ids[i].mapped = ids[i].id;
+		}
+		LOG4(sess, "did not remap identifiers");
+		return;
+	}
 
 	for (i = 0; i < idsz; i++) {
 		assert(ids[i].id != 0);

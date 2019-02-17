@@ -25,6 +25,7 @@
 .Op Fl Daglnoprtv
 .Op Fl e Ar prog
 .Op Fl -delete
+.Op Fl -numeric-ids
 .Op Fl -rsync-path Ar prog
 .Ar source ...
 .Ar directory
@@ -105,6 +106,12 @@ not found in
 directories.
 Only applicable with
 .Fl r .
+.It Fl -numeric-ids
+With
+.Fl g
+or
+.Fl o ,
+simply use the numeric identifier and do not map by name.
 .It Fl -rsync-path Ar prog
 Run
 .Ar prog
