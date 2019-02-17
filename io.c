@@ -463,7 +463,7 @@ io_lowbuffer_buf(struct sess *sess, void *buf,
 {
 	int32_t	tagbuf;
 
-	if (0 == valsz)
+	if (valsz == 0)
 		return;
 
 	if (!sess->mplex_writes) {

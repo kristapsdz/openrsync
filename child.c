@@ -49,7 +49,7 @@ rsync_child(const struct opts *opts, int fd, const struct fargs *f)
 		exit(EXIT_FAILURE);
 	}
 
-	for (i = 0; NULL != args[i]; i++)
+	for (i = 0; args[i] != NULL; i++)
 		LOG2(&sess, "exec[%zu] = %s", i, args[i]);
 
 	/* Make sure the child's stdin is from the sender. */

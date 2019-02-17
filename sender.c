@@ -57,7 +57,7 @@ static void
 send_up_reset(struct send_up *p)
 {
 
-	assert(NULL != p);
+	assert(p != NULL);
 
 	/* Free the download request, if applicable. */
 
@@ -257,7 +257,7 @@ send_up_fsm(struct sess *sess, size_t *phase,
 			ERRX1(sess, "io_lowbuffer_alloc");
 			return 0;
 		}
-		assert(20 == sizeof(buf));
+		assert(sizeof(buf) == 20);
 		blk_recv_ack(sess, buf, up->cur->blks, up->cur->idx);
 		io_lowbuffer_buf(sess, *wb, &pos, *wbsz, buf, 20);
 
@@ -569,7 +569,7 @@ rsync_sender(struct sess *sess, int fdin,
 
 		if (pfd[1].revents & POLLOUT && up.cur != NULL) {
 			assert(pfd[2].fd == -1);
-			assert(0 == wbufpos && 0 == wbufsz);
+			assert(wbufpos == 0 && wbufsz == 0);
 			if (!send_up_fsm(sess, &phase,
 			    &up, &wbuf, &wbufsz, &wbufmax, fl)) {
 				ERRX1(sess, "send_up_fsm");

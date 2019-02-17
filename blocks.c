@@ -167,7 +167,7 @@ blk_match(struct sess *sess, const struct blkset *blks,
 			st->curpos = last;
 			st->curlen = st->curpos + sz;
 			st->curtok = tok;
-			assert(0 != st->curtok);
+			assert(st->curtok != 0);
 			st->curst = sz ? BLKSTAT_DATA : BLKSTAT_TOK;
 			st->total += blk->len;
 			st->offs += blk->len;
