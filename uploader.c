@@ -766,7 +766,7 @@ rsync_uploader(struct upload *u, int *fileinfd,
 	 */
 
 	if (u->state == UPLOAD_WRITE_LOCAL) {
-		assert(NULL != u->buf);
+		assert(u->buf != NULL);
 		assert(*fileoutfd != -1);
 		assert(*fileinfd == -1);
 
@@ -857,7 +857,7 @@ rsync_uploader(struct upload *u, int *fileinfd,
 
 		/* Go back to the event loop, if necessary. */
 
-		u->state = -1 == *fileinfd ?
+		u->state = (*fileinfd == -1) ?
 			UPLOAD_WRITE_LOCAL : UPLOAD_READ_LOCAL;
 		if (u->state == UPLOAD_READ_LOCAL)
 			return 1;

@@ -84,7 +84,7 @@ log_file(struct sess *sess,
 	if (sess->opts->server)
 		return;
 
-	frac = 0 == dl->total ? 100.0 :
+	frac = (dl->total == 0) ? 100.0 :
 		100.0 * dl->downloaded / dl->total;
 
 	if (dl->total > 1024 * 1024 * 1024) {
@@ -294,6 +294,7 @@ buf_copy(struct sess *sess,
 int
 rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 {
+	int		 c;
 	int32_t		 idx, rawtok;
 	const struct flist *f;
 	size_t		 sz, tok;
@@ -301,7 +302,6 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 	char		*buf = NULL;
 	unsigned char	 ourmd[MD4_DIGEST_LENGTH],
 			 md[MD4_DIGEST_LENGTH];
-	int		 c;
 
 	/*
 	 * If we don't have a download already in session, then the next
