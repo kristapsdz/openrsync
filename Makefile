@@ -23,9 +23,11 @@ ALLOBJS	 = $(OBJS) \
 	   main.o
 AFLS	 = afl/test-blk_recv \
 	   afl/test-flist_recv
-CFLAGS	+= -O0 -g -W -Wall -Wextra -Wno-unused-parameter
 MANDIR	 = $(PREFIX)/man
 BINDIR	 = $(PREFIX)/bin
+
+# The -O0 is to help with debugging coredumps.
+CFLAGS	+= -O0 -g -W -Wall -Wextra -Wno-unused-parameter
 
 all: openrsync
 
