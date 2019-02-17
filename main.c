@@ -493,7 +493,7 @@ main(int argc, char *argv[])
 		close(fds[0]);
 	return c ? EXIT_SUCCESS : EXIT_FAILURE;
 usage:
-	fprintf(stderr, "usage: %s [-Daglnoprtv] "
+	fprintf(stderr, "usage: %s [-Daghlnoprtv] "
 		"[-e ssh-prog] [--delete] [--rsync-path=prog] src ... dst\n",
 		getprogname());
 	return EXIT_FAILURE;
