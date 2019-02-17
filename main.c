@@ -287,23 +287,34 @@ main(int argc, char *argv[])
 	int		 fds[2], c, st;
 	struct fargs	*fargs;
 	struct option	 lopts[] = {
-		{ "delete",	no_argument,	&opts.del,		1 },
-		{ "rsync-path",	required_argument, NULL,		1 },
 		{ "rsh",	required_argument, NULL,		'e' },
+		{ "rsync-path",	required_argument, NULL,		1 },
 		{ "sender",	no_argument,	&opts.sender,		1 },
 		{ "server",	no_argument,	&opts.server,		1 },
-		{ "verbose",	no_argument,	&opts.verbose,		1 },
-		{ "links",	no_argument,	&opts.preserve_links,	1 },
 		{ "dry-run",	no_argument,	&opts.dry_run,		1 },
-		{ "perms",	no_argument,	&opts.preserve_perms,	1 },
-		{ "recursive",	no_argument,	&opts.recursive,	1 },
-		{ "times",	no_argument,	&opts.preserve_times,	1 },
-		{ "group",	no_argument,	&opts.preserve_gids,	1 },
+		{ "version",	no_argument,	NULL,			2 },
+		{ "archive",	no_argument,	NULL,			'a' },
+		{ "help",	no_argument,	NULL,			'h' },
+		{ "delete",	no_argument,	&opts.del,		1 },
+		{ "no-delete",	no_argument,	&opts.del,		0 },
 		{ "devices",	no_argument,	&opts.devices,		1 },
 		{ "no-devices",	no_argument,	&opts.devices,		0 },
+		{ "group",	no_argument,	&opts.preserve_gids,	1 },
+		{ "no-group",	no_argument,	&opts.preserve_gids,	0 },
+		{ "links",	no_argument,	&opts.preserve_links,	1 },
+		{ "no-links",	no_argument,	&opts.preserve_links,	0 },
+		{ "owner",	no_argument,	&opts.preserve_uids,	1 },
+		{ "no-owner",	no_argument,	&opts.preserve_uids,	0 },
+		{ "perms",	no_argument,	&opts.preserve_perms,	1 },
+		{ "no-perms",	no_argument,	&opts.preserve_perms,	0 },
+		{ "recursive",	no_argument,	&opts.recursive,	1 },
+		{ "no-recursive", no_argument,	&opts.recursive,	0 },
 		{ "specials",	no_argument,	&opts.specials,		1 },
-		{ "no-specials",	no_argument,	&opts.specials,	0 },
-		{ "version",	no_argument,	NULL,			2 },
+		{ "no-specials", no_argument,	&opts.specials,		0 },
+		{ "times",	no_argument,	&opts.preserve_times,	1 },
+		{ "no-times",	no_argument,	&opts.preserve_times,	0 },
+		{ "verbose",	no_argument,	&opts.verbose,		1 },
+		{ "no-verbose",	no_argument,	&opts.verbose,		0 },
 		{ NULL,		0,		NULL,			0 }};
 
 	/* Global pledge. */
@@ -314,7 +325,7 @@ main(int argc, char *argv[])
 
 	memset(&opts, 0, sizeof(struct opts));
 
-	while ((c = getopt_long(argc, argv, "Dae:glnoprtv", lopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "Dae:ghlnoprtv", lopts, NULL)) != -1) {
 		switch (c) {
 		case 'D':
 			opts.devices = 1;
@@ -368,6 +379,7 @@ main(int argc, char *argv[])
 			fprintf(stderr, "openrsync: protocol version %u\n",
 			    RSYNC_PROTOCOL);
 			exit(0);
+		case 'h':
 		default:
 			goto usage;
 		}
