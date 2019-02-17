@@ -98,12 +98,13 @@ send_up_reset(struct send_up *p)
 static int
 send_up_fsm(struct sess *sess, size_t *phase,
 	struct send_up *up, void **wb, size_t *wbsz, size_t *wbmax,
-	const struct flist *fl, int fdout)
+	const struct flist *fl)
 {
 	size_t	 	 pos = 0, isz = sizeof(int32_t),
 			 dsz = MD4_DIGEST_LENGTH;
 	unsigned char	 fmd[MD4_DIGEST_LENGTH];
 	off_t	 	 sz;
+	char		 buf[20];
 
 	switch (up->stat.curst) {
 	case BLKSTAT_DATA:
@@ -242,15 +243,24 @@ send_up_fsm(struct sess *sess, size_t *phase,
 		up->stat.curst = BLKSTAT_NEXT;
 	} else {
 		assert(up->stat.fd != -1);
+
+		/* 
+		 * FIXME: use the nice output of log_file() and so on in
+		 * downloader.c, which means moving this into
+		 * BLKSTAT_DONE instead of having it be here.
+		 */
+
 		if (!sess->opts->server)
 			LOG1(sess, "%s", fl[up->cur->idx].wpath);
 
-		/* FIXME: lowbuffer. */
-
-		if (!blk_recv_ack(sess, fdout, up->cur->blks, up->cur->idx)) {
-			ERRX1(sess, "blk_recv_ack");
+		if (!io_lowbuffer_alloc(sess, wb, wbsz, wbmax, 20)) {
+			ERRX1(sess, "io_lowbuffer_alloc");
 			return 0;
 		}
+		assert(20 == sizeof(buf));
+		blk_recv_ack(sess, buf, up->cur->blks, up->cur->idx);
+		io_lowbuffer_buf(sess, *wb, &pos, *wbsz, buf, 20);
+
 		LOG3(sess, "%s: primed for %jd B total",
 			fl[up->cur->idx].path,
 			(intmax_t)up->cur->blks->size);
@@ -560,8 +570,8 @@ rsync_sender(struct sess *sess, int fdin,
 		if (pfd[1].revents & POLLOUT && up.cur != NULL) {
 			assert(pfd[2].fd == -1);
 			assert(0 == wbufpos && 0 == wbufsz);
-			if (!send_up_fsm(sess, &phase, &up,
-			    &wbuf, &wbufsz, &wbufmax, fl, fdout)) {
+			if (!send_up_fsm(sess, &phase,
+			    &up, &wbuf, &wbufsz, &wbufmax, fl)) {
 				ERRX1(sess, "send_up_fsm");
 				goto out;
 			} else if (phase > 1)
