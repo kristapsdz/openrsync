@@ -325,8 +325,8 @@ struct upload	 *upload_alloc(struct sess *, const char *, int, int, size_t,
 void		  upload_free(struct upload *);
 
 struct blkset	 *blk_recv(struct sess *, int, const char *);
-int		  blk_recv_ack(struct sess *,
-			int, const struct blkset *, int32_t);
+void		  blk_recv_ack(struct sess *,
+			char [20], const struct blkset *, int32_t);
 void		  blk_match(struct sess *, const struct blkset *,
 			const char *, struct blkstat *);
 int		  blk_send(struct sess *, int, size_t,
