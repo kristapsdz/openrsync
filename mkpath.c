@@ -27,9 +27,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
+#include <sys/queue.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
