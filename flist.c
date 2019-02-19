@@ -387,7 +387,7 @@ flist_send(struct sess *sess, int fdin, int fdout, const struct flist *fl,
 
 	/* Conditionally write identifier lists. */
 
-	if (sess->opts->preserve_uids) {
+	if (sess->opts->preserve_uids && !sess->opts->numeric_ids) {
 		LOG2(sess, "sending uid list: %zu", uidsz);
 		if (!idents_send(sess, fdout, uids, uidsz)) {
 			ERRX1(sess, "idents_send");
@@ -395,7 +395,7 @@ flist_send(struct sess *sess, int fdin, int fdout, const struct flist *fl,
 		}
 	}
 
-	if (sess->opts->preserve_gids) {
+	if (sess->opts->preserve_gids && !sess->opts->numeric_ids) {
 		LOG2(sess, "sending gid list: %zu", gidsz);
 		if (!idents_send(sess, fdout, gids, gidsz)) {
 			ERRX1(sess, "idents_send");
@@ -739,7 +739,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 
 	/* Conditionally read the user/group list. */
 
-	if (sess->opts->preserve_uids) {
+	if (sess->opts->preserve_uids && !sess->opts->numeric_ids) {
 		if (!idents_recv(sess, fd, &uids, &uidsz)) {
 			ERRX1(sess, "idents_recv");
 			goto out;
@@ -747,7 +747,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 		LOG2(sess, "received uid list: %zu", uidsz);
 	}
 
-	if (sess->opts->preserve_gids) {
+	if (sess->opts->preserve_gids && !sess->opts->numeric_ids) {
 		if (!idents_recv(sess, fd, &gids, &gidsz)) {
 			ERRX1(sess, "idents_recv");
 			goto out;
@@ -765,12 +765,12 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 
 	/* Conditionally remap and reassign identifiers. */
 
-	if (sess->opts->preserve_uids) {
+	if (sess->opts->preserve_uids && !sess->opts->numeric_ids) {
 		idents_remap(sess, 0, uids, uidsz);
 		idents_assign_uid(sess, fl, flsz, uids, uidsz);
 	}
 
-	if (sess->opts->preserve_gids) {
+	if (sess->opts->preserve_gids && !sess->opts->numeric_ids) {
 		idents_remap(sess, 1, gids, gidsz);
 		idents_assign_gid(sess, fl, flsz, gids, gidsz);
 	}
