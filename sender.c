@@ -184,10 +184,11 @@ send_up_fsm(struct sess *sess, size_t *phase,
 		 * to find another.
 		 */
 
-		LOG3(sess, "%s: flushed %jd KB total, %.2f%% uploaded",
-			fl[up->cur->idx].path,
-			(intmax_t)up->stat.total / 1024,
-			100.0 * up->stat.dirty / up->stat.total);
+		if (!sess->opts->dry_run)
+			LOG3(sess, "%s: flushed %jd KB total, %.2f%% "
+				"uploaded", fl[up->cur->idx].path,
+				(intmax_t)up->stat.total / 1024,
+				100.0 * up->stat.dirty / up->stat.total);
 		send_up_reset(up);
 		return 1;
 	case BLKSTAT_PHASE:
@@ -251,7 +252,7 @@ send_up_fsm(struct sess *sess, size_t *phase,
 			return 0;
 		}
 		io_lowbuffer_int(sess, *wb, &pos, *wbsz, up->cur->idx);
-		up->stat.curst = BLKSTAT_NEXT;
+		up->stat.curst = BLKSTAT_DONE;
 	} else {
 		assert(up->stat.fd != -1);
 
@@ -303,7 +304,6 @@ send_up_fsm(struct sess *sess, size_t *phase,
 			(intmax_t)up->cur->blks->size,
 			up->cur->blks->blksz);
 		up->stat.curst = BLKSTAT_NEXT;
-
 	}
 
 	return 1;
