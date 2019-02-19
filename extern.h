@@ -139,6 +139,13 @@ struct	blk {
 	unsigned char	 chksum_long[CSUM_LENGTH_PHASE2]; /* slow checksum */
 };
 
+struct	blkhash {
+	struct blk    	    *blk;
+	TAILQ_ENTRY(blkhash) entries;
+};
+
+TAILQ_HEAD(blkhashq, blkhash);
+
 enum	blkstatst {
 	BLKSTAT_NONE = 0,
 	BLKSTAT_NEXT,
@@ -164,6 +171,10 @@ struct	blkstat {
 	off_t		 curpos; /* sending: position in file to send */
 	off_t		 curlen; /* sending: length of send */
 	int32_t		 curtok; /* sending: next matching token or zero */
+	struct blkhashq	*htab; /* hashtable of fast matches */
+	size_t		 htabsz; /* size of hashtable */
+	struct blkhash	*mapent; /* entries in the hashtable */
+	size_t		 mapentsz; /* >= blocksz */
 };
 
 /*

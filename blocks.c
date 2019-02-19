@@ -14,6 +14,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#include <sys/queue.h>
 #include <sys/stat.h>
 
 #include <assert.h>
@@ -35,14 +36,15 @@
  * Returns the blk or NULL if no matching block was found.
  */
 static struct blk *
-blk_find(struct sess *sess, const void *buf, off_t size, off_t offs,
-	const struct blkset *blks, const char *path, size_t hint)
+blk_find(struct sess *sess, struct blkstat *st,
+	const struct blkset *blks, const char *path)
 {
 	unsigned char	 md[MD4_DIGEST_LENGTH];
 	uint32_t	 fhash;
 	off_t		 remain, osz;
-	size_t		 i;
 	int		 have_md = 0;
+	struct blkhashq	*q;
+	struct blkhash	*ent;
 
 	/*
 	 * First, compute our fast hash.
@@ -50,10 +52,10 @@ blk_find(struct sess *sess, const void *buf, off_t size, off_t offs,
 	 * deliberately making it simple first.
 	 */
 
-	remain = size - offs;
+	remain = st->mapsz - st->offs;
 	assert(remain);
 	osz = remain < (off_t)blks->len ? remain : (off_t)blks->len;
-	fhash = hash_fast(buf + offs, (size_t)osz);
+	fhash = hash_fast(st->map + st->offs, (size_t)osz);
 	have_md = 0;
 
 	/*
@@ -61,52 +63,61 @@ blk_find(struct sess *sess, const void *buf, off_t size, off_t offs,
 	 * This just runs the fast and slow check with the hint.
 	 */
 
-	if (hint < blks->blksz &&
-	    fhash == blks->blks[hint].chksum_short &&
-	    (size_t)osz == blks->blks[hint].len) {
-		hash_slow(buf + offs, (size_t)osz, md, sess);
+	if (st->hint < blks->blksz &&
+	    fhash == blks->blks[st->hint].chksum_short &&
+	    (size_t)osz == blks->blks[st->hint].len) {
+		hash_slow(st->map + st->offs, (size_t)osz, md, sess);
 		have_md = 1;
-		if (memcmp(md, blks->blks[hint].chksum_long, blks->csum) == 0) {
+		if (memcmp(md, blks->blks[st->hint].chksum_long, blks->csum) == 0) {
 			LOG4(sess, "%s: found matching hinted match: "
 				"position %jd, block %zu "
 				"(position %jd, size %zu)", path,
-				(intmax_t)offs, blks->blks[hint].idx,
-				(intmax_t)blks->blks[hint].offs,
-				blks->blks[hint].len);
-			return &blks->blks[hint];
+				(intmax_t)st->offs, blks->blks[st->hint].idx,
+				(intmax_t)blks->blks[st->hint].offs,
+				blks->blks[st->hint].len);
+			return &blks->blks[st->hint];
 		}
 	}
 
-	/*
-	 * Now loop and look for the fast hash.
-	 * If it's found, move on to the slow hash.
-	 */
+	q = &st->htab[fhash % st->htabsz];
 
-	for (i = 0; i < blks->blksz; i++) {
-		if (fhash != blks->blks[i].chksum_short)
+#if 0
+	LOG4(sess, "%s: querying hash %zu (%" PRIu32 ") (offset %jd)",
+		path, fhash % st->htabsz, fhash, (intmax_t)st->offs);
+#endif
+
+	TAILQ_FOREACH(ent, q, entries) {
+		LOG4(sess, "%s: possible fast match: "
+			"position %jd, block %zu "
+			"(position %jd, size %zu)", path,
+			(intmax_t)st->offs, ent->blk->idx,
+			(intmax_t)ent->blk->offs,
+			ent->blk->len);
+
+		if (fhash != ent->blk->chksum_short)
 			continue;
-		if ((size_t)osz != blks->blks[i].len)
+		if ((size_t)osz != ent->blk->len)
 			continue;
 
 		LOG4(sess, "%s: found matching fast match: "
 			"position %jd, block %zu "
 			"(position %jd, size %zu)", path,
-			(intmax_t)offs, blks->blks[i].idx,
-			(intmax_t)blks->blks[i].offs,
-			blks->blks[i].len);
+			(intmax_t)st->offs, ent->blk->idx,
+			(intmax_t)ent->blk->offs,
+			ent->blk->len);
 
 		/* Compute slow hash on demand. */
 
 		if (have_md == 0) {
-			hash_slow(buf + offs, (size_t)osz, md, sess);
+			hash_slow(st->map + st->offs, (size_t)osz, md, sess);
 			have_md = 1;
 		}
 
-		if (memcmp(md, blks->blks[i].chksum_long, blks->csum))
+		if (memcmp(md, ent->blk->chksum_long, blks->csum))
 			continue;
 
 		LOG4(sess, "%s: sender verifies slow match", path);
-		return &blks->blks[i];
+		return ent->blk;
 	}
 
 	return NULL;
@@ -146,8 +157,7 @@ blk_match(struct sess *sess, const struct blkset *blks,
 		last = st->offs;
 
 		for ( ; st->offs < end; st->offs++) {
-			blk = blk_find(sess, st->map, st->mapsz,
-				st->offs, blks, path, st->hint);
+			blk = blk_find(sess, st, blks, path);
 			if (blk == NULL)
 				continue;
 

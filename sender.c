@@ -56,6 +56,7 @@ TAILQ_HEAD(send_dlq, send_dl);
 static void
 send_up_reset(struct send_up *p)
 {
+	size_t	 i;
 
 	assert(p != NULL);
 
@@ -85,6 +86,15 @@ send_up_reset(struct send_up *p)
 	p->stat.offs = 0;
 	p->stat.hint = 0;
 	p->stat.curst = BLKSTAT_NONE;
+
+	/* 
+	 * Blow away the hashtable.
+	 * We keep all of the entries separately, so no need to do any
+	 * deallocation here.
+	 */
+
+	for (i = 0; i < p->stat.htabsz; i++)
+		TAILQ_INIT(&p->stat.htab[i]);
 }
 
 /*
@@ -101,10 +111,11 @@ send_up_fsm(struct sess *sess, size_t *phase,
 	const struct flist *fl)
 {
 	size_t	 	 pos = 0, isz = sizeof(int32_t),
-			 dsz = MD4_DIGEST_LENGTH;
+			 dsz = MD4_DIGEST_LENGTH, idx, i;
 	unsigned char	 fmd[MD4_DIGEST_LENGTH];
 	off_t	 	 sz;
 	char		 buf[20];
+	void		*pp;
 
 	switch (up->stat.curst) {
 	case BLKSTAT_DATA:
@@ -261,10 +272,38 @@ send_up_fsm(struct sess *sess, size_t *phase,
 		blk_recv_ack(sess, buf, up->cur->blks, up->cur->idx);
 		io_lowbuffer_buf(sess, *wb, &pos, *wbsz, buf, 20);
 
-		LOG3(sess, "%s: primed for %jd B total",
+		if (up->stat.mapentsz < up->cur->blks->blksz) {
+			pp = reallocarray
+				(up->stat.mapent,
+				 up->cur->blks->blksz,
+				 sizeof(struct blkhash));
+			if (NULL == pp) {
+				ERR(sess, "reallocarray");
+				return 0;
+			}
+			up->stat.mapent = pp;
+			up->stat.mapentsz = up->cur->blks->blksz;
+		}
+
+		for (i = 0; i < up->cur->blks->blksz; i++) {
+			up->stat.mapent[i].blk =
+				&up->cur->blks->blks[i];
+			idx = up->cur->blks->blks[i].chksum_short % 
+				up->stat.htabsz;
+			TAILQ_INSERT_TAIL
+				(&up->stat.htab[idx],
+				 &up->stat.mapent[i], entries);
+			LOG4(sess, "%s: hashing into %zu (%" PRIu32 ")",
+				fl[up->cur->idx].path,
+				idx, up->cur->blks->blks[i].chksum_short);
+		}
+
+		LOG3(sess, "%s: primed for %jd B total, %zu blocks",
 			fl[up->cur->idx].path,
-			(intmax_t)up->cur->blks->size);
+			(intmax_t)up->cur->blks->size,
+			up->cur->blks->blksz);
 		up->stat.curst = BLKSTAT_NEXT;
+
 	}
 
 	return 1;
@@ -378,6 +417,17 @@ rsync_sender(struct sess *sess, int fdin,
 	TAILQ_INIT(&sdlq);
 	up.stat.fd = -1;
 	up.stat.map = MAP_FAILED;
+	up.stat.htabsz = 65536;
+	up.stat.htab = calloc(up.stat.htabsz, sizeof(struct blkhashq));
+	if (up.stat.htab == NULL) {
+		ERR(sess, "calloc");
+		goto out;
+	}
+
+	/* Initially clear the hashtable. */
+
+	for (i = 0; i < up.stat.htabsz; i++)
+		TAILQ_INIT(&up.stat.htab[i]);
 
 	/*
 	 * Generate the list of files we want to send from our
@@ -655,6 +705,8 @@ rsync_sender(struct sess *sess, int fdin,
 	rc = 1;
 out:
 	send_up_reset(&up);
+	free(up.stat.mapent);
+	free(up.stat.htab);
 	while ((dl = TAILQ_FIRST(&sdlq)) != NULL) {
 		TAILQ_REMOVE(&sdlq, dl, entries);
 		free(dl->blks);
