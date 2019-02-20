@@ -524,7 +524,7 @@ rsync_sender(struct sess *sess, int fdin,
 		 * left and hit it again if so (read priority).
 		 */
 
-		if (sess->mplex_reads && pfd[0].revents & POLLIN) {
+		if (sess->mplex_reads && (pfd[0].revents & POLLIN)) {
 			if (!io_read_flush(sess, fdin)) {
 				ERRX1(sess, "io_read_flush");
 				goto out;
