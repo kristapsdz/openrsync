@@ -47,6 +47,8 @@ idents_free(struct ident *p, size_t sz)
  * Given a list of files with the identifiers as set by the sender,
  * re-assign the identifiers from the list of remapped ones.
  * Don't ever remap wheel/root.
+ * If we can't find the gid in the list (when, e.g., being sent by the
+ * daemon), don't try to map it.
  */
 void
 idents_assign_gid(struct sess *sess, struct flist *fl, size_t flsz,
@@ -62,8 +64,8 @@ idents_assign_gid(struct sess *sess, struct flist *fl, size_t flsz,
 		for (j = 0; j < idsz; j++)
 			if ((int32_t)fl[i].st.gid == ids[j].id)
 				break;
-		assert(j < idsz);
-		fl[i].st.gid = ids[j].mapped;
+		if (j < idsz)
+			fl[i].st.gid = ids[j].mapped;
 	}
 }
 
@@ -84,8 +86,8 @@ idents_assign_uid(struct sess *sess, struct flist *fl, size_t flsz,
 		for (j = 0; j < idsz; j++)
 			if ((int32_t)fl[i].st.uid == ids[j].id)
 				break;
-		assert(j < idsz);
-		fl[i].st.uid = ids[j].mapped;
+		if (j < idsz)
+			fl[i].st.uid = ids[j].mapped;
 	}
 }
 
