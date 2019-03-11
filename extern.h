@@ -383,6 +383,12 @@ int		  idents_recv(struct sess *, int, struct ident **, size_t *);
 void		  idents_remap(struct sess *, int, struct ident *, size_t);
 int		  idents_send(struct sess *, int, const struct ident *, size_t);
 
+#ifndef __OpenBSD__
+void *recallocarray(void *ptr, size_t oldnmemb, size_t nmemb, size_t size);
+int pledge(const char *promises, const char *execpromises);
+int unveil(const char *path, const char *permissions);
+#endif
+
 __END_DECLS
 
 #endif /*!EXTERN_H*/

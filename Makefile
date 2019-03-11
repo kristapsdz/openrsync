@@ -12,12 +12,15 @@ OBJS	 = blocks.o \
 	   md4.o \
 	   mkpath.o \
 	   mktemp.o \
+	   pledge.o \
+	   recallocarray.o \
 	   receiver.o \
 	   sender.o \
 	   server.o \
 	   session.o \
 	   socket.o \
 	   symlinks.o \
+	   unveil.o \
 	   uploader.o
 ALLOBJS	 = $(OBJS) \
 	   main.o
@@ -27,7 +30,7 @@ MANDIR	 = $(PREFIX)/man
 BINDIR	 = $(PREFIX)/bin
 
 # The -O0 is to help with debugging coredumps.
-CFLAGS	+= -O0 -g -W -Wall -Wextra -Wno-unused-parameter
+CFLAGS	+= -O0 -g -W -Wall -Wextra -Wno-unused-parameter -D_OPENBSD_SOURCE
 
 all: openrsync
 
