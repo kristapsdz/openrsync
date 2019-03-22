@@ -1,12 +1,16 @@
 # Introduction
 
+**This system has been merged into OpenBSD base.  If you'd like to
+contribute to openrsync, please mail your patches to tech@openbsd.org.
+I'll keep this code-base up to date with OpenBSD's version, and keep
+this page up until the architecture documentation has also been
+mainlined.**
+
 This is an implementation of [rsync](https://rsync.samba.org/) with a
 BSD (ISC) license.
 It's compatible with a modern rsync (3.1.3 is used for testing, but any
 supporting protocol 27 will do), but accepts only a subset of rsync's
 command-line arguments.
-If you want to hack on openrsync, see the
-[TODO](https://github.com/kristapsdz/openrsync/blob/master/TODO.md).
 
 At this time, openrsync runs only on [OpenBSD](https://www.openbsd.org).
 If you want to port to your system (e.g. Linux, FreeBSD), read the
