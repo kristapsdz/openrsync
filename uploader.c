@@ -73,7 +73,7 @@ log_dir(struct sess *sess, const struct flist *f)
 		return;
 	sz = strlen(f->path);
 	assert(sz > 0);
-	LOG1(sess, "%s%s", f->path, ('/' == f->path[sz - 1]) ? "" : "/");
+	LOG1(sess, "%s%s", f->path, (f->path[sz - 1] == '/') ? "" : "/");
 }
 
 /*
@@ -464,7 +464,7 @@ pre_sock(struct upload *p, struct sess *sess)
 	 * mark it from replacement.
 	 */
 
-	assert(-1 != p->rootfd);
+	assert(p->rootfd != -1);
 	rc = fstatat(p->rootfd, f->path, &st, AT_SYMLINK_NOFOLLOW);
 
 	if (rc != -1 && !S_ISSOCK(st.st_mode)) {

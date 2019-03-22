@@ -243,7 +243,7 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 	struct sess	  sess;
 	struct source	 *src = NULL;
 	size_t		  i, srcsz = 0;
-	int		  sd = -1, rc = 0, c;
+	int		  sd = -1, rc = 0;
 	char		**args, buf[BUFSIZ];
 	uint8_t		  byte;
 
@@ -281,11 +281,11 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 
 	assert(srcsz);
 	for (i = 0; i < srcsz; i++) {
-		c = inet_connect(&sess, &sd, &src[i], f->host);
-		if (c < 0) {
+		rc = inet_connect(&sess, &sd, &src[i], f->host);
+		if (rc < 0) {
 			ERRX1(&sess, "inet_connect");
 			goto out;
-		} else if (c > 0)
+		} else if (rc > 0)
 			break;
 	}
 
@@ -351,10 +351,10 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 		if (buf[i - 1] == '\r')
 			buf[i - 1] = '\0';
 
-		if ((c = protocol_line(&sess, f->host, buf)) < 0) {
+		if ((rc = protocol_line(&sess, f->host, buf)) < 0) {
 			ERRX1(&sess, "protocol_line");
 			goto out;
-		} else if (c > 0)
+		} else if (rc > 0)
 			break;
 	}
 
@@ -431,5 +431,5 @@ out:
 	free(args);
 	if (sd != -1)
 		close(sd);
-	return rc;
+	return rc > 0;
 }

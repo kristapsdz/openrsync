@@ -68,7 +68,7 @@ rsync_set_metadata(struct sess *sess, int newfile,
 				ERR(sess, "%s: fchown", path);
 				return 0;
 			}
-			WARNX(sess, "%s: identity unknown or not available "
+			LOG1(sess, "%s: identity unknown or not available "
 				"to user.group: %u.%u", f->path, uid, gid);
 		} else
 			LOG4(sess, "%s: updated uid and/or gid", f->path);
@@ -130,7 +130,7 @@ rsync_set_metadata_at(struct sess *sess, int newfile, int rootfd,
 				ERR(sess, "%s: fchownat", path);
 				return 0;
 			}
-			WARNX(sess, "%s: identity unknown or not available "
+			LOG1(sess, "%s: identity unknown or not available "
 				"to user.group: %u.%u", f->path, uid, gid);
 		} else
 			LOG4(sess, "%s: updated uid and/or gid", f->path);

@@ -56,7 +56,7 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 {
 	struct sess	 sess;
 	int		 fdin = STDIN_FILENO,
-			 fdout = STDOUT_FILENO, c = 0;
+			 fdout = STDOUT_FILENO, rc = 0;
 
 	memset(&sess, 0, sizeof(struct sess));
 	sess.opts = opts;
@@ -157,7 +157,7 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 		WARNX(&sess, "data remains in read pipe");
 #endif
 
-	c = 1;
+	rc = 1;
 out:
-	return c;
+	return rc;
 }
