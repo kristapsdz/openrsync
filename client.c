@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 
 #include <assert.h>
+#include <err.h>
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,19 +31,20 @@
  * It can either be in sender or receiver mode.
  * In the former, it synchronises local files from a remote sink.
  * In the latter, the remote sink synchronses to the local files.
- *
- * Pledges: stdio, rpath, wpath, cpath, unveil, fattr, chown.
- *
- * Pledges (dry-run): -cpath, -wpath, -fattr, chown.
- * Pledges (!preserve_times): -fattr.
+ * Returns exit code 0 on success, 1 on failure, 2 on failure with
+ * incompatible protocols.
  */
 int
 rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 {
 	struct sess	 sess;
-	int		 rc = 0;
+	int		 rc = 1;
 
 	/* Standard rsync preamble, sender side. */
+
+	if (pledge("stdio unix rpath wpath cpath dpath fattr chown getpw unveil",
+	    NULL) == -1)
+		err(1, "pledge");
 
 	memset(&sess, 0, sizeof(struct sess));
 	sess.opts = opts;
@@ -60,10 +62,10 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 	}
 
 	if (sess.rver < sess.lver) {
-		ERRX(&sess, "remote protocol is older "
-			"than our own (%" PRId32 " < %" PRId32 "): "
-			"this is not supported",
-			sess.rver, sess.lver);
+		ERRX(&sess,
+		    "remote protocol %d is older than our own %d: unsupported",
+		    sess.rver, sess.lver);
+		rc = 2;
 		goto out;
 	}
 
@@ -101,7 +103,7 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 		WARNX(&sess, "data remains in read pipe");
 #endif
 
-	rc = 1;
+	rc = 0;
 out:
 	return rc;
 }

@@ -22,6 +22,7 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <err.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -232,10 +233,9 @@ protocol_line(struct sess *sess, const char *host, const char *cp)
 }
 
 /*
- * Pledges: dns, inet, unix, unveil, rpath, cpath, wpath, stdio, fattr, chown.
- *
- * Pledges (dry-run): -unix, -cpath, -wpath, -fattr, -chown.
- * Pledges (!preserve_times): -fattr.
+ * Talk to a remote rsync://-enabled server sender.
+ * Returns exit code 0 on success, 1 on failure, 2 on failure with
+ * incompatible protocols.
  */
 int
 rsync_socket(const struct opts *opts, const struct fargs *f)
@@ -243,9 +243,13 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 	struct sess	  sess;
 	struct source	 *src = NULL;
 	size_t		  i, srcsz = 0;
-	int		  sd = -1, rc = 0;
+	int		  sd = -1, rc = 1, c;
 	char		**args, buf[BUFSIZ];
 	uint8_t		  byte;
+
+	if (pledge("stdio unix rpath wpath cpath dpath inet fattr chown dns getpw unveil",
+	    NULL) == -1)
+		err(1, "pledge");
 
 	memset(&sess, 0, sizeof(struct sess));
 	sess.lver = RSYNC_PROTOCOL;
@@ -256,7 +260,7 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 
 	if ((args = fargs_cmdline(&sess, f)) == NULL) {
 		ERRX1(&sess, "fargs_cmdline");
-		return 0;
+		exit(1);
 	}
 
 	/* Resolve all IP addresses from the host. */
@@ -264,14 +268,15 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 	if ((src = inet_resolve(&sess, f->host, &srcsz)) == NULL) {
 		ERRX1(&sess, "inet_resolve");
 		free(args);
-		return 0;
+		exit(1);
 	}
 
 	/* Drop the DNS pledge. */
 
-	if (pledge("stdio unix rpath wpath cpath dpath fattr chown getpw inet unveil", NULL) == -1) {
+	if (pledge("stdio unix rpath wpath cpath dpath fattr chown getpw inet unveil",
+	    NULL) == -1) {
 		ERR(&sess, "pledge");
-		goto out;
+		exit(1);
 	}
 
 	/*
@@ -281,16 +286,17 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 
 	assert(srcsz);
 	for (i = 0; i < srcsz; i++) {
-		rc = inet_connect(&sess, &sd, &src[i], f->host);
-		if (rc < 0) {
+		c = inet_connect(&sess, &sd, &src[i], f->host);
+		if (c < 0) {
 			ERRX1(&sess, "inet_connect");
 			goto out;
-		} else if (rc > 0)
+		} else if (c > 0)
 			break;
 	}
 
 	/* Drop the inet pledge. */
-	if (pledge("stdio unix rpath wpath cpath dpath fattr chown getpw unveil", NULL) == -1) {
+	if (pledge("stdio unix rpath wpath cpath dpath fattr chown getpw unveil",
+	    NULL) == -1) {
 		ERR(&sess, "pledge");
 		goto out;
 	}
@@ -351,10 +357,10 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 		if (buf[i - 1] == '\r')
 			buf[i - 1] = '\0';
 
-		if ((rc = protocol_line(&sess, f->host, buf)) < 0) {
+		if ((c = protocol_line(&sess, f->host, buf)) < 0) {
 			ERRX1(&sess, "protocol_line");
 			goto out;
-		} else if (rc > 0)
+		} else if (c > 0)
 			break;
 	}
 
@@ -401,6 +407,7 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 			"than our own (%" PRId32 " < %" PRId32 "): "
 			"this is not supported",
 			sess.rver, sess.lver);
+		rc = 2;
 		goto out;
 	}
 
@@ -425,11 +432,11 @@ rsync_socket(const struct opts *opts, const struct fargs *f)
 		WARNX(&sess, "data remains in read pipe");
 #endif
 
-	rc = 1;
+	rc = 0;
 out:
 	free(src);
 	free(args);
 	if (sd != -1)
 		close(sd);
-	return rc > 0;
+	return rc;
 }

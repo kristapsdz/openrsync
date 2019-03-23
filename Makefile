@@ -1,6 +1,5 @@
 PREFIX	 = /usr/local
 OBJS	 = blocks.o \
-	   child.o \
 	   client.o \
 	   downloader.o \
 	   fargs.o \

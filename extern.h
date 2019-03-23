@@ -23,11 +23,6 @@
 #define	RSYNC_PROTOCOL	(27)
 
 /*
- * The default service (see services(5)) for rsync.
- */
-#define RSYNC_SERVICE	"rsync"
-
-/*
  * Maximum amount of file data sent over the wire at once.
  */
 #define MAX_CHUNK	(32 * 1024)
@@ -319,8 +314,6 @@ int		  io_unbuffer_size(struct sess *, const void *,
 void		  io_unbuffer_buf(struct sess *, const void *,
 			size_t *, size_t, void *, size_t);
 
-void		  rsync_child(const struct opts *, int, const struct fargs *)
-			__attribute__((noreturn));
 int		  rsync_receiver(struct sess *, int, int, const char *);
 int		  rsync_sender(struct sess *, int, int, size_t, char **);
 int		  rsync_client(const struct opts *, int, const struct fargs *);

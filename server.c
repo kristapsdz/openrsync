@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 
 #include <assert.h>
+#include <err.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stdlib.h>
@@ -45,18 +46,19 @@ fcntl_nonblock(struct sess *sess, int fd)
  * The server (remote) side of the system.
  * This parses the arguments given it by the remote shell then moves
  * into receiver or sender mode depending upon those arguments.
- *
- * Pledges: unveil rpath, cpath, wpath, stdio, fattr.
- *
- * Pledges (dry-run): -cpath, -wpath, -fattr.
- * Pledges (!preserve_times): -fattr.
+ * Returns exit code 0 on success, 1 on failure, 2 on failure with
+ * incompatible protocols.
  */
 int
 rsync_server(const struct opts *opts, size_t argc, char *argv[])
 {
 	struct sess	 sess;
 	int		 fdin = STDIN_FILENO,
-			 fdout = STDOUT_FILENO, rc = 0;
+			 fdout = STDOUT_FILENO, rc = 1;
+
+	if (pledge("stdio unix rpath wpath cpath dpath fattr chown getpw unveil",
+	    NULL) == -1)
+		err(1, "pledge");
 
 	memset(&sess, 0, sizeof(struct sess));
 	sess.opts = opts;
@@ -88,10 +90,10 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 	sess.mplex_writes = 1;
 
 	if (sess.rver < sess.lver) {
-		ERRX(&sess, "remote protocol is older "
-			"than our own (%" PRId32 " < %" PRId32 "): "
-			"this is not supported",
-			sess.rver, sess.lver);
+		ERRX(&sess,
+		    "remote protocol %d is older than our own %d: unsupported",
+		    sess.rver, sess.lver);
+		rc = 2;
 		goto out;
 	}
 
@@ -157,7 +159,7 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 		WARNX(&sess, "data remains in read pipe");
 #endif
 
-	rc = 1;
+	rc = 0;
 out:
 	return rc;
 }
