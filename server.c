@@ -77,6 +77,8 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 	sess.lver = RSYNC_PROTOCOL;
 #if HAVE_ARC4RANDOM
 	sess.seed = arc4random();
+#else
+	sess.seed = random();
 #endif
 
 	if (!io_read_int(&sess, fdin, &sess.rver)) {
