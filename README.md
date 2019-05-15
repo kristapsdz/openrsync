@@ -4,16 +4,15 @@
 contribute to openrsync, please mail your patches to tech@openbsd.org.**
 
 This is an implementation of [rsync](https://rsync.samba.org/) with a
-BSD (ISC) license.
-It's compatible with a modern rsync (3.1.3 is used for testing, but any
-supporting protocol 27 will do), but accepts only a subset of rsync's
-command-line arguments.
+BSD (ISC) license.  It's compatible with a modern rsync (3.1.3 is used
+for testing, but any supporting protocol 27 will do), but accepts only a
+subset of rsync's command-line arguments.
 
-Its officially-supported operating system is OpenBSD.
-See [Portability](#Portability) for running on other systems.
+Its officially-supported operating system is OpenBSD, but it will
+compile and run on other UNIX systems.  See [Portability](#Portability)
+for details.
 
-The canonical documentation for openrsync is its manual pages.
-See
+The canonical documentation for openrsync is its manual pages.  See
 [rsync(5)](https://github.com/kristapsdz/openrsync/blob/master/rsync.5)
 and
 [rsyncd(5)](https://github.com/kristapsdz/openrsync/blob/master/rsyncd.5)
@@ -23,13 +22,12 @@ If you'd like to write your own rsync implementation, the protocol
 manpages should have all the information required.
 
 The [Architecture](#Architecture) and [Algorithm](#Algorithm) sections
-on this page serve to introduce developers to the source code.
-They are non-canonical.
+on this page serve to introduce developers to the source code.  They are
+non-canonical.
 
-This repository is a read-only mirror of a private CVS repository.
-I use it for issues and pull requests.
-**Please do not make feature requests**: I will simply close out the
-issue.
+This repository is a read-only mirror of a private CVS repository.  I
+use it for issues and pull requests.  **Please do not make feature
+requests**: I will simply close out the issue.
 
 ## Project background
 
@@ -37,10 +35,9 @@ openrsync is written as part of the
 [rpki-client(1)](https://medium.com/@jobsnijders/a-proposal-for-a-new-rpki-validator-openbsd-rpki-client-1-15b74e7a3f65)
 project, an
 [RPKI](https://en.wikipedia.org/wiki/Resource_Public_Key_Infrastructure)
-validator for OpenBSD. 
-openrsync was funded by [NetNod](https://www.netnod.se),
-[IIS.SE](https://www.iis.se), [SUNET](https://www.sunet.se) and
-[6connect](https://www.6connect.com).
+validator for OpenBSD.  openrsync was funded by
+[NetNod](https://www.netnod.se), [IIS.SE](https://www.iis.se),
+[SUNET](https://www.sunet.se) and [6connect](https://www.6connect.com).
 
 # Installation
 
@@ -344,21 +341,20 @@ loop is used for speedy responses to read and write requests.
 # Security
 
 Besides the usual defensive programming, openrsync makes significant use
-of OpenBSD's native security features.
+of native security features.
 
 The system operations available to executing code are foremost limited
-by [pledge(2)](https://man.openbsd.org/pledge.2).
-The pledges given depend upon the operating mode.
-For example, the receiver needs write access to the disc---but only when
-not in dry-run mode (**-n**).
+by OpenBSD's [pledge(2)](https://man.openbsd.org/pledge.2).  The pledges
+given depend upon the operating mode.  For example, the receiver needs
+write access to the disc---but only when not in dry-run mode (**-n**).
 The daemon client needs DNS and network access, but only to a point.
 [pledge(2)](https://man.openbsd.org/pledge.2) allows available resources
 to be limited over the course of operation.
 
-The second tool is [unveil(2)](https://man.openbsd.org/unveil.2), which
-limits access to the file-system.
-This protects against rogue attempts to "break out" of the destination.
-It's an attractive alternative to
+The second tool is OpenBSD's
+[unveil(2)](https://man.openbsd.org/unveil.2), which limits access to
+the file-system.  This protects against rogue attempts to "break out" of
+the destination.  It's an attractive alternative to
 [chroot(2)](https://man.openbsd.org/chroot.2) because it doesn't require
 root permissions to execute.
 
@@ -375,9 +371,9 @@ specified directories may be accessed.
 
 Lastly, the MD4 hashs are seeded with
 [arc4random(3)](https://man.openbsd.org/arc4random.3) instead of with
-[time(3)](https://man.openbsd.org/time.3).
-This is only applicable when running openrsync in server mode, as the
-server generates the seed.
+[time(3)](https://man.openbsd.org/time.3).  (This function is provided
+on a number of operating systems.) This is only applicable when running
+openrsync in server mode, as the server generates the seed.
 
 # Portability
 
