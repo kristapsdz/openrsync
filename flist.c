@@ -18,7 +18,6 @@
 #include "config.h"
 
 #include <sys/param.h>
-#include <sys/queue.h>
 #include <sys/stat.h>
 
 #include <assert.h>
@@ -275,6 +274,7 @@ flist_send(struct sess *sess, int fdin, int fdout, const struct flist *fl,
 		fn = f->wpath;
 		sz = strlen(f->wpath);
 		assert(sz > 0);
+		assert(sz < INT32_MAX);
 
 		/*
 		 * If applicable, unclog the read buffer.
@@ -805,11 +805,12 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
     size_t *max)
 {
 	char		*cargv[2], *cp;
-	int		 rc = 0;
+	int		 rc = 0, nxdev = 0, flag, i;
 	FTS		*fts;
 	FTSENT		*ent;
 	struct flist	*f;
 	size_t		 flsz = 0, stripdir;
+	dev_t		*xdev;
 	struct stat	 st;
 
 	cargv[0] = root;
@@ -918,6 +919,48 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
 			continue;
 		}
 
+		/*
+		 * If rsync is told to avoid crossing a filesystem
+		 * boundary when recursing, then replace all mount point
+		 * directories with empty directories.  The latter is
+		 * prevented by telling rsync multiple times to avoid
+		 * crossing a filesystem boundary when recursing.
+		 * Replacing mount point directories is tricky. We need
+		 * to sort out which directories to include.  As such,
+		 * keep track of unique device inodes, and use these for
+		 * comparison.
+		 */
+
+		if (sess->opts->one_file_system &&
+		    ent->fts_statp->st_dev != st.st_dev) {
+			if (sess->opts->one_file_system > 1 ||
+			    !S_ISDIR(ent->fts_statp->st_mode))
+				continue;
+
+			if ((xdev = malloc(sizeof(dev_t))) == NULL) {
+				ERRX1("malloc");
+				goto out;
+			}
+
+			flag = 0;
+			for (i = 0; i < nxdev; i++)
+				if (xdev[i] == ent->fts_statp->st_dev) {
+					flag = 1;
+					break;
+				}
+			if (flag)
+				continue;
+
+			if (nxdev)
+				if ((xdev = realloc(xdev, sizeof(dev_t))) ==
+				    NULL) {
+					ERRX1("realloc");
+					goto out;
+				}
+			xdev[nxdev] = ent->fts_statp->st_dev;
+			nxdev++;
+		}
+
 		/* Allocate a new file entry. */
 
 		if (!flist_realloc(fl, sz, max)) {
@@ -973,6 +1016,8 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
 	rc = 1;
 out:
 	fts_close(fts);
+	if (sess->opts->one_file_system)
+		free(xdev);
 	return rc;
 }
 
@@ -1140,10 +1185,11 @@ flist_gen_dels(struct sess *sess, const char *root, struct flist **fl,
     size_t *sz,	const struct flist *wfl, size_t wflsz)
 {
 	char		**cargv = NULL;
-	int		  rc = 0, c;
+	int		  rc = 0, c, flag;
 	FTS		 *fts = NULL;
 	FTSENT		 *ent;
 	struct flist	 *f;
+	struct stat	  st;
 	size_t		  cargvs = 0, i, j, max = 0, stripdir;
 	ENTRY		  hent;
 	ENTRY		 *hentp;
@@ -1263,6 +1309,31 @@ flist_gen_dels(struct sess *sess, const char *root, struct flist **fl,
 			continue;
 		} else if (stripdir >= ent->fts_pathlen)
 			continue;
+
+		assert(ent->fts_statp != NULL);
+
+		/*
+		 * If rsync is told to avoid crossing a filesystem
+		 * boundary when recursing, then exclude all entries
+		 * from the list with a device inode, which does not
+		 * match that of one of the top-level directories.
+		 */
+
+		if (sess->opts->one_file_system) {
+			flag = 0;
+			for (i = 0; i < wflsz; i++) {
+				if (stat(wfl[i].path, &st) == -1) {
+					ERR("%s: stat", wfl[i].path);
+					goto out;
+				}
+				if (ent->fts_statp->st_dev == st.st_dev) {
+					flag = 1;
+					break;
+				}
+			}
+			if (!flag)
+				continue;
+		}
 
 		/* Look up in hashtable. */
 
