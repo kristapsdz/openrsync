@@ -1,6 +1,7 @@
 PREFIX	 = /usr/local
 OBJS	 = blocks.o \
 	   client.o \
+	   compats.o \
 	   downloader.o \
 	   fargs.o \
 	   flist.o \
@@ -56,6 +57,6 @@ uninstall:
 clean:
 	rm -f $(ALLOBJS) openrsync $(AFLS)
 
-$(ALLOBJS) $(AFLS): extern.h
+$(ALLOBJS) $(AFLS): extern.h config.h
 
 blocks.o downloader.o hash.o md4.o: md4.h
