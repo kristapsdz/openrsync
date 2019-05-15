@@ -22,12 +22,13 @@
 .Nd synchronise local and remote files
 .Sh SYNOPSIS
 .Nm openrsync
-.Op Fl Daglnoprtv
-.Op Fl e Ar prog
-.Op Fl -delete
+.Op Fl aDglnoprtvx
+.Op Fl e Ar program
+.Op Fl -del
 .Op Fl -numeric-ids
-.Op Fl -port Ar port
-.Op Fl -rsync-path Ar prog
+.Op Fl -port Ns = Ns Ar service
+.Op Fl -rsync-path Ns = Ns Ar program
+.Op Fl -version
 .Ar source ...
 .Ar directory
 .Sh DESCRIPTION
@@ -46,60 +47,14 @@ may be remote,
 but not both.
 The arguments are as follows:
 .Bl -tag -width Ds
-.It Fl D
-Transfer FIFOs, device special files, and sockets.
-.It Fl a
+.It Fl a , -archive
 Shorthand for
-.Fl Dgloptr .
-.It Fl g
-Set group identifier to match the source.
-Groups are matched by name: group
-.Qq kristaps
-with id 1000 on a remote server will be properly assigned group
-.Qq kristaps
-on the local machine with id 2000.
-If the sender's group is unknown on the local machine, the numerical
-value is used.
-.It Fl l
-Transfer symbolic links.
-The link is transferred as a standalone file: if the destination does
-not exist, it will be broken.
-.It Fl n
-Dry-run mode.
-Does not actually modify the destination.
-.It Fl o
-Set user identifier to match the source.
-This behaves like
-.Fl g
-and only works if run as root.
-.It Fl p
-Set destination file or directory permissions to match the source when
-it is updated.
-.It Fl r
-If
-.Ar source
-designates a directory, synchronise the directory and the entire subtree
-connected at that point.
-If
-.Ar source
-ends with a slash, only the subtree is synchronised, not the root
-directory.
-If
-.Ar source
-is a file, this has no effect.
-.It Fl t
-Set destination file and directory modification time to match the source
-when it is updated or created.
-.It Fl v
-Increase verbosity.
-Specify once for files being transferred, twice for specific status,
-thrice for per-file transfer information, and four times for per-file
-breakdowns.
-.It Fl e Ar prog
-The remote shell command to use.
-This may consist of space-separated command and arguments, such as
-.Qq ssh -l kristaps .
-.It Fl -delete
+.Fl Dgloprt .
+.It Fl D
+Also transfer device and special files.
+Shorthand for
+.Fl -devices -specials .
+.It Fl -del , -delete
 Delete files in
 .Ar directory
 not found in
@@ -107,22 +62,92 @@ not found in
 directories.
 Only applicable with
 .Fl r .
+.It Fl -devices
+Also transfer device files.
+.It Fl e Ar program , Fl -rsh Ns = Ns Ar program
+Specify alternative communication program, defaults to
+.Xr ssh 1 .
+.It Fl g , -group
+Set the group name to match the source.
+For example, group
+.Qq kristaps
+with ID 1000 on a remote server is matched to group
+.Qq kristaps
+on the local machine with ID 2000.
+If
+.Fl -numeric-ids
+is also given or if the remote group name is unknown on the local machine,
+set the numeric group ID to match the source instead.
+.It Fl l , -links
+Also transfer symbolic links.
+The link is transferred as a standalone file: if the destination does
+not exist, it will be broken.
+.It Fl n , -dry-run
+Do not actually modify the destination.
+Mainly useful in combination with
+.Fl v .
 .It Fl -numeric-ids
-With
+Ignore user and group names, use numeric user and group IDs only.
+Has no effect unless
 .Fl g
 or
-.Fl o ,
-simply use the numeric identifier and do not map by name.
-.It Fl -port Ar port
-Specify a default port for connecting to
-.Qq rsync://
-servers.
-This is overridden by any port specified in the URL.
-.It Fl -rsync-path Ar prog
+.Fl o
+is also given.
+.It Fl o , -owner
+Set the user name to match the source, with similar matching logic as for
+.Fl g .
+If
+.Fl -numeric-ids
+is also given or if the remote user name is unknown on the local machine,
+set the numeric user ID to match the source instead.
+Only works if run as root.
+.It Fl p , -perms
+Set destination file or directory permissions to match the source when
+it is updated.
+.It Fl -port Ns = Ns Ar service
+Specify an alternative TCP port number.
+The
+.Ar service
+can be given as a decimal integer or as a name to be looked up in the
+.Xr services 5
+database.
+The default is
+.Dq rsync .
+.It Fl r , -recursive
+If
+.Ar source
+designates a directory, synchronise the directory and the entire subtree
+connected at that point.
+If
+.Ar source
+ends with a slash, only the subtree is synchronised, not the
+.Ar source
+directory itself.
+If
+.Ar source
+is a file, this has no effect.
+.It Fl -rsync-path Ns = Ns Ar program
 Run
-.Ar prog
+.Ar program
 on the remote host instead of the default
-.Ar rsync .
+.Pa rsync .
+.It Fl -specials
+Also transfer fifo and unix domain socket files.
+.It Fl t , -times
+Set destination file and directory modification time to match the source
+when it is updated or created.
+.It Fl v , -verbose
+Increase verbosity.
+Specify once for files being transferred, twice for specific status,
+thrice for per-file transfer information, and four times for per-file
+breakdowns.
+.It Fl x
+Do not cross filesystem boundaries.
+If this option is repeated, all mount point directories from the copy are
+omitted.
+Otherwise, it includes an empty directory at each mount point it encounters.
+.It Fl -version
+Print version and exit.
 .El
 .Pp
 By default
@@ -139,29 +164,29 @@ A remote
 .Ar source
 or
 .Ar directory
-has syntax
-.Ar host:path
+has the syntax
+.Ar host : Ns Ar path
 for connecting via
 .Xr ssh 1 ,
 or
-.Ar rsync://host[:port]/path
+.Cm rsync Ns :// Ns Ar host Ns / Ns Ar path
 or
-.Ar host::path
+.Ar host Ns :: Ns Ar path
 for connecting to a remote daemon.
 Subsequent to the first remote
 .Ar source ,
 the host may be dropped to become just
-.Ar :path
+.Pf : Ar path
 or
-.Ar ::path .
+.Pf :: Ar path .
 .Pp
 For connecting to a remote daemon with
-.Ar rsync://host
+.Cm rsync Ns :// Ns Ar host
 or
-.Ar host::path ,
+.Ar host Ns :: Ns Ar path ,
 the first path component is interpreted as a
 .Qq module :
-.Ar host::module/path .
+.Ar host Ns :: Ns Ar module Ns / Ns Ar path .
 This only applies to the first
 .Ar source
 invocation; subsequent to that, the module should not be specified.
@@ -172,23 +197,22 @@ Updated files retain their existing permissions.
 It is an error if updated files have their file types change (e.g.,
 updating a directory with a file).
 .Pp
-.Nm
-is compatible with the GPL-licensed
-.Xr rsync 1
-protocol version 27.
-.\" The following requests should be uncommented and used where appropriate.
-.\" .Sh CONTEXT
-.\" For section 9 functions only.
-.\" .Sh RETURN VALUES
-.\" For sections 2, 3, and 9 function return values only.
+At this time,
+.Ar source
+may only consist of regular files, directories
+.Pq only with Fl r ,
+or symbolic links
+.Pq only with Fl l .
+The destination
+.Ar directory
+must be a directory and is created if not found.
 .\" .Sh ENVIRONMENT
-.\" For sections 1, 6, 7, and 8 only.
 .\" .Sh FILES
 .Sh EXIT STATUS
+The
 .Nm
-utility exits 0 on success, 1 if a general error occurs, and 2 if the
-remote host has an incompatible rsync protocol.
-.\" For sections 1, 6, and 8 only.
+utility exits 0 on success, 1 if an error occurs, or 2 if the remote
+protocol version is older than the local protocol version.
 .Sh EXAMPLES
 A common invocation of
 .Nm
@@ -203,8 +227,7 @@ Switching remote and local wil update the remote contents instead:
 .Pp
 .Dl % openrsync -av --delete /local/path remote:rpath
 .Pp
-.Pp
-All subsequent examples use only
+All examples use
 .Fl t
 so that destination files inherit the source time.
 If not changed, subsequent invocations of
@@ -253,15 +276,23 @@ with the local host running
 .Pp
 .Dl % rsync --rsync-path openrsync -t ../dest/* host:dest
 .\" .Sh DIAGNOSTICS
-.\" For sections 1, 4, 6, 7, 8, and 9 printf/stderr messages only.
-.\" .Sh ERRORS
-.\" For sections 2, 3, 4, and 9 errno settings only.
 .Sh SEE ALSO
 .Xr ssh 1 ,
 .Xr rsync 5 ,
 .Xr rsyncd 5
-.\" .Sh STANDARDS
-.\" .Sh HISTORY
-.\" .Sh AUTHORS
+.Sh STANDARDS
+.Nm
+is compatible with rsync protocol version 27
+as supported by the samba.org implementation of rsync.
+.Sh HISTORY
+The
+.Nm
+utility has been available since
+.Ox 6.5 .
+.Sh AUTHORS
+The
+.Nm
+utility was written by
+.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv .
 .\" .Sh CAVEATS
 .\" .Sh BUGS
