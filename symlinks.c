@@ -15,7 +15,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include <sys/param.h>
-#include <sys/queue.h>
 
 #include <assert.h>
 #include <stdint.h>
@@ -30,7 +29,7 @@
  * The buffer must be passed to free() by the caller.
  */
 char *
-symlink_read(struct sess *sess, const char *path)
+symlink_read(const char *path)
 {
 	char	*buf = NULL;
 	size_t	 sz;
@@ -39,18 +38,18 @@ symlink_read(struct sess *sess, const char *path)
 
 	for (sz = MAXPATHLEN; ; sz *= 2) {
 		if ((pp = realloc(buf, sz + 1)) == NULL) {
-			ERR(sess, "realloc");
+			ERR("realloc");
 			free(buf);
 			return NULL;
 		}
 		buf = pp;
 
 		if ((nsz = readlink(path, buf, sz)) == -1) {
-			ERR(sess, "%s: readlink", path);
+			ERR("%s: readlink", path);
 			free(buf);
 			return NULL;
 		} else if (nsz == 0) {
-			ERRX(sess, "%s: empty link", path);
+			ERRX("%s: empty link", path);
 			free(buf);
 			return NULL;
 		} else if ((size_t)nsz < sz)
@@ -69,7 +68,7 @@ symlink_read(struct sess *sess, const char *path)
  * The buffer must be passed to free() by the caller.
  */
 char *
-symlinkat_read(struct sess *sess, int fd, const char *path)
+symlinkat_read(int fd, const char *path)
 {
 	char	*buf = NULL;
 	size_t	 sz;
@@ -78,18 +77,18 @@ symlinkat_read(struct sess *sess, int fd, const char *path)
 
 	for (sz = MAXPATHLEN; ; sz *= 2) {
 		if ((pp = realloc(buf, sz + 1)) == NULL) {
-			ERR(sess, "realloc");
+			ERR("realloc");
 			free(buf);
 			return NULL;
 		}
 		buf = pp;
 
 		if ((nsz = readlinkat(fd, path, buf, sz)) == -1) {
-			ERR(sess, "%s: readlinkat", path);
+			ERR("%s: readlinkat", path);
 			free(buf);
 			return NULL;
 		} else if (nsz == 0) {
-			ERRX(sess, "%s: empty link", path);
+			ERRX("%s: empty link", path);
 			free(buf);
 			return NULL;
 		} else if ((size_t)nsz < sz)

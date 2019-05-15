@@ -14,7 +14,6 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#include <sys/queue.h>
 #include <sys/stat.h>
 
 #include <assert.h>
@@ -27,11 +26,13 @@
 #define	RSYNC_PATH	"rsync"
 
 char **
-fargs_cmdline(struct sess *sess, const struct fargs *f)
+fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 {
-	char		**args = NULL, **new;
-	size_t		  i = 0, n = 1, j, argsz = 0;
-	char		 *rsync_path, *ap;
+	arglist		 args;
+	size_t		 j;
+	char		*rsync_path, *ap, *arg;
+
+	memset(&args, 0, sizeof args);
 
 	assert(f != NULL);
 	assert(f->sourcesz > 0);
@@ -39,22 +40,7 @@ fargs_cmdline(struct sess *sess, const struct fargs *f)
 	if ((rsync_path = sess->opts->rsync_path) == NULL)
 		rsync_path = RSYNC_PATH;
 
-	/* Be explicit with array size. */
-
-	argsz += 1;	/* dot separator */
-	argsz += 1;	/* sink file */
-	argsz += 5;	/* per-mode maximum */
-	argsz += 15;	/* shared args */
-	argsz += 1;	/* NULL pointer */
-	argsz += f->sourcesz;
-
-	args = calloc(argsz, sizeof(char *));
-	if (args == NULL)
-		goto out;
-
 	if (f->host != NULL) {
-		assert(f->host != NULL);
-
 		/*
 		 * Splice arguments from -e "foo bar baz" into array
 		 * elements required for execve(2).
@@ -67,87 +53,82 @@ fargs_cmdline(struct sess *sess, const struct fargs *f)
 			if (ap == NULL)
 				goto out;
 
-			while ((args[i] = strsep(&ap, " \t")) != NULL) {
-				if (args[i][0] == '\0') {
+			while ((arg = strsep(&ap, " \t")) != NULL) {
+				if (arg[0] == '\0') {
 					ap++;	/* skip seperators */
 					continue;
 				}
 
-				/* Grow command-area of array */
-
-				if (i++ < n)
-					continue;
-				n += 10;
-				new = reallocarray(args,
-					argsz + n, sizeof(char *));
-				if (new == NULL)
-					goto out;
-				args = new;
-				argsz += n;
+				addargs(&args, "%s", arg);
 			}
 		} else
-			args[i++] = "ssh";
+			addargs(&args, "ssh");
 
-		args[i++] = f->host;
-		args[i++] = rsync_path;
-		args[i++] = "--server";
+		addargs(&args, "%s", f->host);
+		addargs(&args, "%s", rsync_path);
+		if (skip)
+			*skip = args.num;
+		addargs(&args, "--server");
 		if (f->mode == FARGS_RECEIVER)
-			args[i++] = "--sender";
+			addargs(&args, "--sender");
 	} else {
-		args[i++] = rsync_path;
-		args[i++] = "--server";
+		addargs(&args, "%s", rsync_path);
+		addargs(&args, "--server");
 	}
 
 	/* Shared arguments. */
 
 	if (sess->opts->del)
-		args[i++] = "--delete";
+		addargs(&args, "--delete");
 	if (sess->opts->numeric_ids)
-		args[i++] = "--numeric-ids";
+		addargs(&args, "--numeric-ids");
 	if (sess->opts->preserve_gids)
-		args[i++] = "-g";
+		addargs(&args, "-g");
 	if (sess->opts->preserve_links)
-		args[i++] = "-l";
+		addargs(&args, "-l");
 	if (sess->opts->dry_run)
-		args[i++] = "-n";
+		addargs(&args, "-n");
 	if (sess->opts->preserve_uids)
-		args[i++] = "-o";
+		addargs(&args, "-o");
 	if (sess->opts->preserve_perms)
-		args[i++] = "-p";
+		addargs(&args, "-p");
 	if (sess->opts->devices)
-		args[i++] = "-D";
+		addargs(&args, "-D");
 	if (sess->opts->recursive)
-		args[i++] = "-r";
+		addargs(&args, "-r");
 	if (sess->opts->preserve_times)
-		args[i++] = "-t";
-	if (sess->opts->verbose > 3)
-		args[i++] = "-v";
-	if (sess->opts->verbose > 2)
-		args[i++] = "-v";
-	if (sess->opts->verbose > 1)
-		args[i++] = "-v";
-	if (sess->opts->verbose > 0)
-		args[i++] = "-v";
+		addargs(&args, "-t");
+	if (verbose > 3)
+		addargs(&args, "-v");
+	if (verbose > 2)
+		addargs(&args, "-v");
+	if (verbose > 1)
+		addargs(&args, "-v");
+	if (verbose > 0)
+		addargs(&args, "-v");
+	if (sess->opts->one_file_system > 1)
+		addargs(&args, "-x");
+	if (sess->opts->one_file_system > 0)
+		addargs(&args, "-x");
 	if (sess->opts->specials && !sess->opts->devices)
-		args[i++] = "--specials";
+		addargs(&args, "--specials");
 	if (!sess->opts->specials && sess->opts->devices)
 		/* --devices is sent as -D --no-specials */
-		args[i++] = "--no-specials";
+		addargs(&args, "--no-specials");
 
 	/* Terminate with a full-stop for reasons unknown. */
 
-	args[i++] = ".";
+	addargs(&args, ".");
 
 	if (f->mode == FARGS_RECEIVER) {
 		for (j = 0; j < f->sourcesz; j++)
-			args[i++] = f->sources[j];
+			addargs(&args, "%s", f->sources[j]);
 	} else
-		args[i++] = f->sink;
+		addargs(&args, "%s", f->sink);
 
-	args[i] = NULL;
-	return args;
+	return args.list;
 out:
-	free(args);
-	ERR(sess, "calloc");
+	freeargs(&args);
+	ERR("calloc");
 	return NULL;
 }

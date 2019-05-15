@@ -9,6 +9,7 @@ OBJS	 = blocks.o \
 	   io.o \
 	   log.o \
 	   md4.o \
+	   misc.o \
 	   mkpath.o \
 	   mktemp.o \
 	   receiver.o \

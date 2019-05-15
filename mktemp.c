@@ -16,7 +16,6 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#include <sys/queue.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -65,7 +64,7 @@ enum	tmpmode {
 #define MKOTEMP_FLAGS	(O_APPEND | O_CLOEXEC | O_DSYNC | O_RSYNC | O_SYNC)
 
 #ifndef nitems
-# define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
+#define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
 #endif
 
 /*
@@ -75,13 +74,13 @@ static int
 mktemp_internalat(int pfd, char *path, int slen, enum tmpmode mode,
 	int flags, const char *link, mode_t dev_type, dev_t dev)
 {
-	char 		*start, *cp, *ep;
-	const char 	 tempchars[] = TEMPCHARS;
-	unsigned int 	 tries;
-	struct stat 	 sb;
+	char		*start, *cp, *ep;
+	const char	 tempchars[] = TEMPCHARS;
+	unsigned int	 tries;
+	struct stat	 sb;
 	struct sockaddr_un sun;
-	size_t 		 len;
-	int 		 fd, saved_errno;
+	size_t		 len;
+	int		 fd, saved_errno;
 
 	len = strlen(path);
 	if (len < MIN_X || slen < 0 || (size_t)slen > len - MIN_X) {
@@ -284,7 +283,7 @@ mkstempsock(const char *root, char *path)
  * (excluding the final '\0').
  */
 int
-mktemplate(struct sess *sess, char **ret, const char *path, int recursive)
+mktemplate(char **ret, const char *path, int recursive)
 {
 	int		 n, dirlen;
 	const char	*cp;
@@ -294,11 +293,11 @@ mktemplate(struct sess *sess, char **ret, const char *path, int recursive)
 		n = asprintf(ret, "%.*s/.%s.XXXXXXXXXX",
 			dirlen, path, path + dirlen + 1);
 		if (n < 0) {
-			ERR(sess, "asprintf");
+			ERR("asprintf");
 			*ret = NULL;
 		}
 	} else if ((n = asprintf(ret, ".%s.XXXXXXXXXX", path)) < 0) {
-		ERR(sess, "asprintf");
+		ERR("asprintf");
 		*ret = NULL;
 	}
 

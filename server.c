@@ -14,7 +14,6 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#include <sys/queue.h>
 #include <sys/stat.h>
 
 #include <assert.h>
@@ -28,14 +27,14 @@
 #include "extern.h"
 
 static int
-fcntl_nonblock(struct sess *sess, int fd)
+fcntl_nonblock(int fd)
 {
 	int	 fl;
 
 	if ((fl = fcntl(fd, F_GETFL, 0)) == -1)
-		ERR(sess, "fcntl: F_GETFL");
+		ERR("fcntl: F_GETFL");
 	else if (fcntl(fd, F_SETFL, fl|O_NONBLOCK) == -1)
-		ERR(sess, "fcntl: F_SETFL");
+		ERR("fcntl: F_SETFL");
 	else
 		return 1;
 
@@ -65,9 +64,9 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 
 	/* Begin by making descriptors non-blocking. */
 
-	if (!fcntl_nonblock(&sess, fdin) ||
-	     !fcntl_nonblock(&sess, fdout)) {
-		ERRX1(&sess, "fcntl_nonblock");
+	if (!fcntl_nonblock(fdin) ||
+	     !fcntl_nonblock(fdout)) {
+		ERRX1("fcntl_nonblock");
 		goto out;
 	}
 
@@ -77,32 +76,31 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 	sess.seed = arc4random();
 
 	if (!io_read_int(&sess, fdin, &sess.rver)) {
-		ERRX1(&sess, "io_read_int");
+		ERRX1("io_read_int");
 		goto out;
 	} else if (!io_write_int(&sess, fdout, sess.lver)) {
-		ERRX1(&sess, "io_write_int");
+		ERRX1("io_write_int");
 		goto out;
 	} else if (!io_write_int(&sess, fdout, sess.seed)) {
-		ERRX1(&sess, "io_write_int");
+		ERRX1("io_write_int");
 		goto out;
 	}
 
 	sess.mplex_writes = 1;
 
 	if (sess.rver < sess.lver) {
-		ERRX(&sess,
-		    "remote protocol %d is older than our own %d: unsupported",
+		ERRX("remote protocol %d is older than our own %d: unsupported",
 		    sess.rver, sess.lver);
 		rc = 2;
 		goto out;
 	}
 
-	LOG2(&sess, "server detected client version %" PRId32
+	LOG2("server detected client version %" PRId32
 		", server version %" PRId32 ", seed %" PRId32,
 		sess.rver, sess.lver, sess.seed);
 
 	if (sess.opts->sender) {
-		LOG2(&sess, "server starting sender");
+		LOG2("server starting sender");
 
 		/*
 		 * At this time, I always get a period as the first
@@ -113,23 +111,22 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 		 */
 
 		if (strcmp(argv[0], ".")) {
-			ERRX(&sess, "first argument must "
-				"be a standalone period");
+			ERRX("first argument must be a standalone period");
 			goto out;
 		}
 		argv++;
 		argc--;
 		if (argc == 0) {
-			ERRX(&sess, "must have arguments");
+			ERRX("must have arguments");
 			goto out;
 		}
 
 		if (!rsync_sender(&sess, fdin, fdout, argc, argv)) {
-			ERRX1(&sess, "rsync_sender");
+			ERRX1("rsync_sender");
 			goto out;
 		}
 	} else {
-		LOG2(&sess, "server starting receiver");
+		LOG2("server starting receiver");
 
 		/*
 		 * I don't understand why this calling convention
@@ -138,17 +135,15 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 		 */
 
 		if (argc != 2) {
-			ERRX(&sess, "server receiver mode "
-				"requires two argument");
+			ERRX("server receiver mode requires two argument");
 			goto out;
 		} else if (strcmp(argv[0], ".")) {
-			ERRX(&sess, "first argument must "
-				"be a standalone period");
+			ERRX("first argument must be a standalone period");
 			goto out;
 		}
 
 		if (!rsync_receiver(&sess, fdin, fdout, argv[1])) {
-			ERRX1(&sess, "rsync_receiver");
+			ERRX1("rsync_receiver");
 			goto out;
 		}
 	}
@@ -156,7 +151,7 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 #if 0
 	/* Probably the EOF. */
 	if (io_read_check(&sess, fdin))
-		WARNX(&sess, "data remains in read pipe");
+		WARNX("data remains in read pipe");
 #endif
 
 	rc = 0;

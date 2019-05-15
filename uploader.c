@@ -16,7 +16,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include <sys/mman.h>
-#include <sys/queue.h>
 #include <sys/stat.h>
 
 #include <assert.h>
@@ -73,7 +72,7 @@ log_dir(struct sess *sess, const struct flist *f)
 		return;
 	sz = strlen(f->path);
 	assert(sz > 0);
-	LOG1(sess, "%s%s", f->path, (f->path[sz - 1] == '/') ? "" : "/");
+	LOG1("%s%s", f->path, (f->path[sz - 1] == '/') ? "" : "/");
 }
 
 /*
@@ -85,7 +84,7 @@ log_link(struct sess *sess, const struct flist *f)
 {
 
 	if (!sess->opts->server)
-		LOG1(sess, "%s -> %s", f->path, f->link);
+		LOG1("%s -> %s", f->path, f->link);
 }
 
 /*
@@ -96,7 +95,7 @@ log_file(struct sess *sess, const struct flist *f)
 {
 
 	if (!sess->opts->server)
-		LOG1(sess, "%s", f->path);
+		LOG1("%s", f->path);
 }
 
 /*
@@ -182,7 +181,7 @@ pre_link(struct upload *p, struct sess *sess)
 	assert(S_ISLNK(f->st.mode));
 
 	if (!sess->opts->preserve_links) {
-		WARNX(sess, "%s: ignoring symlink", f->path);
+		WARNX("%s: ignoring symlink", f->path);
 		return 0;
 	} else if (sess->opts->dry_run) {
 		log_link(sess, f);
@@ -201,12 +200,12 @@ pre_link(struct upload *p, struct sess *sess)
 	if (rc != -1 && !S_ISLNK(st.st_mode)) {
 		if (S_ISDIR(st.st_mode) &&
 		    unlinkat(p->rootfd, f->path, AT_REMOVEDIR) == -1) {
-			ERR(sess, "%s: unlinkat", f->path);
+			ERR("%s: unlinkat", f->path);
 			return -1;
 		}
 		rc = -1;
 	} else if (rc == -1 && errno != ENOENT) {
-		ERR(sess, "%s: fstatat", f->path);
+		ERR("%s: fstatat", f->path);
 		return -1;
 	}
 
@@ -216,16 +215,15 @@ pre_link(struct upload *p, struct sess *sess)
 	 */
 
 	if (rc != -1) {
-		b = symlinkat_read(sess, p->rootfd, f->path);
+		b = symlinkat_read(p->rootfd, f->path);
 		if (b == NULL) {
-			ERRX1(sess, "symlinkat_read");
+			ERRX1("symlinkat_read");
 			return -1;
 		}
 		if (strcmp(f->link, b)) {
 			free(b);
 			b = NULL;
-			LOG3(sess, "%s: updating "
-				"symlink: %s", f->path, f->link);
+			LOG3("%s: updating symlink: %s", f->path, f->link);
 			updatelink = 1;
 		}
 		free(b);
@@ -238,15 +236,13 @@ pre_link(struct upload *p, struct sess *sess)
 	 */
 
 	if (rc == -1 || updatelink) {
-		LOG3(sess, "%s: creating "
-			"symlink: %s", f->path, f->link);
-		if (mktemplate(sess, &temp,
-		    f->path, sess->opts->recursive) == -1) {
-			ERRX1(sess, "mktemplate");
+		LOG3("%s: creating symlink: %s", f->path, f->link);
+		if (mktemplate(&temp, f->path, sess->opts->recursive) == -1) {
+			ERRX1("mktemplate");
 			return -1;
 		}
 		if (mkstemplinkat(f->link, p->rootfd, temp) == NULL) {
-			ERR(sess, "mkstemplinkat");
+			ERR("mkstemplinkat");
 			free(temp);
 			return -1;
 		}
@@ -258,7 +254,7 @@ pre_link(struct upload *p, struct sess *sess)
 
 	if (newlink) {
 		if (renameat(p->rootfd, temp, p->rootfd, f->path) == -1) {
-			ERR(sess, "%s: renameat %s", temp, f->path);
+			ERR("%s: renameat %s", temp, f->path);
 			(void)unlinkat(p->rootfd, temp, 0);
 			free(temp);
 			return -1;
@@ -287,7 +283,7 @@ pre_dev(struct upload *p, struct sess *sess)
 	assert(S_ISBLK(f->st.mode) || S_ISCHR(f->st.mode));
 
 	if (!sess->opts->devices || getuid() != 0) {
-		WARNX(sess, "skipping non-regular file %s", f->path);
+		WARNX("skipping non-regular file %s", f->path);
 		return 0;
 	} else if (sess->opts->dry_run) {
 		log_file(sess, f);
@@ -306,12 +302,12 @@ pre_dev(struct upload *p, struct sess *sess)
 	if (rc != -1 && !(S_ISBLK(st.st_mode) || S_ISCHR(st.st_mode))) {
 		if (S_ISDIR(st.st_mode) &&
 		    unlinkat(p->rootfd, f->path, AT_REMOVEDIR) == -1) {
-			ERR(sess, "%s: unlinkat", f->path);
+			ERR("%s: unlinkat", f->path);
 			return -1;
 		}
 		rc = -1;
 	} else if (rc == -1 && errno != ENOENT) {
-		ERR(sess, "%s: fstatat", f->path);
+		ERR("%s: fstatat", f->path);
 		return -1;
 	}
 
@@ -321,21 +317,20 @@ pre_dev(struct upload *p, struct sess *sess)
 		if ((f->st.mode & (S_IFCHR|S_IFBLK)) !=
 		    (st.st_mode & (S_IFCHR|S_IFBLK)) ||
 		    f->st.rdev != st.st_rdev) {
-			LOG3(sess, "%s: updating device", f->path);
+			LOG3("%s: updating device", f->path);
 			updatedev = 1;
 		}
 	}
 
 	if (rc == -1 || updatedev) {
 		newdev = 1;
-		if (mktemplate(sess, &temp, f->path,
-		    sess->opts->recursive) == -1) {
-			ERRX1(sess, "mktemplate");
+		if (mktemplate(&temp, f->path, sess->opts->recursive) == -1) {
+			ERRX1("mktemplate");
 			return -1;
 		}
 		if (mkstempnodat(p->rootfd, temp,
 		    f->st.mode & (S_IFCHR|S_IFBLK), f->st.rdev) == NULL) {
-			ERR(sess, "mkstempnodat");
+			ERR("mkstempnodat");
 			free(temp);
 			return -1;
 		}
@@ -346,7 +341,7 @@ pre_dev(struct upload *p, struct sess *sess)
 
 	if (newdev) {
 		if (renameat(p->rootfd, temp, p->rootfd, f->path) == -1) {
-			ERR(sess, "%s: renameat %s", temp, f->path);
+			ERR("%s: renameat %s", temp, f->path);
 			(void)unlinkat(p->rootfd, temp, 0);
 			free(temp);
 			return -1;
@@ -375,7 +370,7 @@ pre_fifo(struct upload *p, struct sess *sess)
 	assert(S_ISFIFO(f->st.mode));
 
 	if (!sess->opts->specials) {
-		WARNX(sess, "skipping non-regular file %s", f->path);
+		WARNX("skipping non-regular file %s", f->path);
 		return 0;
 	} else if (sess->opts->dry_run) {
 		log_file(sess, f);
@@ -394,24 +389,23 @@ pre_fifo(struct upload *p, struct sess *sess)
 	if (rc != -1 && !S_ISFIFO(st.st_mode)) {
 		if (S_ISDIR(st.st_mode) &&
 		    unlinkat(p->rootfd, f->path, AT_REMOVEDIR) == -1) {
-			ERR(sess, "%s: unlinkat", f->path);
+			ERR("%s: unlinkat", f->path);
 			return -1;
 		}
 		rc = -1;
 	} else if (rc == -1 && errno != ENOENT) {
-		ERR(sess, "%s: fstatat", f->path);
+		ERR("%s: fstatat", f->path);
 		return -1;
 	}
 
 	if (rc == -1) {
 		newfifo = 1;
-		if (mktemplate(sess, &temp, f->path,
-		    sess->opts->recursive) == -1) {
-			ERRX1(sess, "mktemplate");
+		if (mktemplate(&temp, f->path, sess->opts->recursive) == -1) {
+			ERRX1("mktemplate");
 			return -1;
 		}
 		if (mkstempfifoat(p->rootfd, temp) == NULL) {
-			ERR(sess, "mkstempfifoat");
+			ERR("mkstempfifoat");
 			free(temp);
 			return -1;
 		}
@@ -422,7 +416,7 @@ pre_fifo(struct upload *p, struct sess *sess)
 
 	if (newfifo) {
 		if (renameat(p->rootfd, temp, p->rootfd, f->path) == -1) {
-			ERR(sess, "%s: renameat %s", temp, f->path);
+			ERR("%s: renameat %s", temp, f->path);
 			(void)unlinkat(p->rootfd, temp, 0);
 			free(temp);
 			return -1;
@@ -451,7 +445,7 @@ pre_sock(struct upload *p, struct sess *sess)
 	assert(S_ISSOCK(f->st.mode));
 
 	if (!sess->opts->specials) {
-		WARNX(sess, "skipping non-regular file %s", f->path);
+		WARNX("skipping non-regular file %s", f->path);
 		return 0;
 	} else if (sess->opts->dry_run) {
 		log_file(sess, f);
@@ -470,24 +464,23 @@ pre_sock(struct upload *p, struct sess *sess)
 	if (rc != -1 && !S_ISSOCK(st.st_mode)) {
 		if (S_ISDIR(st.st_mode) &&
 		    unlinkat(p->rootfd, f->path, AT_REMOVEDIR) == -1) {
-			ERR(sess, "%s: unlinkat", f->path);
+			ERR("%s: unlinkat", f->path);
 			return -1;
 		}
 		rc = -1;
 	} else if (rc == -1 && errno != ENOENT) {
-		ERR(sess, "%s: fstatat", f->path);
+		ERR("%s: fstatat", f->path);
 		return -1;
 	}
 
 	if (rc == -1) {
 		newsock = 1;
-		if (mktemplate(sess, &temp, f->path,
-		    sess->opts->recursive) == -1) {
-			ERRX1(sess, "mktemplate");
+		if (mktemplate(&temp, f->path, sess->opts->recursive) == -1) {
+			ERRX1("mktemplate");
 			return -1;
 		}
 		if (mkstempsock(p->root, temp) == NULL) {
-			ERR(sess, "mkstempsock");
+			ERR("mkstempsock");
 			free(temp);
 			return -1;
 		}
@@ -498,7 +491,7 @@ pre_sock(struct upload *p, struct sess *sess)
 
 	if (newsock) {
 		if (renameat(p->rootfd, temp, p->rootfd, f->path) == -1) {
-			ERR(sess, "%s: renameat %s", temp, f->path);
+			ERR("%s: renameat %s", temp, f->path);
 			(void)unlinkat(p->rootfd, temp, 0);
 			free(temp);
 			return -1;
@@ -526,7 +519,7 @@ pre_dir(const struct upload *p, struct sess *sess)
 	assert(S_ISDIR(f->st.mode));
 
 	if (!sess->opts->recursive) {
-		WARNX(sess, "%s: ignoring directory", f->path);
+		WARNX("%s: ignoring directory", f->path);
 		return 0;
 	} else if (sess->opts->dry_run) {
 		log_dir(sess, f);
@@ -537,10 +530,10 @@ pre_dir(const struct upload *p, struct sess *sess)
 	rc = fstatat(p->rootfd, f->path, &st, AT_SYMLINK_NOFOLLOW);
 
 	if (rc == -1 && errno != ENOENT) {
-		ERR(sess, "%s: fstatat", f->path);
+		ERR("%s: fstatat", f->path);
 		return -1;
 	} else if (rc != -1 && !S_ISDIR(st.st_mode)) {
-		ERRX(sess, "%s: not a directory", f->path);
+		ERRX("%s: not a directory", f->path);
 		return -1;
 	} else if (rc != -1) {
 		/*
@@ -548,7 +541,7 @@ pre_dir(const struct upload *p, struct sess *sess)
 		 * as we may locally have shut down writing into the
 		 * directory and that doesn't work.
 		 */
-		LOG3(sess, "%s: updating directory", f->path);
+		LOG3("%s: updating directory", f->path);
 		return 0;
 	}
 
@@ -559,9 +552,9 @@ pre_dir(const struct upload *p, struct sess *sess)
 	 * case it's u-w or something.
 	 */
 
-	LOG3(sess, "%s: creating directory", f->path);
+	LOG3("%s: creating directory", f->path);
 	if (mkdirat(p->rootfd, f->path, 0777 & ~p->oumask) == -1) {
-		ERR(sess, "%s: mkdirat", f->path);
+		ERR("%s: mkdirat", f->path);
 		return -1;
 	}
 
@@ -593,10 +586,10 @@ post_dir(struct sess *sess, const struct upload *u, size_t idx)
 		return 1;
 
 	if (fstatat(u->rootfd, f->path, &st, AT_SYMLINK_NOFOLLOW) == -1) {
-		ERR(sess, "%s: fstatat", f->path);
+		ERR("%s: fstatat", f->path);
 		return 0;
 	} else if (!S_ISDIR(st.st_mode)) {
-		WARNX(sess, "%s: not a directory", f->path);
+		WARNX("%s: not a directory", f->path);
 		return 0;
 	}
 
@@ -615,10 +608,10 @@ post_dir(struct sess *sess, const struct upload *u, size_t idx)
 		tv[1].tv_nsec = 0;
 		rc = utimensat(u->rootfd, f->path, tv, 0);
 		if (rc == -1) {
-			ERR(sess, "%s: utimensat", f->path);
+			ERR("%s: utimensat", f->path);
 			return 0;
 		}
-		LOG4(sess, "%s: updated date", f->path);
+		LOG4("%s: updated date", f->path);
 	}
 
 	/*
@@ -627,14 +620,13 @@ post_dir(struct sess *sess, const struct upload *u, size_t idx)
 	 */
 
 	if (u->newdir[idx] ||
-	    (sess->opts->preserve_perms &&
-	     st.st_mode != f->st.mode)) {
+	    (sess->opts->preserve_perms && st.st_mode != f->st.mode)) {
 		rc = fchmodat(u->rootfd, f->path, f->st.mode, 0);
 		if (rc == -1) {
-			ERR(sess, "%s: fchmodat", f->path);
+			ERR("%s: fchmodat", f->path);
 			return 0;
 		}
-		LOG4(sess, "%s: updated mode", f->path);
+		LOG4("%s: updated mode", f->path);
 	}
 
 	return 1;
@@ -657,7 +649,7 @@ pre_file(const struct upload *p, int *filefd, struct sess *sess)
 	if (sess->opts->dry_run) {
 		log_file(sess, f);
 		if (!io_write_int(sess, p->fdout, p->idx)) {
-			ERRX1(sess, "io_write_int");
+			ERRX1("io_write_int");
 			return -1;
 		}
 		return 0;
@@ -676,7 +668,7 @@ pre_file(const struct upload *p, int *filefd, struct sess *sess)
 		O_RDONLY | O_NOFOLLOW | O_NONBLOCK, 0);
 	if (*filefd != -1 || errno == ENOENT)
 		return 1;
-	ERR(sess, "%s: openat", f->path);
+	ERR("%s: openat", f->path);
 	return -1;
 }
 
@@ -686,13 +678,13 @@ pre_file(const struct upload *p, int *filefd, struct sess *sess)
  * On success, upload_free() must be called with the allocated pointer.
  */
 struct upload *
-upload_alloc(struct sess *sess, const char *root, int rootfd, int fdout,
+upload_alloc(const char *root, int rootfd, int fdout,
 	size_t clen, const struct flist *fl, size_t flsz, mode_t msk)
 {
 	struct upload	*p;
 
 	if ((p = calloc(1, sizeof(struct upload))) == NULL) {
-		ERR(sess, "calloc");
+		ERR("calloc");
 		return NULL;
 	}
 
@@ -700,7 +692,7 @@ upload_alloc(struct sess *sess, const char *root, int rootfd, int fdout,
 	p->oumask = msk;
 	p->root = strdup(root);
 	if (p->root == NULL) {
-		ERR(sess, "strdup");
+		ERR("strdup");
 		free(p);
 		return NULL;
 	}
@@ -711,7 +703,7 @@ upload_alloc(struct sess *sess, const char *root, int rootfd, int fdout,
 	p->flsz = flsz;
 	p->newdir = calloc(flsz, sizeof(int));
 	if (p->newdir == NULL) {
-		ERR(sess, "calloc");
+		ERR("calloc");
 		free(p->root);
 		free(p);
 		return NULL;
@@ -786,7 +778,7 @@ rsync_uploader(struct upload *u, int *fileinfd,
 			c = io_write_buf(sess, u->fdout,
 				u->buf + u->bufpos, sz);
 			if (c == 0) {
-				ERRX1(sess, "io_write_nonblocking");
+				ERRX1("io_write_nonblocking");
 				return -1;
 			}
 			u->bufpos += sz;
@@ -848,11 +840,11 @@ rsync_uploader(struct upload *u, int *fileinfd,
 		if (u->idx == u->flsz) {
 			assert(*fileinfd == -1);
 			if (!io_write_int(sess, u->fdout, -1)) {
-				ERRX1(sess, "io_write_int");
+				ERRX1("io_write_int");
 				return -1;
 			}
 			u->state = UPLOAD_FINISHED;
-			LOG4(sess, "uploader: finished");
+			LOG4("uploader: finished");
 			return 0;
 		}
 
@@ -876,12 +868,12 @@ rsync_uploader(struct upload *u, int *fileinfd,
 		f = &u->fl[u->idx];
 
 		if (fstat(*fileinfd, &st) == -1) {
-			ERR(sess, "%s: fstat", f->path);
+			ERR("%s: fstat", f->path);
 			close(*fileinfd);
 			*fileinfd = -1;
 			return -1;
 		} else if (!S_ISREG(st.st_mode)) {
-			ERRX(sess, "%s: not regular", f->path);
+			ERRX("%s: not regular", f->path);
 			close(*fileinfd);
 			*fileinfd = -1;
 			return -1;
@@ -889,10 +881,10 @@ rsync_uploader(struct upload *u, int *fileinfd,
 
 		if (st.st_size == f->st.size &&
 		    st.st_mtime == f->st.mtime) {
-			LOG3(sess, "%s: skipping: up to date", f->path);
+			LOG3("%s: skipping: up to date", f->path);
 			if (!rsync_set_metadata
 			    (sess, 0, *fileinfd, f, f->path)) {
-				ERRX1(sess, "rsync_set_metadata");
+				ERRX1("rsync_set_metadata");
 				close(*fileinfd);
 				*fileinfd = -1;
 				return -1;
@@ -920,7 +912,7 @@ rsync_uploader(struct upload *u, int *fileinfd,
 		mapsz = st.st_size;
 		map = mmap(NULL, mapsz, PROT_READ, MAP_SHARED, *fileinfd, 0);
 		if (map == MAP_FAILED) {
-			ERR(sess, "%s: mmap", u->fl[u->idx].path);
+			ERR("%s: mmap", u->fl[u->idx].path);
 			close(*fileinfd);
 			*fileinfd = -1;
 			return -1;
@@ -931,7 +923,7 @@ rsync_uploader(struct upload *u, int *fileinfd,
 
 		blk.blks = calloc(blk.blksz, sizeof(struct blk));
 		if (blk.blks == NULL) {
-			ERR(sess, "calloc");
+			ERR("calloc");
 			munmap(map, mapsz);
 			close(*fileinfd);
 			*fileinfd = -1;
@@ -948,7 +940,7 @@ rsync_uploader(struct upload *u, int *fileinfd,
 		munmap(map, mapsz);
 		close(*fileinfd);
 		*fileinfd = -1;
-		LOG3(sess, "%s: mapped %jd B with %zu blocks",
+		LOG3("%s: mapped %jd B with %zu blocks",
 			u->fl[u->idx].path, (intmax_t)blk.size,
 			blk.blksz);
 	} else {
@@ -957,7 +949,7 @@ rsync_uploader(struct upload *u, int *fileinfd,
 			*fileinfd = -1;
 		}
 		blk.len = MAX_CHUNK; /* Doesn't matter. */
-		LOG3(sess, "%s: not mapped", u->fl[u->idx].path);
+		LOG3("%s: not mapped", u->fl[u->idx].path);
 	}
 
 	assert(*fileinfd == -1);
@@ -976,7 +968,7 @@ rsync_uploader(struct upload *u, int *fileinfd,
 
 	if (u->bufsz > u->bufmax) {
 		if ((bufp = realloc(u->buf, u->bufsz)) == NULL) {
-			ERR(sess, "realloc");
+			ERR("realloc");
 			return -1;
 		}
 		u->buf = bufp;
@@ -984,15 +976,15 @@ rsync_uploader(struct upload *u, int *fileinfd,
 	}
 
 	u->bufpos = pos = 0;
-	io_buffer_int(sess, u->buf, &pos, u->bufsz, u->idx);
-	io_buffer_int(sess, u->buf, &pos, u->bufsz, blk.blksz);
-	io_buffer_int(sess, u->buf, &pos, u->bufsz, blk.len);
-	io_buffer_int(sess, u->buf, &pos, u->bufsz, blk.csum);
-	io_buffer_int(sess, u->buf, &pos, u->bufsz, blk.rem);
+	io_buffer_int(u->buf, &pos, u->bufsz, u->idx);
+	io_buffer_int(u->buf, &pos, u->bufsz, blk.blksz);
+	io_buffer_int(u->buf, &pos, u->bufsz, blk.len);
+	io_buffer_int(u->buf, &pos, u->bufsz, blk.csum);
+	io_buffer_int(u->buf, &pos, u->bufsz, blk.rem);
 	for (i = 0; i < blk.blksz; i++) {
-		io_buffer_int(sess, u->buf, &pos, u->bufsz,
+		io_buffer_int(u->buf, &pos, u->bufsz,
 			blk.blks[i].chksum_short);
-		io_buffer_buf(sess, u->buf, &pos, u->bufsz,
+		io_buffer_buf(u->buf, &pos, u->bufsz,
 			blk.blks[i].chksum_long, blk.csum);
 	}
 	assert(pos == u->bufsz);
@@ -1020,10 +1012,10 @@ rsync_uploader_tail(struct upload *u, struct sess *sess)
 
 
 	if (!sess->opts->preserve_times &&
-	     !sess->opts->preserve_perms)
+	    !sess->opts->preserve_perms)
 		return 1;
 
-	LOG2(sess, "fixing up directory times and permissions");
+	LOG2("fixing up directory times and permissions");
 
 	for (i = 0; i < u->flsz; i++)
 		if (S_ISDIR(u->fl[i].st.mode))

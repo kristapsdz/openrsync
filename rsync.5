@@ -220,7 +220,7 @@ file (byte array)
 .It
 file length (long)
 .It
-file modification time (optional, time_t, integer)
+file modification time (optional, integer)
 .It
 file mode (optional, mode_t, integer)
 .It
@@ -516,7 +516,7 @@ uses an event-loop model instead.
 .\" .Sh AUTHORS
 .\" .Sh CAVEATS
 .Sh BUGS
-Time values are sent as 32-bit integers.
+Time values are sent as 32-bit signed integers.
 .Pp
 When in server mode
 .Em and

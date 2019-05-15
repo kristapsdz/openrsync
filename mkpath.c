@@ -27,7 +27,6 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include <sys/queue.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -43,7 +42,7 @@
  *	path     - path
  */
 int
-mkpath(struct sess *sess, char *path)
+mkpath(char *path)
 {
 	struct stat sb;
 	char *slash;
@@ -61,12 +60,12 @@ mkpath(struct sess *sess, char *path)
 		if (stat(path, &sb)) {
 			if (errno != ENOENT || (mkdir(path, 0777) &&
 			    errno != EEXIST)) {
-				ERR(sess, "%s: stat", path);
+				ERR("%s: stat", path);
 				return (-1);
 			}
 		} else if (!S_ISDIR(sb.st_mode)) {
 			errno = ENOTDIR;
-			ERR(sess, "%s: stat", path);
+			ERR("%s: stat", path);
 			return (-1);
 		}
 

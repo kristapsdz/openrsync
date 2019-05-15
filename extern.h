@@ -106,7 +106,6 @@ struct	opts {
 	int		 sender;		/* --sender */
 	int		 server;		/* --server */
 	int		 recursive;		/* -r */
-	int		 verbose;		/* -v */
 	int		 dry_run;		/* -n */
 	int		 preserve_times;	/* -t */
 	int		 preserve_perms;	/* -p */
@@ -117,6 +116,7 @@ struct	opts {
 	int		 devices;		/* --devices */
 	int		 specials;		/* --specials */
 	int		 numeric_ids;		/* --numeric-ids */
+	int		 one_file_system;	/* -x */
 	char		*rsync_path;		/* --rsync-path */
 	char		*ssh_prog;		/* --rsh or -e */
 	char		*port;			/* --port */
@@ -133,13 +133,6 @@ struct	blk {
 	uint32_t	 chksum_short; /* fast checksum */
 	unsigned char	 chksum_long[CSUM_LENGTH_PHASE2]; /* slow checksum */
 };
-
-struct	blkhash {
-	struct blk    	    *blk;
-	TAILQ_ENTRY(blkhash) entries;
-};
-
-TAILQ_HEAD(blkhashq, blkhash);
 
 enum	blkstatst {
 	BLKSTAT_NONE = 0,
@@ -166,10 +159,6 @@ struct	blkstat {
 	off_t		 curpos; /* sending: position in file to send */
 	off_t		 curlen; /* sending: length of send */
 	int32_t		 curtok; /* sending: next matching token or zero */
-	struct blkhashq	*htab; /* hashtable of fast matches */
-	size_t		 htabsz; /* size of hashtable */
-	struct blkhash	*mapent; /* entries in the hashtable */
-	size_t		 mapentsz; /* >= blocksz */
 };
 
 /*
@@ -210,59 +199,62 @@ struct	ident {
 	char	*name; /* resolved name */
 };
 
+typedef struct arglist arglist;
+struct arglist {
+	char	**list;
+	u_int	num;
+	u_int	nalloc;
+};
+void	addargs(arglist *, char *, ...)
+	    __attribute__((format(printf, 2, 3)));
+void	freeargs(arglist *);
+
 struct	download;
 struct	upload;
 
+extern int verbose;
+
 #define MINIMUM(a, b) (((a) < (b)) ? (a) : (b))
 
-#define LOG0(_sess, _fmt, ...) \
-	rsync_log((_sess), __FILE__, __LINE__, -1, (_fmt), ##__VA_ARGS__)
-#define LOG1(_sess, _fmt, ...) \
-	rsync_log((_sess), __FILE__, __LINE__, 0, (_fmt), ##__VA_ARGS__)
-#define LOG2(_sess, _fmt, ...) \
-	rsync_log((_sess), __FILE__, __LINE__, 1, (_fmt), ##__VA_ARGS__)
-#define LOG3(_sess, _fmt, ...) \
-	rsync_log((_sess), __FILE__, __LINE__, 2, (_fmt), ##__VA_ARGS__)
-#define LOG4(_sess, _fmt, ...) \
-	rsync_log((_sess), __FILE__, __LINE__, 3, (_fmt), ##__VA_ARGS__)
-#define ERRX1(_sess, _fmt, ...) \
-	rsync_errx1((_sess), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
-#define WARNX(_sess, _fmt, ...) \
-	rsync_warnx((_sess), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
-#define WARN(_sess, _fmt, ...) \
-	rsync_warn((_sess), 0, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
-#define WARN1(_sess, _fmt, ...) \
-	rsync_warn((_sess), 1, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
-#define WARN2(_sess, _fmt, ...) \
-	rsync_warn((_sess), 2, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
-#define ERR(_sess, _fmt, ...) \
-	rsync_err((_sess), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
-#define ERRX(_sess, _fmt, ...) \
-	rsync_errx((_sess), __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+#define LOG0(_fmt, ...) \
+	rsync_log(__FILE__, __LINE__, -1, (_fmt), ##__VA_ARGS__)
+#define LOG1(_fmt, ...) \
+	rsync_log(__FILE__, __LINE__, 0, (_fmt), ##__VA_ARGS__)
+#define LOG2(_fmt, ...) \
+	rsync_log(__FILE__, __LINE__, 1, (_fmt), ##__VA_ARGS__)
+#define LOG3(_fmt, ...) \
+	rsync_log(__FILE__, __LINE__, 2, (_fmt), ##__VA_ARGS__)
+#define LOG4(_fmt, ...) \
+	rsync_log(__FILE__, __LINE__, 3, (_fmt), ##__VA_ARGS__)
+#define ERRX1(_fmt, ...) \
+	rsync_errx1(__FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+#define WARNX(_fmt, ...) \
+	rsync_warnx(__FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+#define WARN(_fmt, ...) \
+	rsync_warn(0, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+#define WARN1(_fmt, ...) \
+	rsync_warn(1, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+#define WARN2(_fmt, ...) \
+	rsync_warn(2, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+#define ERR(_fmt, ...) \
+	rsync_err(__FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+#define ERRX(_fmt, ...) \
+	rsync_errx(__FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
 
-__BEGIN_DECLS
-
-void		  rsync_log(struct sess *,
-			const char *, size_t, int, const char *, ...)
-			__attribute__((format(printf, 5, 6)));
-void		  rsync_warnx1(struct sess *,
-			const char *, size_t, const char *, ...)
+void		  rsync_log(const char *, size_t, int, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
-void		  rsync_warn(struct sess *, int,
-			const char *, size_t, const char *, ...)
-			__attribute__((format(printf, 5, 6)));
-void		  rsync_warnx(struct sess *, const char *,
-			size_t, const char *, ...)
+void		  rsync_warnx1(const char *, size_t, const char *, ...)
+			__attribute__((format(printf, 3, 4)));
+void		  rsync_warn(int, const char *, size_t, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
-void		  rsync_err(struct sess *, const char *,
-			size_t, const char *, ...)
-			__attribute__((format(printf, 4, 5)));
-void		  rsync_errx(struct sess *, const char *,
-			size_t, const char *, ...)
-			__attribute__((format(printf, 4, 5)));
-void		  rsync_errx1(struct sess *, const char *,
-			size_t, const char *, ...)
-			__attribute__((format(printf, 4, 5)));
+void		  rsync_warnx(const char *, size_t, const char *, ...)
+			__attribute__((format(printf, 3, 4)));
+void		  rsync_err(const char *, size_t, const char *, ...)
+			__attribute__((format(printf, 3, 4)));
+void		  rsync_errx(const char *, size_t, const char *, ...)
+			__attribute__((format(printf, 3, 4)));
+void		  rsync_errx1(const char *, size_t, const char *, ...)
+			__attribute__((format(printf, 3, 4)));
 
 int		  flist_del(struct sess *, int,
 			const struct flist *, size_t);
@@ -279,21 +271,24 @@ int		  flist_gen_dels(struct sess *, const char *,
 			struct flist **, size_t *,
 			const struct flist *, size_t);
 
-char		**fargs_cmdline(struct sess *, const struct fargs *);
+char		**fargs_cmdline(struct sess *, const struct fargs *, size_t *);
 
 int		  io_read_buf(struct sess *, int, void *, size_t);
 int		  io_read_byte(struct sess *, int, uint8_t *);
-int		  io_read_check(struct sess *, int);
+int		  io_read_check(int);
 int		  io_read_flush(struct sess *, int);
 int		  io_read_int(struct sess *, int, int32_t *);
+int		  io_read_uint(struct sess *, int, uint32_t *);
 int		  io_read_long(struct sess *, int, int64_t *);
 int		  io_read_size(struct sess *, int, size_t *);
 int		  io_read_ulong(struct sess *, int, uint64_t *);
 int		  io_write_buf(struct sess *, int, const void *, size_t);
 int		  io_write_byte(struct sess *, int, uint8_t);
 int		  io_write_int(struct sess *, int, int32_t);
+int		  io_write_uint(struct sess *, int, uint32_t);
 int		  io_write_line(struct sess *, int, const char *);
 int		  io_write_long(struct sess *, int, int64_t);
+int		  io_write_ulong(struct sess *, int, uint64_t);
 
 int		  io_lowbuffer_alloc(struct sess *, void **,
 			size_t *, size_t *, size_t);
@@ -302,22 +297,20 @@ void		  io_lowbuffer_int(struct sess *, void *,
 void		  io_lowbuffer_buf(struct sess *, void *,
 			size_t *, size_t, const void *, size_t);
 
-void		  io_buffer_int(struct sess *, void *,
-			size_t *, size_t, int32_t);
-void		  io_buffer_buf(struct sess *, void *,
-			size_t *, size_t, const void *, size_t);
+void		  io_buffer_int(void *, size_t *, size_t, int32_t);
+void		  io_buffer_buf(void *, size_t *, size_t, const void *, size_t);
 
-void		  io_unbuffer_int(struct sess *, const void *,
+void		  io_unbuffer_int(const void *,
 			size_t *, size_t, int32_t *);
-int		  io_unbuffer_size(struct sess *, const void *,
-			size_t *, size_t, size_t *);
-void		  io_unbuffer_buf(struct sess *, const void *,
-			size_t *, size_t, void *, size_t);
+int		  io_unbuffer_size(const void *, size_t *, size_t, size_t *);
+void		  io_unbuffer_buf(const void *, size_t *, size_t, void *, size_t);
 
 int		  rsync_receiver(struct sess *, int, int, const char *);
 int		  rsync_sender(struct sess *, int, int, size_t, char **);
 int		  rsync_client(const struct opts *, int, const struct fargs *);
-int		  rsync_socket(const struct opts *, const struct fargs *);
+int		  rsync_connect(const struct opts *, int *,
+			const struct fargs *);
+int		  rsync_socket(const struct opts *, int, const struct fargs *);
 int		  rsync_server(const struct opts *, size_t, char *[]);
 int		  rsync_downloader(struct download *, struct sess *, int *);
 int		  rsync_set_metadata(struct sess *, int, int,
@@ -331,13 +324,12 @@ int		  rsync_uploader_tail(struct upload *, struct sess *);
 struct download	 *download_alloc(struct sess *, int,
 			const struct flist *, size_t, int);
 void		  download_free(struct download *);
-struct upload	 *upload_alloc(struct sess *, const char *, int, int, size_t,
+struct upload	 *upload_alloc(const char *, int, int, size_t,
 			const struct flist *, size_t, mode_t);
 void		  upload_free(struct upload *);
 
 struct blkset	 *blk_recv(struct sess *, int, const char *);
-void		  blk_recv_ack(struct sess *,
-			char [20], const struct blkset *, int32_t);
+void		  blk_recv_ack(char [20], const struct blkset *, int32_t);
 void		  blk_match(struct sess *, const struct blkset *,
 			const char *, struct blkstat *);
 int		  blk_send(struct sess *, int, size_t,
@@ -350,23 +342,22 @@ void		  hash_slow(const void *, size_t,
 void		  hash_file(const void *, size_t,
 			unsigned char *, const struct sess *);
 
-int		  mkpath(struct sess *, char *);
+int		  mkpath(char *);
 
 int		  mkstempat(int, char *);
 char		 *mkstemplinkat(char*, int, char *);
 char		 *mkstempfifoat(int, char *);
 char		 *mkstempnodat(int, char *, mode_t, dev_t);
 char		 *mkstempsock(const char *, char *);
-int		  mktemplate(struct sess *, char **, const char *, int);
+int		  mktemplate(char **, const char *, int);
 
-char		 *symlink_read(struct sess *, const char *);
-char		 *symlinkat_read(struct sess *, int, const char *);
+char		 *symlink_read(const char *);
+char		 *symlinkat_read(int, const char *);
 
 int		  sess_stats_send(struct sess *, int);
 int		  sess_stats_recv(struct sess *, int);
 
-int		  idents_add(struct sess *, int, struct ident **, size_t *,
-			int32_t);
+int		  idents_add(int, struct ident **, size_t *, int32_t);
 void		  idents_assign_gid(struct sess *,
 			struct flist *, size_t, const struct ident *, size_t);
 void		  idents_assign_uid(struct sess *,
@@ -375,7 +366,5 @@ void		  idents_free(struct ident *, size_t);
 int		  idents_recv(struct sess *, int, struct ident **, size_t *);
 void		  idents_remap(struct sess *, int, struct ident *, size_t);
 int		  idents_send(struct sess *, int, const struct ident *, size_t);
-
-__END_DECLS
 
 #endif /*!EXTERN_H*/

@@ -14,7 +14,6 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#include <sys/queue.h>
 #include <sys/stat.h>
 
 #include <assert.h>
@@ -42,9 +41,8 @@ blk_find(struct sess *sess, struct blkstat *st,
 	unsigned char	 md[MD4_DIGEST_LENGTH];
 	uint32_t	 fhash;
 	off_t		 remain, osz;
+	size_t		 i;
 	int		 have_md = 0;
-	struct blkhashq	*q;
-	struct blkhash	*ent;
 
 	/*
 	 * First, compute our fast hash.
@@ -69,7 +67,7 @@ blk_find(struct sess *sess, struct blkstat *st,
 		hash_slow(st->map + st->offs, (size_t)osz, md, sess);
 		have_md = 1;
 		if (memcmp(md, blks->blks[st->hint].chksum_long, blks->csum) == 0) {
-			LOG4(sess, "%s: found matching hinted match: "
+			LOG4("%s: found matching hinted match: "
 				"position %jd, block %zu "
 				"(position %jd, size %zu)", path,
 				(intmax_t)st->offs, blks->blks[st->hint].idx,
@@ -79,32 +77,18 @@ blk_find(struct sess *sess, struct blkstat *st,
 		}
 	}
 
-	q = &st->htab[fhash % st->htabsz];
-
-#if 0
-	LOG4(sess, "%s: querying hash %zu (%" PRIu32 ") (offset %jd)",
-		path, fhash % st->htabsz, fhash, (intmax_t)st->offs);
-#endif
-
-	TAILQ_FOREACH(ent, q, entries) {
-		LOG4(sess, "%s: possible fast match: "
-			"position %jd, block %zu "
-			"(position %jd, size %zu)", path,
-			(intmax_t)st->offs, ent->blk->idx,
-			(intmax_t)ent->blk->offs,
-			ent->blk->len);
-
-		if (fhash != ent->blk->chksum_short)
+	for (i = 0; i < blks->blksz; i++) {
+		if (fhash != blks->blks[i].chksum_short)
 			continue;
-		if ((size_t)osz != ent->blk->len)
+		if ((size_t)osz != blks->blks[i].len)
 			continue;
 
-		LOG4(sess, "%s: found matching fast match: "
+		LOG4("%s: found matching fast match: "
 			"position %jd, block %zu "
 			"(position %jd, size %zu)", path,
-			(intmax_t)st->offs, ent->blk->idx,
-			(intmax_t)ent->blk->offs,
-			ent->blk->len);
+			(intmax_t)st->offs, blks->blks[i].idx,
+			(intmax_t)blks->blks[i].offs,
+			blks->blks[i].len);
 
 		/* Compute slow hash on demand. */
 
@@ -113,11 +97,11 @@ blk_find(struct sess *sess, struct blkstat *st,
 			have_md = 1;
 		}
 
-		if (memcmp(md, ent->blk->chksum_long, blks->csum))
+		if (memcmp(md, blks->blks[i].chksum_long, blks->csum))
 			continue;
 
-		LOG4(sess, "%s: sender verifies slow match", path);
-		return ent->blk;
+		LOG4("%s: sender verifies slow match", path);
+		return &blks->blks[i];
 	}
 
 	return NULL;
@@ -164,8 +148,8 @@ blk_match(struct sess *sess, const struct blkset *blks,
 			sz = st->offs - last;
 			st->dirty += sz;
 			st->total += sz;
-			LOG4(sess, "%s: flushing %jd B before %zu B "
-				"block %zu", path, (intmax_t)sz,
+			LOG4("%s: flushing %jd B before %zu B "
+			"block %zu", path, (intmax_t)sz,
 				blk->len, blk->idx);
 			tok = -(blk->idx + 1);
 
@@ -188,8 +172,8 @@ blk_match(struct sess *sess, const struct blkset *blks,
 		/* Emit remaining data and send terminator token. */
 
 		sz = st->mapsz - last;
-		LOG4(sess, "%s: flushing remaining %jd B",
-			path, (intmax_t)sz);
+		LOG4("%s: flushing remaining %jd B",
+		    path, (intmax_t)sz);
 
 		st->total += sz;
 		st->dirty += sz;
@@ -204,8 +188,8 @@ blk_match(struct sess *sess, const struct blkset *blks,
 		st->curst = st->mapsz ? BLKSTAT_DATA : BLKSTAT_TOK;
 		st->dirty = st->total = st->mapsz;
 
-		LOG4(sess, "%s: flushing whole file %zu B",
-			path, st->mapsz);
+		LOG4("%s: flushing whole file %zu B",
+		    path, st->mapsz);
 	}
 }
 
@@ -215,8 +199,7 @@ blk_match(struct sess *sess, const struct blkset *blks,
  * Symmetrises blk_send_ack().
  */
 void
-blk_recv_ack(struct sess *sess, char buf[20],
-	const struct blkset *blocks, int32_t idx)
+blk_recv_ack(char buf[20], const struct blkset *blocks, int32_t idx)
 {
 	size_t	 pos = 0, sz;
 
@@ -227,11 +210,11 @@ blk_recv_ack(struct sess *sess, char buf[20],
 	     sizeof(int32_t); /* block remainder */
 	assert(sz == 20);
 
-	io_buffer_int(sess, buf, &pos, sz, idx);
-	io_buffer_int(sess, buf, &pos, sz, blocks->blksz);
-	io_buffer_int(sess, buf, &pos, sz, blocks->len);
-	io_buffer_int(sess, buf, &pos, sz, blocks->csum);
-	io_buffer_int(sess, buf, &pos, sz, blocks->rem);
+	io_buffer_int(buf, &pos, sz, idx);
+	io_buffer_int(buf, &pos, sz, blocks->blksz);
+	io_buffer_int(buf, &pos, sz, blocks->len);
+	io_buffer_int(buf, &pos, sz, blocks->csum);
+	io_buffer_int(buf, &pos, sz, blocks->rem);
 	assert(pos == sz);
 }
 
@@ -249,7 +232,7 @@ blk_recv(struct sess *sess, int fd, const char *path)
 	off_t		 offs = 0;
 
 	if ((s = calloc(1, sizeof(struct blkset))) == NULL) {
-		ERR(sess, "calloc");
+		ERR("calloc");
 		return NULL;
 	}
 
@@ -260,31 +243,31 @@ blk_recv(struct sess *sess, int fd, const char *path)
 	 */
 
 	if (!io_read_size(sess, fd, &s->blksz)) {
-		ERRX1(sess, "io_read_size");
+		ERRX1("io_read_size");
 		goto out;
 	} else if (!io_read_size(sess, fd, &s->len)) {
-		ERRX1(sess, "io_read_size");
+		ERRX1("io_read_size");
 		goto out;
 	} else if (!io_read_size(sess, fd, &s->csum)) {
-		ERRX1(sess, "io_read_int");
+		ERRX1("io_read_int");
 		goto out;
 	} else if (!io_read_size(sess, fd, &s->rem)) {
-		ERRX1(sess, "io_read_int");
+		ERRX1("io_read_int");
 		goto out;
 	} else if (s->rem && s->rem >= s->len) {
-		ERRX(sess, "block remainder is "
+		ERRX("block remainder is "
 			"greater than block size");
 		goto out;
 	}
 
-	LOG3(sess, "%s: read block prologue: %zu blocks of "
-		"%zu B, %zu B remainder, %zu B checksum", path,
-		s->blksz, s->len, s->rem, s->csum);
+	LOG3("%s: read block prologue: %zu blocks of "
+	    "%zu B, %zu B remainder, %zu B checksum", path,
+	    s->blksz, s->len, s->rem, s->csum);
 
 	if (s->blksz) {
 		s->blks = calloc(s->blksz, sizeof(struct blk));
 		if (s->blks == NULL) {
-			ERR(sess, "calloc");
+			ERR("calloc");
 			goto out;
 		}
 	}
@@ -297,7 +280,7 @@ blk_recv(struct sess *sess, int fd, const char *path)
 	for (j = 0; j < s->blksz; j++) {
 		b = &s->blks[j];
 		if (!io_read_int(sess, fd, &i)) {
-			ERRX1(sess, "io_read_int");
+			ERRX1("io_read_int");
 			goto out;
 		}
 		b->chksum_short = i;
@@ -305,7 +288,7 @@ blk_recv(struct sess *sess, int fd, const char *path)
 		assert(s->csum <= sizeof(b->chksum_long));
 		if (!io_read_buf(sess,
 		    fd, b->chksum_long, s->csum)) {
-			ERRX1(sess, "io_read_buf");
+			ERRX1("io_read_buf");
 			goto out;
 		}
 
@@ -320,12 +303,12 @@ blk_recv(struct sess *sess, int fd, const char *path)
 			s->rem : s->len;
 		offs += b->len;
 
-		LOG4(sess, "%s: read block %zu, "
+		LOG4("%s: read block %zu, "
 			"length %zu B", path, b->idx, b->len);
 	}
 
 	s->size = offs;
-	LOG3(sess, "%s: read blocks: %zu blocks, %jd B total "
+	LOG3("%s: read blocks: %zu blocks, %jd B total "
 		"blocked data", path, s->blksz, (intmax_t)s->size);
 	return s;
 out:
@@ -353,22 +336,22 @@ blk_send_ack(struct sess *sess, int fd, struct blkset *p)
 	assert(sz <= sizeof(buf));
 
 	if (!io_read_buf(sess, fd, buf, sz)) {
-		ERRX1(sess, "io_read_buf");
+		ERRX1("io_read_buf");
 		return 0;
 	}
 
-	if (!io_unbuffer_size(sess, buf, &pos, sz, &p->blksz))
-		ERRX1(sess, "io_unbuffer_size");
-	else if (!io_unbuffer_size(sess, buf, &pos, sz, &p->len))
-		ERRX1(sess, "io_unbuffer_size");
-	else if (!io_unbuffer_size(sess, buf, &pos, sz, &p->csum))
-		ERRX1(sess, "io_unbuffer_size");
-	else if (!io_unbuffer_size(sess, buf, &pos, sz, &p->rem))
-		ERRX1(sess, "io_unbuffer_size");
+	if (!io_unbuffer_size(buf, &pos, sz, &p->blksz))
+		ERRX1("io_unbuffer_size");
+	else if (!io_unbuffer_size(buf, &pos, sz, &p->len))
+		ERRX1("io_unbuffer_size");
+	else if (!io_unbuffer_size(buf, &pos, sz, &p->csum))
+		ERRX1("io_unbuffer_size");
+	else if (!io_unbuffer_size(buf, &pos, sz, &p->rem))
+		ERRX1("io_unbuffer_size");
 	else if (p->len && p->rem >= p->len)
-		ERRX1(sess, "non-zero length is less than remainder");
+		ERRX1("non-zero length is less than remainder");
 	else if (p->csum == 0 || p->csum > 16)
-		ERRX1(sess, "inappropriate checksum length");
+		ERRX1("inappropriate checksum length");
 	else
 		return 1;
 
@@ -399,31 +382,31 @@ blk_send(struct sess *sess, int fd, size_t idx,
 		p->csum); /* long checksum */
 
 	if ((buf = malloc(sz)) == NULL) {
-		ERR(sess, "malloc");
+		ERR("malloc");
 		return 0;
 	}
 
-	io_buffer_int(sess, buf, &pos, sz, idx);
-	io_buffer_int(sess, buf, &pos, sz, p->blksz);
-	io_buffer_int(sess, buf, &pos, sz, p->len);
-	io_buffer_int(sess, buf, &pos, sz, p->csum);
-	io_buffer_int(sess, buf, &pos, sz, p->rem);
+	io_buffer_int(buf, &pos, sz, idx);
+	io_buffer_int(buf, &pos, sz, p->blksz);
+	io_buffer_int(buf, &pos, sz, p->len);
+	io_buffer_int(buf, &pos, sz, p->csum);
+	io_buffer_int(buf, &pos, sz, p->rem);
 
 	for (i = 0; i < p->blksz; i++) {
-		io_buffer_int(sess, buf, &pos,
+		io_buffer_int(buf, &pos,
 			sz, p->blks[i].chksum_short);
-		io_buffer_buf(sess, buf, &pos, sz,
+		io_buffer_buf(buf, &pos, sz,
 			p->blks[i].chksum_long, p->csum);
 	}
 
 	assert(pos == sz);
 
 	if (!io_write_buf(sess, fd, buf, sz)) {
-		ERRX1(sess, "io_write_buf");
+		ERRX1("io_write_buf");
 		goto out;
 	}
 
-	LOG3(sess, "%s: sent block prologue: %zu blocks of %zu B, "
+	LOG3("%s: sent block prologue: %zu blocks of %zu B, "
 		"%zu B remainder, %zu B checksum", path,
 		p->blksz, p->len, p->rem, p->csum);
 	rc = 1;

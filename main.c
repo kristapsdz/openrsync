@@ -14,7 +14,6 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#include <sys/queue.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -29,6 +28,8 @@
 #include <unistd.h>
 
 #include "extern.h"
+
+int verbose;
 
 /*
  * A remote host is has a colon before the first path separator.
@@ -112,8 +113,7 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 
 	if (fargs_is_remote(f->sources[0])) {
 		if (f->host != NULL)
-			errx(1, "both source and "
-				"destination cannot be remote files");
+			errx(1, "both source and destination cannot be remote files");
 		f->mode = FARGS_RECEIVER;
 		if ((f->host = strdup(f->sources[0])) == NULL)
 			err(1, "strdup");
@@ -126,8 +126,7 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 			len = strlen(f->host) - 8 + 1;
 			memmove(f->host, f->host + 8, len);
 			if ((cp = strchr(f->host, '/')) == NULL)
-				errx(1, "rsync protocol requires a module "
-					"name");
+				errx(1, "rsync protocol requires a module name");
 			*cp++ = '\0';
 			f->module = cp;
 			if ((cp = strchr(f->module, '/')) != NULL)
@@ -281,7 +280,7 @@ main(int argc, char *argv[])
 {
 	struct opts	 opts;
 	pid_t		 child;
-	int		 fds[2], rc, c, st, i;
+	int		 fds[2], sd, rc, c, st, i;
 	struct sess	  sess;
 	struct fargs	*fargs;
 	char		**args;
@@ -295,8 +294,9 @@ main(int argc, char *argv[])
 		{ "version",	no_argument,	NULL,			2 },
 		{ "archive",	no_argument,	NULL,			'a' },
 		{ "help",	no_argument,	NULL,			'h' },
+		{ "compress",	no_argument,	NULL,			'z' },
+		{ "del",	no_argument,	&opts.del,		1 },
 		{ "delete",	no_argument,	&opts.del,		1 },
-		{ "no-delete",	no_argument,	&opts.del,		0 },
 		{ "devices",	no_argument,	&opts.devices,		1 },
 		{ "no-devices",	no_argument,	&opts.devices,		0 },
 		{ "group",	no_argument,	&opts.preserve_gids,	1 },
@@ -314,8 +314,8 @@ main(int argc, char *argv[])
 		{ "no-specials", no_argument,	&opts.specials,		0 },
 		{ "times",	no_argument,	&opts.preserve_times,	1 },
 		{ "no-times",	no_argument,	&opts.preserve_times,	0 },
-		{ "verbose",	no_argument,	&opts.verbose,		1 },
-		{ "no-verbose",	no_argument,	&opts.verbose,		0 },
+		{ "verbose",	no_argument,	&verbose,		1 },
+		{ "no-verbose",	no_argument,	&verbose,		0 },
 		{ NULL,		0,		NULL,			0 }};
 
 	/* Global pledge. */
@@ -326,7 +326,7 @@ main(int argc, char *argv[])
 
 	memset(&opts, 0, sizeof(struct opts));
 
-	while ((c = getopt_long(argc, argv, "Dae:ghlnoprtv", lopts, NULL))
+	while ((c = getopt_long(argc, argv, "Dae:ghlnoprtvz", lopts, NULL))
 	    != -1) {
 		switch (c) {
 		case 'D':
@@ -345,7 +345,6 @@ main(int argc, char *argv[])
 			break;
 		case 'e':
 			opts.ssh_prog = optarg;
-			/* Ignore. */
 			break;
 		case 'g':
 			opts.preserve_gids = 1;
@@ -369,7 +368,10 @@ main(int argc, char *argv[])
 			opts.preserve_times = 1;
 			break;
 		case 'v':
-			opts.verbose++;
+			verbose++;
+			break;
+		case 'z':
+			fprintf(stderr, "%s: -z not supported yet\n", getprogname());
 			break;
 		case 0:
 			/* Non-NULL flag values (e.g., --sender). */
@@ -426,12 +428,15 @@ main(int argc, char *argv[])
 	/*
 	 * If we're contacting an rsync:// daemon, then we don't need to
 	 * fork, because we won't start a server ourselves.
-	 * Route directly into the socket code, in that case.
+	 * Route directly into the socket code, unless a remote shell
+	 * has explicitly been specified.
 	 */
 
-	if (fargs->remote) {
+	if (fargs->remote && opts.ssh_prog == NULL) {
 		assert(fargs->mode == FARGS_RECEIVER);
-		exit(rsync_socket(&opts, fargs));
+		if ((rc = rsync_connect(&opts, &sd, fargs)) == 0)
+			rc = rsync_socket(&opts, sd, fargs);
+		exit(rc);
 	}
 
 	/* Drop the dns/inet possibility. */
@@ -456,21 +461,22 @@ main(int argc, char *argv[])
 		memset(&sess, 0, sizeof(struct sess));
 		sess.opts = &opts;
 
-		if ((args = fargs_cmdline(&sess, fargs)) == NULL) {
-			ERRX1(&sess, "fargs_cmdline");
+		if ((args = fargs_cmdline(&sess, fargs, NULL)) == NULL) {
+			ERRX1("fargs_cmdline");
 			_exit(1);
 		}
 
 		for (i = 0; args[i] != NULL; i++)
-			LOG2(&sess, "exec[%d] = %s", i, args[i]);
+			LOG2("exec[%d] = %s", i, args[i]);
 
 		/* Make sure the child's stdin is from the sender. */
 
 		if (dup2(fds[1], STDIN_FILENO) == -1) {
-			ERR(&sess, "dup2");
+			ERR("dup2");
 			_exit(1);
-		} if (dup2(fds[1], STDOUT_FILENO) == -1) {
-			ERR(&sess, "dup2");
+		}
+		if (dup2(fds[1], STDOUT_FILENO) == -1) {
+			ERR("dup2");
 			_exit(1);
 		}
 
@@ -479,7 +485,10 @@ main(int argc, char *argv[])
 		/* NOTREACHED */
 	default:
 		close(fds[1]);
-		rc = rsync_client(&opts, fds[0], fargs);
+		if (!fargs->remote)
+			rc = rsync_client(&opts, fds[0], fargs);
+		else
+			rc = rsync_socket(&opts, fds[0], fargs);
 		break;
 	}
 
@@ -508,11 +517,10 @@ main(int argc, char *argv[])
 
 	exit(rc);
 usage:
-	fprintf(stderr, "usage: %s [-aDglnoprtv] [-e program] [--archive] [--delete] [--devices]\n"
-	    "\t[--group] [--links] [--dry-run] [--owner] [--perms]\n"
-	    "\t[--port=portnumber] [--recursive] [--rsh=program]\n"
-	    "\t[--rsync-path=program] [--specials] [--times] [--verbose]\n"
-	    "\t[--version] source ... directory\n",
+	fprintf(stderr, "usage: %s"
+	    " [-aDglnoprtv] [-e program] [--del] [--numeric-ids]\n"
+	    "\t[--port=portnumber] [--rsync-path=program] [--version]\n"
+	    "\tsource ... directory\n",
 	    getprogname());
 	exit(1);
 }
