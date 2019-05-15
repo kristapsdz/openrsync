@@ -70,14 +70,19 @@ blk_find(struct sess *sess, struct blkstat *st,
 		have_md = 1;
 		if (memcmp(md, blks->blks[st->hint].chksum_long, blks->csum) == 0) {
 			LOG4("%s: found matching hinted match: "
-				"position %jd, block %zu "
-				"(position %jd, size %zu)", path,
-				(intmax_t)st->offs, blks->blks[st->hint].idx,
-				(intmax_t)blks->blks[st->hint].offs,
-				blks->blks[st->hint].len);
+			    "position %jd, block %zu (position %jd, size %zu)",
+			    path,
+			    (intmax_t)st->offs, blks->blks[st->hint].idx,
+			    (intmax_t)blks->blks[st->hint].offs,
+			    blks->blks[st->hint].len);
 			return &blks->blks[st->hint];
 		}
 	}
+
+	/*
+	 * Now loop and look for the fast hash.
+	 * If it's found, move on to the slow hash.
+	 */
 
 	for (i = 0; i < blks->blksz; i++) {
 		if (fhash != blks->blks[i].chksum_short)
@@ -86,11 +91,11 @@ blk_find(struct sess *sess, struct blkstat *st,
 			continue;
 
 		LOG4("%s: found matching fast match: "
-			"position %jd, block %zu "
-			"(position %jd, size %zu)", path,
-			(intmax_t)st->offs, blks->blks[i].idx,
-			(intmax_t)blks->blks[i].offs,
-			blks->blks[i].len);
+		    "position %jd, block %zu (position %jd, size %zu)",
+		    path,
+		    (intmax_t)st->offs, blks->blks[i].idx,
+		    (intmax_t)blks->blks[i].offs,
+		    blks->blks[i].len);
 
 		/* Compute slow hash on demand. */
 
@@ -150,9 +155,9 @@ blk_match(struct sess *sess, const struct blkset *blks,
 			sz = st->offs - last;
 			st->dirty += sz;
 			st->total += sz;
-			LOG4("%s: flushing %jd B before %zu B "
-			"block %zu", path, (intmax_t)sz,
-				blk->len, blk->idx);
+			LOG4("%s: flushing %jd B before %zu B block %zu",
+			    path, (intmax_t)sz,
+			    blk->len, blk->idx);
 			tok = -(blk->idx + 1);
 
 			/*
@@ -305,13 +310,13 @@ blk_recv(struct sess *sess, int fd, const char *path)
 			s->rem : s->len;
 		offs += b->len;
 
-		LOG4("%s: read block %zu, "
-			"length %zu B", path, b->idx, b->len);
+		LOG4("%s: read block %zu, length %zu B",
+		    path, b->idx, b->len);
 	}
 
 	s->size = offs;
-	LOG3("%s: read blocks: %zu blocks, %jd B total "
-		"blocked data", path, s->blksz, (intmax_t)s->size);
+	LOG3("%s: read blocks: %zu blocks, %jd B total blocked data",
+	    path, s->blksz, (intmax_t)s->size);
 	return s;
 out:
 	free(s->blks);
@@ -397,8 +402,7 @@ blk_send(struct sess *sess, int fd, size_t idx,
 	for (i = 0; i < p->blksz; i++) {
 		io_buffer_int(buf, &pos,
 			sz, p->blks[i].chksum_short);
-		io_buffer_buf(buf, &pos, sz,
-			p->blks[i].chksum_long, p->csum);
+		io_buffer_buf(buf, &pos, sz, p->blks[i].chksum_long, p->csum);
 	}
 
 	assert(pos == sz);
@@ -409,8 +413,8 @@ blk_send(struct sess *sess, int fd, size_t idx,
 	}
 
 	LOG3("%s: sent block prologue: %zu blocks of %zu B, "
-		"%zu B remainder, %zu B checksum", path,
-		p->blksz, p->len, p->rem, p->csum);
+	    "%zu B remainder, %zu B checksum",
+	    path, p->blksz, p->len, p->rem, p->csum);
 	rc = 1;
 out:
 	free(buf);

@@ -55,7 +55,8 @@ io_read_check(int fd)
  * On success, fills in "sz" with the amount written.
  */
 static int
-io_write_nonblocking(int fd, const void *buf, size_t bsz, size_t *sz)
+io_write_nonblocking(int fd, const void *buf, size_t bsz,
+    size_t *sz)
 {
 	struct pollfd	pfd;
 	ssize_t		wsz;
@@ -459,8 +460,8 @@ io_write_int(struct sess *sess, int fd, int32_t val)
  * is insufficient for the new data.
  */
 void
-io_buffer_buf(void *buf, size_t *bufpos,
-	size_t buflen, const void *val, size_t valsz)
+io_buffer_buf(void *buf, size_t *bufpos, size_t buflen, const void *val,
+    size_t valsz)
 {
 
 	assert(*bufpos + valsz <= buflen);
@@ -657,8 +658,8 @@ io_read_int(struct sess *sess, int fd, int32_t *val)
  * Increases "bufpos" to the new position.
  */
 void
-io_unbuffer_buf(const void *buf, size_t *bufpos,
-	size_t bufsz, void *val, size_t valsz)
+io_unbuffer_buf(const void *buf, size_t *bufpos, size_t bufsz, void *val,
+    size_t valsz)
 {
 
 	assert(*bufpos + valsz <= bufsz);

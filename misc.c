@@ -59,8 +59,7 @@ addargs(arglist *args, char *fmt, ...)
 	} else if (args->num+2 >= nalloc)
 		nalloc *= 2;
 
-	args->list = recallocarray
-		(args->list, args->nalloc, nalloc, sizeof(char *));
+	args->list = recallocarray(args->list, args->nalloc, nalloc, sizeof(char *));
 	if (!args->list)
 		err(1, "malloc");
 

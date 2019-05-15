@@ -145,7 +145,7 @@ idents_remap(struct sess *sess, int isgid, struct ident *ids, size_t idsz)
 			ids[i].mapped = id;
 
 		LOG4("remapped identifier %s: %" PRId32 " -> %" PRId32,
-			ids[i].name, ids[i].id, ids[i].mapped);
+		    ids[i].name, ids[i].id, ids[i].mapped);
 	}
 }
 
@@ -217,7 +217,7 @@ idents_add(int isgid, struct ident **ids, size_t *idsz, int32_t id)
 	}
 
 	LOG4("adding identifier to list: %s (%u)",
-		(*ids)[*idsz].name, (*ids)[*idsz].id);
+	    (*ids)[*idsz].name, (*ids)[*idsz].id);
 	(*idsz)++;
 	return 1;
 }

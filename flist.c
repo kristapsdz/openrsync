@@ -1284,7 +1284,6 @@ flist_gen_dels(struct sess *sess, const char *root, struct flist **fl,
 			goto out;
 		}
 		f->wpath = f->path + stripdir;
-		assert(ent->fts_statp != NULL);
 		flist_copy_stat(f, ent->fts_statp);
 		errno = 0;
 	}

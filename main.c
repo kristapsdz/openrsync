@@ -165,9 +165,9 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 			for (i = 0; i < f->sourcesz; i++) {
 				if (!fargs_is_remote(f->sources[i]))
 					continue;
-				errx(1, "remote file in "
-					"list of local sources: %s",
-					f->sources[i]);
+				errx(1,
+				    "remote file in list of local sources: %s",
+				    f->sources[i]);
 			}
 		if (f->mode == FARGS_RECEIVER)
 			for (i = 0; i < f->sourcesz; i++) {
@@ -175,13 +175,11 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 				    !fargs_is_daemon(f->sources[i]))
 					continue;
 				if (fargs_is_daemon(f->sources[i]))
-					errx(1, "remote "
-						"daemon in list of "
-						"remote sources: %s",
-						f->sources[i]);
-				errx(1, "local file in "
-					"list of remote sources: %s",
-					f->sources[i]);
+					errx(1, "remote daemon in list of "
+					    "remote sources: %s",
+					    f->sources[i]);
+				errx(1, "local file in list of remote sources: %s",
+				    f->sources[i]);
 			}
 	} else {
 		if (f->mode != FARGS_RECEIVER)
@@ -243,8 +241,8 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 				*ccp = '\0';
 			if (strncmp(cp, f->host, len) ||
 			    (cp[len] != '/' && cp[len] != '\0'))
-				errx(1, "different remote "
-					"host: %s", f->sources[i]);
+				errx(1, "different remote host: %s",
+				    f->sources[i]);
 			memmove(f->sources[i],
 				f->sources[i] + len + 8 + 1,
 				j - len - 8);
@@ -256,8 +254,8 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 			/* host::path */
 			if (strncmp(cp, f->host, len) ||
 			    (cp[len] != ':' && cp[len] != '\0'))
-				errx(1, "different remote "
-					"host: %s", f->sources[i]);
+				errx(1, "different remote host: %s",
+				    f->sources[i]);
 			memmove(f->sources[i], f->sources[i] + len + 2,
 			    j - len - 1);
 		} else if (cp[0] == ':') {
@@ -267,8 +265,8 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 			/* host:path */
 			if (strncmp(cp, f->host, len) ||
 			    (cp[len] != ':' && cp[len] != '\0'))
-				errx(1, "different remote "
-					"host: %s", f->sources[i]);
+				errx(1, "different remote host: %s",
+				    f->sources[i]);
 			memmove(f->sources[i],
 				f->sources[i] + len + 1, j - len);
 		}

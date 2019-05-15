@@ -339,7 +339,7 @@ pre_dev(struct upload *p, struct sess *sess)
 	}
 
 	rsync_set_metadata_at(sess, newdev,
-		p->rootfd, f, newdev ? temp : f->path);
+	    p->rootfd, f, newdev ? temp : f->path);
 
 	if (newdev) {
 		if (renameat(p->rootfd, temp, p->rootfd, f->path) == -1) {
@@ -943,8 +943,8 @@ rsync_uploader(struct upload *u, int *fileinfd,
 		close(*fileinfd);
 		*fileinfd = -1;
 		LOG3("%s: mapped %jd B with %zu blocks",
-			u->fl[u->idx].path, (intmax_t)blk.size,
-			blk.blksz);
+		    u->fl[u->idx].path, (intmax_t)blk.size,
+		    blk.blksz);
 	} else {
 		if (*fileinfd != -1) {
 			close(*fileinfd);

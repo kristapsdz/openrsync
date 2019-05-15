@@ -176,10 +176,10 @@ send_up_fsm(struct sess *sess, size_t *phase,
 		 */
 
 		if (!sess->opts->dry_run)
-			LOG3("%s: flushed %jd KB total, %.2f%% "
-				"uploaded", fl[up->cur->idx].path,
-				(intmax_t)up->stat.total / 1024,
-				100.0 * up->stat.dirty / up->stat.total);
+			LOG3("%s: flushed %jd KB total, %.2f%% uploaded",
+			    fl[up->cur->idx].path,
+			    (intmax_t)up->stat.total / 1024,
+			    100.0 * up->stat.dirty / up->stat.total);
 		send_up_reset(up);
 		return 1;
 	case BLKSTAT_PHASE:
@@ -264,10 +264,8 @@ send_up_fsm(struct sess *sess, size_t *phase,
 		blk_recv_ack(buf, up->cur->blks, up->cur->idx);
 		io_lowbuffer_buf(sess, *wb, &pos, *wbsz, buf, 20);
 
-		LOG3("%s: primed for %jd B total, %zu blocks",
-			fl[up->cur->idx].path,
-			(intmax_t)up->cur->blks->size,
-			up->cur->blks->blksz);
+		LOG3("%s: primed for %jd B total",
+		    fl[up->cur->idx].path, (intmax_t)up->cur->blks->size);
 		up->stat.curst = BLKSTAT_NEXT;
 	}
 
@@ -304,8 +302,8 @@ send_dl_enqueue(struct sess *sess, struct send_dlq *q,
 	/* Validate the index. */
 
 	if (idx < 0 || (uint32_t)idx >= flsz) {
-		ERRX("file index out of bounds: invalid %"
-			PRId32 " out of %zu", idx, flsz);
+		ERRX("file index out of bounds: invalid %d out of %zu",
+		    idx, flsz);
 		return 0;
 	} else if (S_ISDIR(fl[idx].st.mode)) {
 		ERRX("blocks requested for "
