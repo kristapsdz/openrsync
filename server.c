@@ -14,6 +14,8 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#include "config.h"
+
 #include <sys/stat.h>
 
 #include <assert.h>
@@ -73,7 +75,9 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 	/* Standard rsync preamble, server side. */
 
 	sess.lver = RSYNC_PROTOCOL;
+#if HAVE_ARC4RANDOM
 	sess.seed = arc4random();
+#endif
 
 	if (!io_read_int(&sess, fdin, &sess.rver)) {
 		ERRX1("io_read_int");

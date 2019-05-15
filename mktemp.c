@@ -16,6 +16,8 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#include "config.h"
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -114,7 +116,13 @@ mktemp_internalat(int pfd, char *path, int slen, enum tmpmode mode,
 			 * Avoid lots of arc4random() calls by using
 			 * a buffer sized for up to 16 Xs at a time.
 			 */
+#if HAVE_ARC4RANDOM
 			arc4random_buf(rbuf, sizeof(rbuf));
+#else
+			for (i = 0; i < sizeof(rbuf); i++)
+				rbuf[i] = random();
+#endif
+
 			for (i = 0; i < nitems(rbuf) && cp != ep; i++)
 				*cp++ = tempchars[rbuf[i] % NUM_CHARS];
 		} while (cp != ep);

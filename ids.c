@@ -14,6 +14,8 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#include "config.h"
+
 #include <assert.h>
 #include <grp.h>
 #include <inttypes.h>
@@ -267,9 +269,9 @@ int
 idents_recv(struct sess *sess,
 	int fd, struct ident **ids, size_t *idsz)
 {
-	int32_t	 id;
-	uint8_t	 sz;
-	void	*pp;
+	uint32_t	 id;
+	uint8_t	 	 sz;
+	void		*pp;
 
 	for (;;) {
 		if (!io_read_uint(sess, fd, &id)) {

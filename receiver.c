@@ -16,8 +16,11 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#include "config.h"
+
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 
 #include <assert.h>
 #include <errno.h>
@@ -32,6 +35,10 @@
 #include <unistd.h>
 
 #include "extern.h"
+
+#ifndef S_ISTXT
+#define S_ISTXT S_ISVTX
+#endif
 
 enum	pfdt {
 	PFD_SENDER_IN = 0, /* input from the sender */

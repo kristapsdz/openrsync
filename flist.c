@@ -15,6 +15,8 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#include "config.h"
+
 #include <sys/param.h>
 #include <sys/queue.h>
 #include <sys/stat.h>
@@ -833,10 +835,12 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
 			ERRX1("flist_append");
 			return 0;
 		}
+#if HAVE_UNVEIL
 		if (unveil(root, "r") == -1) {
 			ERR("%s: unveil", root);
 			return 0;
 		}
+#endif
 		return 1;
 	} else if (S_ISLNK(st.st_mode)) {
 		if (!sess->opts->preserve_links) {
@@ -853,10 +857,12 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
 			ERRX1("flist_append");
 			return 0;
 		}
+#if HAVE_UNVEIL
 		if (unveil(root, "r") == -1) {
 			ERR("%s: unveil", root);
 			return 0;
 		}
+#endif
 		return 1;
 	} else if (!S_ISDIR(st.st_mode)) {
 		WARNX("%s: skipping special", root);
@@ -956,10 +962,12 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
 		ERR("fts_read");
 		goto out;
 	}
+#if HAVE_UNVEIL
 	if (unveil(root, "r") == -1) {
 		ERR("%s: unveil", root);
 		goto out;
 	}
+#endif
 
 	LOG3("generated %zu filenames: %s", flsz, root);
 	rc = 1;
@@ -1052,10 +1060,12 @@ flist_gen_files(struct sess *sess, size_t argc, char **argv,
 
 		/* Add this file to our file-system worldview. */
 
+#if HAVE_UNVEIL
 		if (unveil(argv[i], "r") == -1) {
 			ERR("%s: unveil", argv[i]);
 			goto out;
 		}
+#endif
 		if (!flist_append(f, &st, argv[i])) {
 			ERRX1("flist_append");
 			goto out;
@@ -1094,10 +1104,12 @@ flist_gen(struct sess *sess, size_t argc, char **argv, struct flist **flp,
 
 	/* After scanning, lock our file-system view. */
 
+#if HAVE_UNVEIL
 	if (unveil(NULL, NULL) == -1) {
 		ERR("unveil");
 		return 0;
 	}
+#endif
 	if (!rc)
 		return 0;
 
