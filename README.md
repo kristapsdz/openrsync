@@ -1,10 +1,7 @@
 # Introduction
 
 **This system has been merged into OpenBSD base.  If you'd like to
-contribute to openrsync, please mail your patches to tech@openbsd.org.
-I'll keep this code-base up to date with OpenBSD's version, and keep
-this page up until the architecture documentation has also been
-mainlined.**
+contribute to openrsync, please mail your patches to tech@openbsd.org.**
 
 This is an implementation of [rsync](https://rsync.samba.org/) with a
 BSD (ISC) license.
@@ -12,9 +9,8 @@ It's compatible with a modern rsync (3.1.3 is used for testing, but any
 supporting protocol 27 will do), but accepts only a subset of rsync's
 command-line arguments.
 
-At this time, openrsync runs only on [OpenBSD](https://www.openbsd.org).
-If you want to port to your system (e.g. Linux, FreeBSD), read the
-[Portability](#Portability) section first.
+Its officially-supported operating system is OpenBSD.
+See [Portability](#Portability) for running on other systems.
 
 The canonical documentation for openrsync is its manual pages.
 See
@@ -48,10 +44,12 @@ openrsync was funded by [NetNod](https://www.netnod.se),
 
 # Installation
 
-On an up-to-date [OpenBSD](https://www.openbsd.org) system, simply download and run:
+On an up-to-date UNIX system, simply download and run:
 
 ```
-% make && doas make install
+% ./configure
+% make
+# make install
 ```
 
 This will install the openrsync utility and manual pages.
@@ -62,7 +60,7 @@ If you upgrade your sources and want to re-install, just run the same.
 If you'd like to uninstall the sources:
 
 ```
-% doas make uninstall
+# make uninstall
 ```
 
 If you'd like to interact with the openrsync as a server, you can run
@@ -385,17 +383,16 @@ server generates the seed.
 
 Many have asked about portability.
 
-The system is easy to port into compiling and running: I was able to
-copy over [oconfigure](https://github.com/kristapsdz/oconfigure), add
-`config.h` as requirement, and mask the OpenBSD-specific functions on
-both Linux and FreeBSD without any problems.
+The only officially-supported operating system is OpenBSD, as this has
+considerable security features.  openrsync does, however, use
+[oconfigure](https://github.com/kristapsdz/oconfigure) for compilation
+on non-OpenBSD systems.  This is to encourage porting.
 
-The actual work of porting, however, is matching the security features
-provided by OpenBSD's [pledge(2)](https://man.openbsd.org/pledge.2) and
-[unveil(2)](https://man.openbsd.org/unveil.2).
-These are critical elements to the functionality of the system.
-Without them, your system accepts arbitrary data from the public
-network.
+The actual work of porting is matching the security features provided by
+OpenBSD's [pledge(2)](https://man.openbsd.org/pledge.2) and
+[unveil(2)](https://man.openbsd.org/unveil.2).  These are critical
+elements to the functionality of the system.  Without them, your system
+accepts arbitrary data from the public network.
 
 This is possible (I think?) with FreeBSD's
 [Capsicum](https://man.freebsd.org/capsicum(4)), but Linux's security
