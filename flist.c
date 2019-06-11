@@ -873,7 +873,7 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
 	/*
 	 * If we end with a slash, it means that we're not supposed to
 	 * copy the directory part itself---only the contents.
-	 * So set "stripdir" to be what we take out.
+	 * So set "stripdir" to be the full file.
 	 */
 
 	stripdir = strlen(root);
@@ -1099,7 +1099,6 @@ flist_gen_files(struct sess *sess, size_t argc, char **argv,
 			continue;
 		}
 
-
 		f = &fl[flsz++];
 		assert(f != NULL);
 
@@ -1128,6 +1127,167 @@ out:
 	return 0;
 }
 
+#if 0
+/*
+ * Generate a list of files from a syncfile that are contained within
+ * the arguments given on the command line.
+ * This overrides everything we're given on the command line.
+ * TODO: mmap() the file to avoid the billion reads.
+ * FIXME: unveil().
+ * Returns zero on failure, non-zero on success.
+ */
+static int
+flist_gen_syncfile(struct sess *sess, size_t argc, char **argv,
+	struct flist **flp, size_t *sz)
+{
+	int		 fd, first = 1;
+	ssize_t		 ssz;
+	char		*path = NULL, *link = NULL;
+	struct flist	*fl;
+	struct stat	 st;
+	size_t		 tmpsz, pathsz, linksz, i, stripdir = 0;
+	const char	*cp;
+
+	if ((fd = open(sess->opts->syncfile, O_RDONLY, 0)) == -1) {
+		ERR("%s", sess->opts->syncfile);
+		return 0;
+	}
+
+	/* Read until end of file. */
+
+	while ((ssz = read(fd, &pathsz, sizeof(size_t))) != 0) {
+		free(path);
+		free(link);
+		path = link = NULL;
+		if (ssz < 0) {
+			ERR("%s", sess->opts->syncfile);
+			goto out;
+		} else if ((size_t)ssz != sizeof(size_t)) {
+			ERRX("%s: short read", sess->opts->syncfile);
+			goto out;
+		} else if ((path = calloc(pathsz + 1, 1)) == NULL) {
+			ERR("calloc");
+			goto out;
+		} else if ((ssz = read(fd, path, pathsz)) < 0) {
+			ERR("%s", sess->opts->syncfile);
+			goto out;
+		} else if ((size_t)ssz != pathsz) {
+			ERRX("%s: short read", sess->opts->syncfile);
+			goto out;
+		} else if ((ssz = read(fd, &st, sizeof(struct stat))) < 0) {
+			ERR("%s", sess->opts->syncfile);
+			goto out;
+		} else if ((size_t)ssz != sizeof(struct stat)) {
+			ERR("%s", sess->opts->syncfile);
+			goto out;
+		}
+
+		if (S_ISLNK(st.st_mode)) {
+			if ((ssz = read(fd, &linksz, sizeof(size_t))) < 0) {
+				ERR("%s", sess->opts->syncfile);
+				goto out;
+			} else if ((size_t)ssz != sizeof(size_t)) {
+				ERRX("%s: short read", sess->opts->syncfile);
+				goto out;
+			} else if ((link = calloc(linksz + 1, 1)) == NULL) {
+				ERR("calloc");
+				goto out;
+			} else if ((ssz = read(fd, link, linksz)) < 0) {
+				ERR("%s", sess->opts->syncfile);
+				goto out;
+			} else if ((size_t)ssz != linksz) {
+				ERRX("%s: short read", sess->opts->syncfile);
+				goto out;
+			}
+		}
+
+		/*
+		 * We want to make sure that the requested file is part
+		 * of the set in our syncfile.
+		 * If the request is recursive, we check that the
+		 * syncfile has at least the requested root.
+		 * If it's non-recursive, it must exist exactly.
+		 */
+
+		if (!sess->opts->recursive) {
+			for (i = 0; i < argc; i++)
+				if (strcmp(argv[i], path) == 0)
+					break;
+			if (i == argc)
+				continue;
+
+			if (S_ISDIR(st.st_mode)) {
+				WARNX("%s: skipping directory", path);
+				continue;
+			} else if (S_ISLNK(st.st_mode)) {
+				if (!sess->opts->preserve_links) {
+					WARNX("%s: skipping symlink", path);
+					continue;
+				}
+			} else if (!S_ISREG(st.st_mode)) {
+				WARNX("%s: skipping special", path);
+				continue;
+			}
+		} else {
+			for (i = 0; i < argc; i++) {
+				tmpsz = strlen(argv[i]);
+				if (pathsz < tmpsz)
+					continue;
+				if (strncmp(argv[i], path, tmpsz))
+					continue;
+				if (path[tmpsz] == '\0' || path[tmpsz] == '/')
+					break;
+			}
+			if (i == argc)
+				continue;
+		}
+
+		/* 
+		 * We need to find the common root that we're going to
+		 * build in the receiver, so use the first entry as a
+		 * referent.
+		 * If it ends with a slash, we're going to omit the
+		 * directory altogether, so the stripdir will be the
+		 * full length of the file.
+		 * Otherwise, we take the final path component.
+		 */
+
+		if (first) {
+			if ((stripdir = strlen(path)) == 0) {
+				ERRX("%s: empty root", sess->opts->syncfile);
+				goto out;
+			} else if (path[stripdir - 1] != '/') {
+				if ((cp = strrchr(path, '/')) != NULL)
+					stripdir = cp - path + 1;
+			}
+			first = 0;
+		}
+
+		/* Create the entry. */
+
+		*flp = reallocarray(*flp, *sz + 1, sizeof(struct flist));
+		if (*flp == NULL) {
+			ERR("reallocarray");
+			goto out;
+		}
+		fl = &(*flp)[*sz];
+		(*sz)++;
+		memset(fl, 0, sizeof(struct flist));
+		fl->path = path;
+		fl->link = link;
+		fl->wpath = fl->path + stripdir;
+		flist_copy_stat(fl, &st);
+		path = link = NULL;
+	}
+out:
+	LOG2("syncfile generated %zu filenames", *sz);
+	free(path);
+	free(link);
+	close(fd);
+	return 1;
+}
+#endif
+
 /*
  * Generate a sorted, de-duplicated list of file metadata.
  * In non-recursive mode (the default), we use only the files we're
@@ -1142,10 +1302,17 @@ flist_gen(struct sess *sess, size_t argc, char **argv, struct flist **flp,
 {
 	int	 rc;
 
-	assert(argc > 0);
-	rc = sess->opts->recursive ?
-		flist_gen_dirs(sess, argc, argv, flp, sz) :
-		flist_gen_files(sess, argc, argv, flp, sz);
+#if 0
+	if (sess->opts->syncfile == NULL) {
+#endif
+		assert(argc > 0);
+		rc = sess->opts->recursive ?
+			flist_gen_dirs(sess, argc, argv, flp, sz) :
+			flist_gen_files(sess, argc, argv, flp, sz);
+#if 0
+	} else
+		rc = flist_gen_syncfile(sess, argc, argv, flp, sz);
+#endif
 
 	/* After scanning, lock our file-system view. */
 
