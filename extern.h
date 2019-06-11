@@ -120,6 +120,9 @@ struct	opts {
 	char		*rsync_path;		/* --rsync-path */
 	char		*ssh_prog;		/* --rsh or -e */
 	char		*port;			/* --port */
+#if 0
+	char		*syncfile;		/* --sync-file */
+#endif
 };
 
 /*
@@ -159,6 +162,9 @@ struct	blkstat {
 	off_t		 curpos; /* sending: position in file to send */
 	off_t		 curlen; /* sending: length of send */
 	int32_t		 curtok; /* sending: next matching token or zero */
+	struct blktab	*blktab; /* hashtable of blocks */
+	uint32_t	 s1; /* partial sum for computing fast hash */
+	uint32_t	 s2; /* partial sum for computing fast hash */
 };
 
 /*
@@ -205,7 +211,7 @@ struct arglist {
 	u_int	num;
 	u_int	nalloc;
 };
-void	addargs(arglist *, char *, ...)
+void	addargs(arglist *, const char *, ...)
 	    __attribute__((format(printf, 2, 3)));
 void	freeargs(arglist *);
 
@@ -327,6 +333,10 @@ void		  download_free(struct download *);
 struct upload	 *upload_alloc(const char *, int, int, size_t,
 			const struct flist *, size_t, mode_t);
 void		  upload_free(struct upload *);
+
+struct blktab	*blkhash_alloc(void);
+int		 blkhash_set(struct blktab *, const struct blkset *);
+void		 blkhash_free(struct blktab *);
 
 struct blkset	 *blk_recv(struct sess *, int, const char *);
 void		  blk_recv_ack(char [20], const struct blkset *, int32_t);
