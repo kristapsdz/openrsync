@@ -15,7 +15,7 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-OCONFIGURE_VERSION="0.1.7"
+OCONFIGURE_VERSION="0.1.8"
 
 #
 # This script outputs two files: config.h and Makefile.configure.
@@ -152,8 +152,12 @@ HAVE_SECCOMP_FILTER=
 HAVE_SOCK_NONBLOCK=
 HAVE_STRLCAT=
 HAVE_STRLCPY=
+HAVE_STRNDUP=
+HAVE_STRNLEN=
 HAVE_STRTONUM=
 HAVE_SYSTRACE=
+HAVE_UNVEIL=
+HAVE_ZLIB=
 HAVE___PROGNAME=
 
 #----------------------------------------------------------------------
@@ -309,6 +313,7 @@ runtest strnlen		STRNLEN				  || true
 runtest strtonum	STRTONUM			  || true
 runtest sys_queue	SYS_QUEUE			  || true
 runtest systrace	SYSTRACE			  || true
+runtest unveil		UNVEIL				  || true
 runtest zlib		ZLIB		"" "-lz"	  || true
 runtest __progname	__PROGNAME			  || true
 
@@ -392,6 +397,7 @@ cat << __HEREDOC__
 #define HAVE_STRTONUM ${HAVE_STRTONUM}
 #define HAVE_SYS_QUEUE ${HAVE_SYS_QUEUE}
 #define HAVE_SYSTRACE ${HAVE_SYSTRACE}
+#define HAVE_UNVEIL ${HAVE_UNVEIL}
 #define HAVE_ZLIB ${HAVE_ZLIB}
 #define HAVE___PROGNAME ${HAVE___PROGNAME}
 __HEREDOC__

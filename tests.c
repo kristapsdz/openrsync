@@ -395,6 +395,15 @@ main(void)
 	return(0);
 }
 #endif /* TEST_SYSTRACE */
+#if TEST_UNVEIL
+#include <unistd.h>
+
+int
+main(void)
+{
+	return -1 != unveil(NULL, NULL);
+}
+#endif /* TEST_UNVEIL */
 #if TEST_ZLIB
 #include <stddef.h>
 #include <zlib.h>
