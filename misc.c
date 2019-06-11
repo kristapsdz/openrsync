@@ -38,7 +38,7 @@
  * Function to assist building execv() arguments.
  */
 void
-addargs(arglist *args, char *fmt, ...)
+addargs(arglist *args, const char *fmt, ...)
 {
 	va_list	 	 ap;
 	char		*cp;
