@@ -15,7 +15,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include <sys/param.h>
-#include <sys/queue.h>
 
 #include <assert.h>
 #include <stdint.h>
