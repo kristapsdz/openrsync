@@ -45,7 +45,7 @@ install: all
 	mkdir -p $(DESTDIR)$(MANDIR)/man5
 	$(INSTALL_MAN) openrsync.1 $(DESTDIR)$(MANDIR)/man1
 	$(INSTALL_MAN) rsync.5 rsyncd.5 $(DESTDIR)$(MANDIR)/man5
-	$(INSTALL_PROG) openrsync $(DESTDIR)$(BINDIR)
+	$(INSTALL_PROGRAM) openrsync $(DESTDIR)$(BINDIR)
 
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/openrsync
