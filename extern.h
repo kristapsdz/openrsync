@@ -17,6 +17,13 @@
 #ifndef EXTERN_H
 #define EXTERN_H
 
+#if !HAVE_PLEDGE
+# define pledge(x, y) (1)
+#endif
+#if !HAVE_UNVEIL
+# define unveil(x, y) (1)
+#endif
+
 /*
  * This is the rsync protocol version that we support.
  */
