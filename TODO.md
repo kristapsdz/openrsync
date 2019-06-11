@@ -5,20 +5,13 @@ First, porting: see
 for information on this topic.
 I've included the specific security porting topics below.
 
-This list also does not include adding support for features (e.g., **-u** and
-so on).  The **-a** feature is probably most important, and involves a little
-legwork in the protocol getting **-g** and **-u** passing around file modes.
-I would rate this as easy/medium.
+This list also does not include adding support for features.
 
 - Easy: speed up the uid/gid mapping/remapping with a simple table.
   Right now, the code in 
   [ids.c](https://github.com/kristapsdz/openrsync/blob/master/ids.c)
   is simple, but could easily bottleneck with a large number of groups
   and files with **-g**.
-
-- Easy: add a hashtable to `blk_find()` in
-  [blocks.c](https://github.com/kristapsdz/openrsync/blob/master/blocks.c)
-  for quickly looking up fast-hash matches.
 
 - Easy: print more statistics, such as transfer times and rates.
 
