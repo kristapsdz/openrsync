@@ -269,9 +269,9 @@ int
 idents_recv(struct sess *sess,
 	int fd, struct ident **ids, size_t *idsz)
 {
-	uint32_t	 id;
-	uint8_t	 	 sz;
-	void		*pp;
+	uint32_t id;
+	uint8_t	 sz;
+	void	*pp;
 
 	for (;;) {
 		if (!io_read_uint(sess, fd, &id)) {
