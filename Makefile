@@ -26,9 +26,6 @@ ALLOBJS	   = $(OBJS) \
 AFLS	   = afl/test-blk_recv \
 	     afl/test-flist_recv
 
-# The -O0 is to help with debugging coredumps.
-CFLAGS	+= -O0
-
 all: openrsync
 
 afl: $(AFLS)
