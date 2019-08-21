@@ -24,6 +24,7 @@
 .Nm openrsync
 .Op Fl aDglnoprtvx
 .Op Fl e Ar program
+.Op Fl -address Ns = Ns Ar bind_address
 .Op Fl -del
 .Op Fl -numeric-ids
 .Op Fl -port Ns = Ns Ar service
@@ -50,6 +51,12 @@ The arguments are as follows:
 .It Fl a , -archive
 Shorthand for
 .Fl Dgloprt .
+.It Fl -address Ns = Ns Ar bind_address
+Use
+.Ar bind_address
+on the local machine as the source address of the connection.
+Only useful when connecting to an rsync daemon and on systems with more than
+one address.
 .It Fl D
 Also transfer device and special files.
 Shorthand for
