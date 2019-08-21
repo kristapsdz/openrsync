@@ -1,7 +1,9 @@
 # Introduction
 
 **This system has been merged into OpenBSD base.  If you'd like to
-contribute to openrsync, please mail your patches to tech@openbsd.org.**
+contribute to openrsync, please mail your patches to tech@openbsd.org.
+This repository is simply the OpenBSD version plus some glue for
+portability.**
 
 This is an implementation of [rsync](https://rsync.samba.org/) with a
 BSD (ISC) license.  It's compatible with a modern rsync (3.1.3 is used
@@ -24,10 +26,6 @@ manpages should have all the information required.
 The [Architecture](#Architecture) and [Algorithm](#Algorithm) sections
 on this page serve to introduce developers to the source code.  They are
 non-canonical.
-
-This repository is a read-only mirror of a private CVS repository.  I
-use it for issues and pull requests.  **Please do not make feature
-requests**: I will simply close out the issue.
 
 ## Project background
 
