@@ -300,11 +300,11 @@ mktemplate(char **ret, const char *path, int recursive)
 		dirlen = cp - path;
 		n = asprintf(ret, "%.*s/.%s.XXXXXXXXXX",
 			dirlen, path, path + dirlen + 1);
-		if (n < 0) {
+		if (n == -1) {
 			ERR("asprintf");
 			*ret = NULL;
 		}
-	} else if ((n = asprintf(ret, ".%s.XXXXXXXXXX", path)) < 0) {
+	} else if ((n = asprintf(ret, ".%s.XXXXXXXXXX", path)) == -1) {
 		ERR("asprintf");
 		*ret = NULL;
 	}

@@ -289,7 +289,7 @@ main(int argc, char *argv[])
 		{ "rsh",	required_argument, NULL,		'e' },
 		{ "rsync-path",	required_argument, NULL,		1 },
 #if 0
-		{ "sync-file",	required_argument, NULL,		4 },
+		{ "sync-file",	required_argument, NULL,		5 },
 #endif
 		{ "sender",	no_argument,	&opts.sender,		1 },
 		{ "server",	no_argument,	&opts.server,		1 },
@@ -319,6 +319,7 @@ main(int argc, char *argv[])
 		{ "no-times",	no_argument,	&opts.preserve_times,	0 },
 		{ "verbose",	no_argument,	&verbose,		1 },
 		{ "no-verbose",	no_argument,	&verbose,		0 },
+		{ "address",	required_argument, NULL,		4 },
 		{ NULL,		0,		NULL,			0 }};
 
 	/* Global pledge. */
@@ -392,8 +393,11 @@ main(int argc, char *argv[])
 		case 3:
 			opts.port = optarg;
 			break;
-#if 0
 		case 4:
+			opts.address = optarg;
+			break;
+#if 0
+		case 5:
 			opts.syncfile = optarg;
 			break;
 #endif
@@ -412,7 +416,7 @@ main(int argc, char *argv[])
 		goto usage;
 
 	if (opts.port == NULL)
-		opts.port = "rsync";
+		opts.port = (char *)"rsync";
 
 	/*
 	 * This is what happens when we're started with the "hidden"
@@ -524,9 +528,9 @@ main(int argc, char *argv[])
 	exit(rc);
 usage:
 	fprintf(stderr, "usage: %s"
-	    " [-aDglnoprtvx] [-e program] [--del] [--numeric-ids]\n"
-	    "\t[--port=portnumber] [--rsync-path=program] [--version]\n"
-	    "\tsource ... directory\n",
+	    " [-aDglnoprtvx] [-e program] [--address=bind_address] [--del]\n"
+	    "\t[--numeric-ids] [--port=portnumber] [--rsync-path=program]\n"
+	    "\t[--version] source ... directory\n",
 	    getprogname());
 	exit(1);
 }

@@ -55,7 +55,7 @@
 #define FLIST_TIME_SAME  0x0080 /* time is repeat */
 
 /*
- * Requied way to sort a filename list.
+ * Required way to sort a filename list.
  */
 static int
 flist_cmp(const void *p1, const void *p2)
@@ -805,12 +805,12 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
     size_t *max)
 {
 	char		*cargv[2], *cp;
-	int		 rc = 0, nxdev = 0, flag, i;
+	int		 rc = 0, flag;
 	FTS		*fts;
 	FTSENT		*ent;
 	struct flist	*f;
-	size_t		 flsz = 0, stripdir;
-	dev_t		*xdev;
+	size_t		 i, flsz = 0, nxdev = 0, stripdir;
+	dev_t		*newxdev, *xdev = NULL;
 	struct stat	 st;
 
 	cargv[0] = root;
@@ -933,11 +933,6 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
 			    !S_ISDIR(ent->fts_statp->st_mode))
 				continue;
 
-			if ((xdev = malloc(sizeof(dev_t))) == NULL) {
-				ERRX1("malloc");
-				goto out;
-			}
-
 			flag = 0;
 			for (i = 0; i < nxdev; i++)
 				if (xdev[i] == ent->fts_statp->st_dev) {
@@ -947,12 +942,12 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
 			if (flag)
 				continue;
 
-			if (nxdev)
-				if ((xdev = realloc(xdev, sizeof(dev_t))) ==
-				    NULL) {
-					ERRX1("realloc");
-					goto out;
-				}
+			if ((newxdev = reallocarray(xdev, nxdev + 1,
+			    sizeof(dev_t))) == NULL) {
+				ERRX1("reallocarray");
+				goto out;
+			}
+			xdev = newxdev;
 			xdev[nxdev] = ent->fts_statp->st_dev;
 			nxdev++;
 		}
@@ -969,7 +964,7 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
 		/* Our path defaults to "." for the root. */
 
 		if (ent->fts_path[stripdir] == '\0') {
-			if (asprintf(&f->path, "%s.", ent->fts_path) < 0) {
+			if (asprintf(&f->path, "%s.", ent->fts_path) == -1) {
 				ERR("asprintf");
 				f->path = NULL;
 				goto out;
@@ -1010,8 +1005,7 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
 	rc = 1;
 out:
 	fts_close(fts);
-	if (sess->opts->one_file_system)
-		free(xdev);
+	free(xdev);
 	return rc;
 }
 
@@ -1388,7 +1382,7 @@ flist_gen_dels(struct sess *sess, const char *root, struct flist **fl,
 	if (wflsz && strcmp(wfl[0].wpath, ".") == 0) {
 		assert(cargvs == 1);
 		assert(S_ISDIR(wfl[0].st.mode));
-		if (asprintf(&cargv[0], "%s/", root) < 0) {
+		if (asprintf(&cargv[0], "%s/", root) == -1) {
 			ERR("asprintf");
 			cargv[0] = NULL;
 			goto out;
@@ -1401,7 +1395,7 @@ flist_gen_dels(struct sess *sess, const char *root, struct flist **fl,
 			assert(S_ISDIR(wfl[i].st.mode));
 			assert(strcmp(wfl[i].wpath, "."));
 			c = asprintf(&cargv[j], "%s/%s", root, wfl[i].wpath);
-			if (c < 0) {
+			if (c == -1) {
 				ERR("asprintf");
 				cargv[j] = NULL;
 				goto out;

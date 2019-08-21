@@ -32,7 +32,8 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 {
 	arglist		 args;
 	size_t		 j;
-	char		*rsync_path, *ap, *arg;
+	const char	*rsync_path;
+	char		*ap, *arg;
 
 	memset(&args, 0, sizeof args);
 

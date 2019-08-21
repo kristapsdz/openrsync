@@ -570,7 +570,7 @@ rsync_sender(struct sess *sess, int fdin,
 			assert(wbufsz - wbufpos);
 			ssz = write(fdout,
 				wbuf + wbufpos, wbufsz - wbufpos);
-			if (ssz < 0) {
+			if (ssz == -1) {
 				ERR("write");
 				goto out;
 			}
