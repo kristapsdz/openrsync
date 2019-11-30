@@ -15,8 +15,12 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#ifndef _BSD_SOURCE
+# define _BSD_SOURCE 1 /* Linux major(3), minor(3) */
+#endif
 #include "config.h"
 
+#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/stat.h>
 
