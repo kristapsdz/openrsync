@@ -15,7 +15,7 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-OCONFIGURE_VERSION="0.1.8"
+OCONFIGURE_VERSION="0.1.18"
 
 #
 # This script outputs two files: config.h and Makefile.configure.
@@ -64,6 +64,9 @@ CFLAGS=`printf "all:\\n\\t@echo \\\$(CFLAGS)\\n" | make -sf -`
 CFLAGS="${CFLAGS} -g -W -Wall -Wextra -Wmissing-prototypes -Wstrict-prototypes"
 CFLAGS="${CFLAGS} -Wwrite-strings -Wno-unused-parameter"
 LDADD=
+LDADD_B64_NTOP=
+LDADD_MD5=
+LDADD_ZLIB=
 CPPFLAGS=
 LDFLAGS=
 DESTDIR=
@@ -134,8 +137,10 @@ done
 HAVE_ARC4RANDOM=
 HAVE_B64_NTOP=
 HAVE_CAPSICUM=
+HAVE_ENDIAN_H=
 HAVE_ERR=
 HAVE_EXPLICIT_BZERO=
+HAVE_GETEXECNAME=
 HAVE_GETPROGNAME=
 HAVE_INFTIM=
 HAVE_MD5=
@@ -145,6 +150,7 @@ HAVE_MEMSET_S=
 HAVE_PATH_MAX=
 HAVE_PLEDGE=
 HAVE_PROGRAM_INVOCATION_SHORT_NAME=
+HAVE_READPASSPHRASE=
 HAVE_REALLOCARRAY=
 HAVE_RECALLOCARRAY=
 HAVE_SANDBOX_INIT=
@@ -155,6 +161,8 @@ HAVE_STRLCPY=
 HAVE_STRNDUP=
 HAVE_STRNLEN=
 HAVE_STRTONUM=
+HAVE_SYS_QUEUE=
+HAVE_SYS_TREE=
 HAVE_SYSTRACE=
 HAVE_UNVEIL=
 HAVE_ZLIB=
@@ -235,28 +243,20 @@ __HEREDOC__
 		fi
 	fi
 
+	if [ -n "${extralib}" ] 
+	then
+		eval LDADD_${2}="${5}"
+	elif [ -n "${4}" ]
+	then
+		eval LDADD_${2}="${4}"
+	fi
+
 	echo "${1}: yes ${extralib}" 1>&2
 	echo "${1}: yes ${extralib}" 1>&3
 	echo 1>&3
 	eval HAVE_${2}=1
 	rm "test-${1}"
 	return 0
-
-	# Don't actually run the test: none of our tests check for
-	# run-time behaviour.
-	# if ./test-${1} 1>&3 2>&3; then
-	# 	echo "${1}: yes" 1>&2
-	# 	echo "${1}: yes" 1>&3
-	# 	echo 1>&3
-	# 	eval HAVE_${2}=1
-	# 	rm "test-${1}"
-	# 	return 0
-	# else
-	# 	echo "${1}: execution failed with $?" 1>&3
-	# 	echo 1>&3
-	# 	rm "test-${1}"
-	# 	return 1
-	# fi
 }
 
 # Run a complete autoconfiguration test, including the check for
@@ -290,8 +290,10 @@ runtest() {
 runtest arc4random	ARC4RANDOM			  || true
 runtest b64_ntop	B64_NTOP "" "" "-lresolv"	  || true
 runtest capsicum	CAPSICUM			  || true
+runtest endian_h	ENDIAN_H			  || true
 runtest err		ERR				  || true
 runtest explicit_bzero	EXPLICIT_BZERO			  || true
+runtest getexecname	GETEXECNAME			  || true
 runtest getprogname	GETPROGNAME			  || true
 runtest INFTIM		INFTIM				  || true
 runtest md5		MD5 "" "" "-lmd"		  || true
@@ -301,6 +303,7 @@ runtest memset_s	MEMSET_S			  || true
 runtest PATH_MAX	PATH_MAX			  || true
 runtest pledge		PLEDGE				  || true
 runtest program_invocation_short_name	PROGRAM_INVOCATION_SHORT_NAME || true
+runtest readpassphrase	READPASSPHRASE			  || true
 runtest reallocarray	REALLOCARRAY			  || true
 runtest recallocarray	RECALLOCARRAY			  || true
 runtest sandbox_init	SANDBOX_INIT	"-Wno-deprecated" || true
@@ -312,6 +315,7 @@ runtest strndup		STRNDUP				  || true
 runtest strnlen		STRNLEN				  || true
 runtest strtonum	STRTONUM			  || true
 runtest sys_queue	SYS_QUEUE			  || true
+runtest sys_tree	SYS_TREE			  || true
 runtest systrace	SYSTRACE			  || true
 runtest unveil		UNVEIL				  || true
 runtest zlib		ZLIB		"" "-lz"	  || true
@@ -330,6 +334,8 @@ exec > config.h
 # Start with prologue.
 
 cat << __HEREDOC__
+#ifndef OCONFIGURE_CONFIG_H
+#define OCONFIGURE_CONFIG_H
 #ifdef __cplusplus
 #error "Do not use C++: this is a C application."
 #endif
@@ -347,9 +353,13 @@ cat << __HEREDOC__
 #endif
 __HEREDOC__
 
-# For the function declaration variables...
+# This is just for size_t.
+# Most of these functions, in the real world, pull in <string.h> or
+# someting that pulls in support for size_t.
+# Our function declarations are standalone, so specify them here.
 
 [ ${HAVE_MD5} -eq 0 -o \
+  ${HAVE_READPASSPHRASE} -eq 0 -o \
   ${HAVE_REALLOCARRAY} -eq 0 -o \
   ${HAVE_RECALLOCARRAY} -eq 0 -o \
   ${HAVE_STRLCAT} -eq 0 -o \
@@ -374,8 +384,10 @@ cat << __HEREDOC__
 #define HAVE_ARC4RANDOM ${HAVE_ARC4RANDOM}
 #define HAVE_B64_NTOP ${HAVE_B64_NTOP}
 #define HAVE_CAPSICUM ${HAVE_CAPSICUM}
+#define HAVE_ENDIAN_H ${HAVE_ENDIAN_H}
 #define HAVE_ERR ${HAVE_ERR}
 #define HAVE_EXPLICIT_BZERO ${HAVE_EXPLICIT_BZERO}
+#define HAVE_GETEXECNAME ${HAVE_GETEXECNAME}
 #define HAVE_GETPROGNAME ${HAVE_GETPROGNAME}
 #define HAVE_INFTIM ${HAVE_INFTIM}
 #define HAVE_MD5 ${HAVE_MD5}
@@ -385,6 +397,7 @@ cat << __HEREDOC__
 #define HAVE_PATH_MAX ${HAVE_PATH_MAX}
 #define HAVE_PLEDGE ${HAVE_PLEDGE}
 #define HAVE_PROGRAM_INVOCATION_SHORT_NAME ${HAVE_PROGRAM_INVOCATION_SHORT_NAME}
+#define HAVE_READPASSPHRASE ${HAVE_READPASSPHRASE}
 #define HAVE_REALLOCARRAY ${HAVE_REALLOCARRAY}
 #define HAVE_RECALLOCARRAY ${HAVE_RECALLOCARRAY}
 #define HAVE_SANDBOX_INIT ${HAVE_SANDBOX_INIT}
@@ -396,6 +409,7 @@ cat << __HEREDOC__
 #define HAVE_STRNLEN ${HAVE_STRNLEN}
 #define HAVE_STRTONUM ${HAVE_STRTONUM}
 #define HAVE_SYS_QUEUE ${HAVE_SYS_QUEUE}
+#define HAVE_SYS_TREE ${HAVE_SYS_TREE}
 #define HAVE_SYSTRACE ${HAVE_SYSTRACE}
 #define HAVE_UNVEIL ${HAVE_UNVEIL}
 #define HAVE_ZLIB ${HAVE_ZLIB}
@@ -444,6 +458,9 @@ if [ ${HAVE_SECCOMP_FILTER} -eq 1 ]; then
 		arm*)
 			echo "#define SECCOMP_AUDIT_ARCH AUDIT_ARCH_ARM"
 			;;
+		aarch64)
+			echo "#define SECCOMP_AUDIT_ARCH AUDIT_ARCH_AARCH64"
+			;;
 	esac
 fi
 
@@ -466,6 +483,17 @@ fi
 
 if [ ${HAVE_GETPROGNAME} -eq 0 ]; then
 	echo "extern const char *getprogname(void);"
+fi
+
+if [ ${HAVE_READPASSPHRASE} -eq 0 ]; then
+	echo "#define RPP_ECHO_OFF 0x00"
+	echo "#define RPP_ECHO_ON 0x01"
+	echo "#define RPP_REQUIRE_TTY 0x02"
+	echo "#define RPP_FORCELOWER 0x04"
+	echo "#define RPP_FORCEUPPER 0x08"
+	echo "#define RPP_SEVENBIT 0x10"
+	echo "#define RPP_STDIN 0x20"
+	echo "char *readpassphrase(const char *, char *, size_t, int);"
 fi
 
 if [ ${HAVE_REALLOCARRAY} -eq 0 ]; then
@@ -497,10 +525,9 @@ if [ ${HAVE_STRTONUM} -eq 0 ]; then
 fi
 
 if [ ${HAVE_SYS_QUEUE} -eq 0 ]; then
-cat <<!!
-
-/*	$OpenBSD$	*/
-/*	$NetBSD: queue.h,v 1.11 1996/05/16 05:17:14 mycroft Exp $	*/
+	cat << __HEREDOC__
+/*	\$OpenBSD$	*/
+/*	\$NetBSD: queue.h,v 1.11 1996/05/16 05:17:14 mycroft Exp \$	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -534,9 +561,6 @@ cat <<!!
  */
 
 /* OPENBSD ORIGINAL: sys/sys/queue.h */
-
-#ifndef	_FAKE_QUEUE_H_
-#define	_FAKE_QUEUE_H_
 
 /*
  * Require for OS/X and other platforms that have old/broken/incomplete
@@ -582,6 +606,7 @@ cat <<!!
 #undef SIMPLEQ_EMPTY
 #undef SIMPLEQ_NEXT
 #undef SIMPLEQ_FOREACH
+#undef SIMPLEQ_FOREACH_SAFE
 #undef SIMPLEQ_INIT
 #undef SIMPLEQ_INSERT_HEAD
 #undef SIMPLEQ_INSERT_TAIL
@@ -1155,10 +1180,762 @@ struct {								\\
 	_Q_INVALIDATE((elm)->field.cqe_prev);				\\
 	_Q_INVALIDATE((elm)->field.cqe_next);				\\
 } while (0)
-#endif	/* !_FAKE_QUEUE_H_ */
-
-!!
+__HEREDOC__
 fi
+
+if [ ${HAVE_SYS_TREE} -eq 0 ]; then
+	cat << __HEREDOC__
+/*	\$OpenBSD$	*/
+/*
+ * Copyright 2002 Niels Provos <provos@citi.umich.edu>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/* OPENBSD ORIGINAL: sys/sys/tree.h */
+
+/*
+ * This file defines data structures for different types of trees:
+ * splay trees and red-black trees.
+ *
+ * A splay tree is a self-organizing data structure.  Every operation
+ * on the tree causes a splay to happen.  The splay moves the requested
+ * node to the root of the tree and partly rebalances it.
+ *
+ * This has the benefit that request locality causes faster lookups as
+ * the requested nodes move to the top of the tree.  On the other hand,
+ * every lookup causes memory writes.
+ *
+ * The Balance Theorem bounds the total access time for m operations
+ * and n inserts on an initially empty tree as O((m + n)lg n).  The
+ * amortized cost for a sequence of m accesses to a splay tree is O(lg n);
+ *
+ * A red-black tree is a binary search tree with the node color as an
+ * extra attribute.  It fulfills a set of conditions:
+ *	- every search path from the root to a leaf consists of the
+ *	  same number of black nodes,
+ *	- each red node (except for the root) has a black parent,
+ *	- each leaf node is black.
+ *
+ * Every operation on a red-black tree is bounded as O(lg n).
+ * The maximum height of a red-black tree is 2lg (n+1).
+ */
+
+#define SPLAY_HEAD(name, type)						\\
+struct name {								\\
+	struct type *sph_root; /* root of the tree */			\\
+}
+
+#define SPLAY_INITIALIZER(root)						\\
+	{ NULL }
+
+#define SPLAY_INIT(root) do {						\\
+	(root)->sph_root = NULL;					\\
+} while (0)
+
+#define SPLAY_ENTRY(type)						\\
+struct {								\\
+	struct type *spe_left; /* left element */			\\
+	struct type *spe_right; /* right element */			\\
+}
+
+#define SPLAY_LEFT(elm, field)		(elm)->field.spe_left
+#define SPLAY_RIGHT(elm, field)		(elm)->field.spe_right
+#define SPLAY_ROOT(head)		(head)->sph_root
+#define SPLAY_EMPTY(head)		(SPLAY_ROOT(head) == NULL)
+
+/* SPLAY_ROTATE_{LEFT,RIGHT} expect that tmp hold SPLAY_{RIGHT,LEFT} */
+#define SPLAY_ROTATE_RIGHT(head, tmp, field) do {			\\
+	SPLAY_LEFT((head)->sph_root, field) = SPLAY_RIGHT(tmp, field);	\\
+	SPLAY_RIGHT(tmp, field) = (head)->sph_root;			\\
+	(head)->sph_root = tmp;						\\
+} while (0)
+	
+#define SPLAY_ROTATE_LEFT(head, tmp, field) do {			\\
+	SPLAY_RIGHT((head)->sph_root, field) = SPLAY_LEFT(tmp, field);	\\
+	SPLAY_LEFT(tmp, field) = (head)->sph_root;			\\
+	(head)->sph_root = tmp;						\\
+} while (0)
+
+#define SPLAY_LINKLEFT(head, tmp, field) do {				\\
+	SPLAY_LEFT(tmp, field) = (head)->sph_root;			\\
+	tmp = (head)->sph_root;						\\
+	(head)->sph_root = SPLAY_LEFT((head)->sph_root, field);		\\
+} while (0)
+
+#define SPLAY_LINKRIGHT(head, tmp, field) do {				\\
+	SPLAY_RIGHT(tmp, field) = (head)->sph_root;			\\
+	tmp = (head)->sph_root;						\\
+	(head)->sph_root = SPLAY_RIGHT((head)->sph_root, field);	\\
+} while (0)
+
+#define SPLAY_ASSEMBLE(head, node, left, right, field) do {		\\
+	SPLAY_RIGHT(left, field) = SPLAY_LEFT((head)->sph_root, field);	\\
+	SPLAY_LEFT(right, field) = SPLAY_RIGHT((head)->sph_root, field);\\
+	SPLAY_LEFT((head)->sph_root, field) = SPLAY_RIGHT(node, field);	\\
+	SPLAY_RIGHT((head)->sph_root, field) = SPLAY_LEFT(node, field);	\\
+} while (0)
+
+/* Generates prototypes and inline functions */
+
+#define SPLAY_PROTOTYPE(name, type, field, cmp)				\\
+void name##_SPLAY(struct name *, struct type *);			\\
+void name##_SPLAY_MINMAX(struct name *, int);				\\
+struct type *name##_SPLAY_INSERT(struct name *, struct type *);		\\
+struct type *name##_SPLAY_REMOVE(struct name *, struct type *);		\\
+									\\
+/* Finds the node with the same key as elm */				\\
+static __inline struct type *						\\
+name##_SPLAY_FIND(struct name *head, struct type *elm)			\\
+{									\\
+	if (SPLAY_EMPTY(head))						\\
+		return(NULL);						\\
+	name##_SPLAY(head, elm);					\\
+	if ((cmp)(elm, (head)->sph_root) == 0)				\\
+		return (head->sph_root);				\\
+	return (NULL);							\\
+}									\\
+									\\
+static __inline struct type *						\\
+name##_SPLAY_NEXT(struct name *head, struct type *elm)			\\
+{									\\
+	name##_SPLAY(head, elm);					\\
+	if (SPLAY_RIGHT(elm, field) != NULL) {				\\
+		elm = SPLAY_RIGHT(elm, field);				\\
+		while (SPLAY_LEFT(elm, field) != NULL) {		\\
+			elm = SPLAY_LEFT(elm, field);			\\
+		}							\\
+	} else								\\
+		elm = NULL;						\\
+	return (elm);							\\
+}									\\
+									\\
+static __inline struct type *						\\
+name##_SPLAY_MIN_MAX(struct name *head, int val)			\\
+{									\\
+	name##_SPLAY_MINMAX(head, val);					\\
+        return (SPLAY_ROOT(head));					\\
+}
+
+/* Main splay operation.
+ * Moves node close to the key of elm to top
+ */
+#define SPLAY_GENERATE(name, type, field, cmp)				\\
+struct type *								\\
+name##_SPLAY_INSERT(struct name *head, struct type *elm)		\\
+{									\\
+    if (SPLAY_EMPTY(head)) {						\\
+	    SPLAY_LEFT(elm, field) = SPLAY_RIGHT(elm, field) = NULL;	\\
+    } else {								\\
+	    int __comp;							\\
+	    name##_SPLAY(head, elm);					\\
+	    __comp = (cmp)(elm, (head)->sph_root);			\\
+	    if(__comp < 0) {						\\
+		    SPLAY_LEFT(elm, field) = SPLAY_LEFT((head)->sph_root, field);\\
+		    SPLAY_RIGHT(elm, field) = (head)->sph_root;		\\
+		    SPLAY_LEFT((head)->sph_root, field) = NULL;		\\
+	    } else if (__comp > 0) {					\\
+		    SPLAY_RIGHT(elm, field) = SPLAY_RIGHT((head)->sph_root, field);\\
+		    SPLAY_LEFT(elm, field) = (head)->sph_root;		\\
+		    SPLAY_RIGHT((head)->sph_root, field) = NULL;	\\
+	    } else							\\
+		    return ((head)->sph_root);				\\
+    }									\\
+    (head)->sph_root = (elm);						\\
+    return (NULL);							\\
+}									\\
+									\\
+struct type *								\\
+name##_SPLAY_REMOVE(struct name *head, struct type *elm)		\\
+{									\\
+	struct type *__tmp;						\\
+	if (SPLAY_EMPTY(head))						\\
+		return (NULL);						\\
+	name##_SPLAY(head, elm);					\\
+	if ((cmp)(elm, (head)->sph_root) == 0) {			\\
+		if (SPLAY_LEFT((head)->sph_root, field) == NULL) {	\\
+			(head)->sph_root = SPLAY_RIGHT((head)->sph_root, field);\\
+		} else {						\\
+			__tmp = SPLAY_RIGHT((head)->sph_root, field);	\\
+			(head)->sph_root = SPLAY_LEFT((head)->sph_root, field);\\
+			name##_SPLAY(head, elm);			\\
+			SPLAY_RIGHT((head)->sph_root, field) = __tmp;	\\
+		}							\\
+		return (elm);						\\
+	}								\\
+	return (NULL);							\\
+}									\\
+									\\
+void									\\
+name##_SPLAY(struct name *head, struct type *elm)			\\
+{									\\
+	struct type __node, *__left, *__right, *__tmp;			\\
+	int __comp;							\\
+\\
+	SPLAY_LEFT(&__node, field) = SPLAY_RIGHT(&__node, field) = NULL;\\
+	__left = __right = &__node;					\\
+\\
+	while ((__comp = (cmp)(elm, (head)->sph_root))) {		\\
+		if (__comp < 0) {					\\
+			__tmp = SPLAY_LEFT((head)->sph_root, field);	\\
+			if (__tmp == NULL)				\\
+				break;					\\
+			if ((cmp)(elm, __tmp) < 0){			\\
+				SPLAY_ROTATE_RIGHT(head, __tmp, field);	\\
+				if (SPLAY_LEFT((head)->sph_root, field) == NULL)\\
+					break;				\\
+			}						\\
+			SPLAY_LINKLEFT(head, __right, field);		\\
+		} else if (__comp > 0) {				\\
+			__tmp = SPLAY_RIGHT((head)->sph_root, field);	\\
+			if (__tmp == NULL)				\\
+				break;					\\
+			if ((cmp)(elm, __tmp) > 0){			\\
+				SPLAY_ROTATE_LEFT(head, __tmp, field);	\\
+				if (SPLAY_RIGHT((head)->sph_root, field) == NULL)\\
+					break;				\\
+			}						\\
+			SPLAY_LINKRIGHT(head, __left, field);		\\
+		}							\\
+	}								\\
+	SPLAY_ASSEMBLE(head, &__node, __left, __right, field);		\\
+}									\\
+									\\
+/* Splay with either the minimum or the maximum element			\\
+ * Used to find minimum or maximum element in tree.			\\
+ */									\\
+void name##_SPLAY_MINMAX(struct name *head, int __comp) \\
+{									\\
+	struct type __node, *__left, *__right, *__tmp;			\\
+\\
+	SPLAY_LEFT(&__node, field) = SPLAY_RIGHT(&__node, field) = NULL;\\
+	__left = __right = &__node;					\\
+\\
+	while (1) {							\\
+		if (__comp < 0) {					\\
+			__tmp = SPLAY_LEFT((head)->sph_root, field);	\\
+			if (__tmp == NULL)				\\
+				break;					\\
+			if (__comp < 0){				\\
+				SPLAY_ROTATE_RIGHT(head, __tmp, field);	\\
+				if (SPLAY_LEFT((head)->sph_root, field) == NULL)\\
+					break;				\\
+			}						\\
+			SPLAY_LINKLEFT(head, __right, field);		\\
+		} else if (__comp > 0) {				\\
+			__tmp = SPLAY_RIGHT((head)->sph_root, field);	\\
+			if (__tmp == NULL)				\\
+				break;					\\
+			if (__comp > 0) {				\\
+				SPLAY_ROTATE_LEFT(head, __tmp, field);	\\
+				if (SPLAY_RIGHT((head)->sph_root, field) == NULL)\\
+					break;				\\
+			}						\\
+			SPLAY_LINKRIGHT(head, __left, field);		\\
+		}							\\
+	}								\\
+	SPLAY_ASSEMBLE(head, &__node, __left, __right, field);		\\
+}
+
+#define SPLAY_NEGINF	-1
+#define SPLAY_INF	1
+
+#define SPLAY_INSERT(name, x, y)	name##_SPLAY_INSERT(x, y)
+#define SPLAY_REMOVE(name, x, y)	name##_SPLAY_REMOVE(x, y)
+#define SPLAY_FIND(name, x, y)		name##_SPLAY_FIND(x, y)
+#define SPLAY_NEXT(name, x, y)		name##_SPLAY_NEXT(x, y)
+#define SPLAY_MIN(name, x)		(SPLAY_EMPTY(x) ? NULL	\\
+					: name##_SPLAY_MIN_MAX(x, SPLAY_NEGINF))
+#define SPLAY_MAX(name, x)		(SPLAY_EMPTY(x) ? NULL	\\
+					: name##_SPLAY_MIN_MAX(x, SPLAY_INF))
+
+#define SPLAY_FOREACH(x, name, head)					\\
+	for ((x) = SPLAY_MIN(name, head);				\\
+	     (x) != NULL;						\\
+	     (x) = SPLAY_NEXT(name, head, x))
+
+/* Macros that define a red-black tree */
+#define RB_HEAD(name, type)						\\
+struct name {								\\
+	struct type *rbh_root; /* root of the tree */			\\
+}
+
+#define RB_INITIALIZER(root)						\\
+	{ NULL }
+
+#define RB_INIT(root) do {						\\
+	(root)->rbh_root = NULL;					\\
+} while (0)
+
+#define RB_BLACK	0
+#define RB_RED		1
+#define RB_ENTRY(type)							\\
+struct {								\\
+	struct type *rbe_left;		/* left element */		\\
+	struct type *rbe_right;		/* right element */		\\
+	struct type *rbe_parent;	/* parent element */		\\
+	int rbe_color;			/* node color */		\\
+}
+
+#define RB_LEFT(elm, field)		(elm)->field.rbe_left
+#define RB_RIGHT(elm, field)		(elm)->field.rbe_right
+#define RB_PARENT(elm, field)		(elm)->field.rbe_parent
+#define RB_COLOR(elm, field)		(elm)->field.rbe_color
+#define RB_ROOT(head)			(head)->rbh_root
+#define RB_EMPTY(head)			(RB_ROOT(head) == NULL)
+
+#define RB_SET(elm, parent, field) do {					\\
+	RB_PARENT(elm, field) = parent;					\\
+	RB_LEFT(elm, field) = RB_RIGHT(elm, field) = NULL;		\\
+	RB_COLOR(elm, field) = RB_RED;					\\
+} while (0)
+
+#define RB_SET_BLACKRED(black, red, field) do {				\\
+	RB_COLOR(black, field) = RB_BLACK;				\\
+	RB_COLOR(red, field) = RB_RED;					\\
+} while (0)
+
+#ifndef RB_AUGMENT
+#define RB_AUGMENT(x)	do {} while (0)
+#endif
+
+#define RB_ROTATE_LEFT(head, elm, tmp, field) do {			\\
+	(tmp) = RB_RIGHT(elm, field);					\\
+	if ((RB_RIGHT(elm, field) = RB_LEFT(tmp, field))) {		\\
+		RB_PARENT(RB_LEFT(tmp, field), field) = (elm);		\\
+	}								\\
+	RB_AUGMENT(elm);						\\
+	if ((RB_PARENT(tmp, field) = RB_PARENT(elm, field))) {		\\
+		if ((elm) == RB_LEFT(RB_PARENT(elm, field), field))	\\
+			RB_LEFT(RB_PARENT(elm, field), field) = (tmp);	\\
+		else							\\
+			RB_RIGHT(RB_PARENT(elm, field), field) = (tmp);	\\
+	} else								\\
+		(head)->rbh_root = (tmp);				\\
+	RB_LEFT(tmp, field) = (elm);					\\
+	RB_PARENT(elm, field) = (tmp);					\\
+	RB_AUGMENT(tmp);						\\
+	if ((RB_PARENT(tmp, field)))					\\
+		RB_AUGMENT(RB_PARENT(tmp, field));			\\
+} while (0)
+
+#define RB_ROTATE_RIGHT(head, elm, tmp, field) do {			\\
+	(tmp) = RB_LEFT(elm, field);					\\
+	if ((RB_LEFT(elm, field) = RB_RIGHT(tmp, field))) {		\\
+		RB_PARENT(RB_RIGHT(tmp, field), field) = (elm);		\\
+	}								\\
+	RB_AUGMENT(elm);						\\
+	if ((RB_PARENT(tmp, field) = RB_PARENT(elm, field))) {		\\
+		if ((elm) == RB_LEFT(RB_PARENT(elm, field), field))	\\
+			RB_LEFT(RB_PARENT(elm, field), field) = (tmp);	\\
+		else							\\
+			RB_RIGHT(RB_PARENT(elm, field), field) = (tmp);	\\
+	} else								\\
+		(head)->rbh_root = (tmp);				\\
+	RB_RIGHT(tmp, field) = (elm);					\\
+	RB_PARENT(elm, field) = (tmp);					\\
+	RB_AUGMENT(tmp);						\\
+	if ((RB_PARENT(tmp, field)))					\\
+		RB_AUGMENT(RB_PARENT(tmp, field));			\\
+} while (0)
+
+/* Generates prototypes and inline functions */
+#define	RB_PROTOTYPE(name, type, field, cmp)				\\
+	RB_PROTOTYPE_INTERNAL(name, type, field, cmp,)
+#define	RB_PROTOTYPE_STATIC(name, type, field, cmp)			\\
+	RB_PROTOTYPE_INTERNAL(name, type, field, cmp, __attribute__((__unused__)) static)
+#define RB_PROTOTYPE_INTERNAL(name, type, field, cmp, attr)		\\
+attr void name##_RB_INSERT_COLOR(struct name *, struct type *);		\\
+attr void name##_RB_REMOVE_COLOR(struct name *, struct type *, struct type *);\\
+attr struct type *name##_RB_REMOVE(struct name *, struct type *);	\\
+attr struct type *name##_RB_INSERT(struct name *, struct type *);	\\
+attr struct type *name##_RB_FIND(struct name *, struct type *);		\\
+attr struct type *name##_RB_NFIND(struct name *, struct type *);	\\
+attr struct type *name##_RB_NEXT(struct type *);			\\
+attr struct type *name##_RB_PREV(struct type *);			\\
+attr struct type *name##_RB_MINMAX(struct name *, int);			\\
+									\\
+
+/* Main rb operation.
+ * Moves node close to the key of elm to top
+ */
+#define	RB_GENERATE(name, type, field, cmp)				\\
+	RB_GENERATE_INTERNAL(name, type, field, cmp,)
+#define	RB_GENERATE_STATIC(name, type, field, cmp)			\\
+	RB_GENERATE_INTERNAL(name, type, field, cmp, __attribute__((__unused__)) static)
+#define RB_GENERATE_INTERNAL(name, type, field, cmp, attr)		\\
+attr void								\\
+name##_RB_INSERT_COLOR(struct name *head, struct type *elm)		\\
+{									\\
+	struct type *parent, *gparent, *tmp;				\\
+	while ((parent = RB_PARENT(elm, field)) &&			\\
+	    RB_COLOR(parent, field) == RB_RED) {			\\
+		gparent = RB_PARENT(parent, field);			\\
+		if (parent == RB_LEFT(gparent, field)) {		\\
+			tmp = RB_RIGHT(gparent, field);			\\
+			if (tmp && RB_COLOR(tmp, field) == RB_RED) {	\\
+				RB_COLOR(tmp, field) = RB_BLACK;	\\
+				RB_SET_BLACKRED(parent, gparent, field);\\
+				elm = gparent;				\\
+				continue;				\\
+			}						\\
+			if (RB_RIGHT(parent, field) == elm) {		\\
+				RB_ROTATE_LEFT(head, parent, tmp, field);\\
+				tmp = parent;				\\
+				parent = elm;				\\
+				elm = tmp;				\\
+			}						\\
+			RB_SET_BLACKRED(parent, gparent, field);	\\
+			RB_ROTATE_RIGHT(head, gparent, tmp, field);	\\
+		} else {						\\
+			tmp = RB_LEFT(gparent, field);			\\
+			if (tmp && RB_COLOR(tmp, field) == RB_RED) {	\\
+				RB_COLOR(tmp, field) = RB_BLACK;	\\
+				RB_SET_BLACKRED(parent, gparent, field);\\
+				elm = gparent;				\\
+				continue;				\\
+			}						\\
+			if (RB_LEFT(parent, field) == elm) {		\\
+				RB_ROTATE_RIGHT(head, parent, tmp, field);\\
+				tmp = parent;				\\
+				parent = elm;				\\
+				elm = tmp;				\\
+			}						\\
+			RB_SET_BLACKRED(parent, gparent, field);	\\
+			RB_ROTATE_LEFT(head, gparent, tmp, field);	\\
+		}							\\
+	}								\\
+	RB_COLOR(head->rbh_root, field) = RB_BLACK;			\\
+}									\\
+									\\
+attr void								\\
+name##_RB_REMOVE_COLOR(struct name *head, struct type *parent, struct type *elm) \\
+{									\\
+	struct type *tmp;						\\
+	while ((elm == NULL || RB_COLOR(elm, field) == RB_BLACK) &&	\\
+	    elm != RB_ROOT(head)) {					\\
+		if (RB_LEFT(parent, field) == elm) {			\\
+			tmp = RB_RIGHT(parent, field);			\\
+			if (RB_COLOR(tmp, field) == RB_RED) {		\\
+				RB_SET_BLACKRED(tmp, parent, field);	\\
+				RB_ROTATE_LEFT(head, parent, tmp, field);\\
+				tmp = RB_RIGHT(parent, field);		\\
+			}						\\
+			if ((RB_LEFT(tmp, field) == NULL ||		\\
+			    RB_COLOR(RB_LEFT(tmp, field), field) == RB_BLACK) &&\\
+			    (RB_RIGHT(tmp, field) == NULL ||		\\
+			    RB_COLOR(RB_RIGHT(tmp, field), field) == RB_BLACK)) {\\
+				RB_COLOR(tmp, field) = RB_RED;		\\
+				elm = parent;				\\
+				parent = RB_PARENT(elm, field);		\\
+			} else {					\\
+				if (RB_RIGHT(tmp, field) == NULL ||	\\
+				    RB_COLOR(RB_RIGHT(tmp, field), field) == RB_BLACK) {\\
+					struct type *oleft;		\\
+					if ((oleft = RB_LEFT(tmp, field)))\\
+						RB_COLOR(oleft, field) = RB_BLACK;\\
+					RB_COLOR(tmp, field) = RB_RED;	\\
+					RB_ROTATE_RIGHT(head, tmp, oleft, field);\\
+					tmp = RB_RIGHT(parent, field);	\\
+				}					\\
+				RB_COLOR(tmp, field) = RB_COLOR(parent, field);\\
+				RB_COLOR(parent, field) = RB_BLACK;	\\
+				if (RB_RIGHT(tmp, field))		\\
+					RB_COLOR(RB_RIGHT(tmp, field), field) = RB_BLACK;\\
+				RB_ROTATE_LEFT(head, parent, tmp, field);\\
+				elm = RB_ROOT(head);			\\
+				break;					\\
+			}						\\
+		} else {						\\
+			tmp = RB_LEFT(parent, field);			\\
+			if (RB_COLOR(tmp, field) == RB_RED) {		\\
+				RB_SET_BLACKRED(tmp, parent, field);	\\
+				RB_ROTATE_RIGHT(head, parent, tmp, field);\\
+				tmp = RB_LEFT(parent, field);		\\
+			}						\\
+			if ((RB_LEFT(tmp, field) == NULL ||		\\
+			    RB_COLOR(RB_LEFT(tmp, field), field) == RB_BLACK) &&\\
+			    (RB_RIGHT(tmp, field) == NULL ||		\\
+			    RB_COLOR(RB_RIGHT(tmp, field), field) == RB_BLACK)) {\\
+				RB_COLOR(tmp, field) = RB_RED;		\\
+				elm = parent;				\\
+				parent = RB_PARENT(elm, field);		\\
+			} else {					\\
+				if (RB_LEFT(tmp, field) == NULL ||	\\
+				    RB_COLOR(RB_LEFT(tmp, field), field) == RB_BLACK) {\\
+					struct type *oright;		\\
+					if ((oright = RB_RIGHT(tmp, field)))\\
+						RB_COLOR(oright, field) = RB_BLACK;\\
+					RB_COLOR(tmp, field) = RB_RED;	\\
+					RB_ROTATE_LEFT(head, tmp, oright, field);\\
+					tmp = RB_LEFT(parent, field);	\\
+				}					\\
+				RB_COLOR(tmp, field) = RB_COLOR(parent, field);\\
+				RB_COLOR(parent, field) = RB_BLACK;	\\
+				if (RB_LEFT(tmp, field))		\\
+					RB_COLOR(RB_LEFT(tmp, field), field) = RB_BLACK;\\
+				RB_ROTATE_RIGHT(head, parent, tmp, field);\\
+				elm = RB_ROOT(head);			\\
+				break;					\\
+			}						\\
+		}							\\
+	}								\\
+	if (elm)							\\
+		RB_COLOR(elm, field) = RB_BLACK;			\\
+}									\\
+									\\
+attr struct type *							\\
+name##_RB_REMOVE(struct name *head, struct type *elm)			\\
+{									\\
+	struct type *child, *parent, *old = elm;			\\
+	int color;							\\
+	if (RB_LEFT(elm, field) == NULL)				\\
+		child = RB_RIGHT(elm, field);				\\
+	else if (RB_RIGHT(elm, field) == NULL)				\\
+		child = RB_LEFT(elm, field);				\\
+	else {								\\
+		struct type *left;					\\
+		elm = RB_RIGHT(elm, field);				\\
+		while ((left = RB_LEFT(elm, field)))			\\
+			elm = left;					\\
+		child = RB_RIGHT(elm, field);				\\
+		parent = RB_PARENT(elm, field);				\\
+		color = RB_COLOR(elm, field);				\\
+		if (child)						\\
+			RB_PARENT(child, field) = parent;		\\
+		if (parent) {						\\
+			if (RB_LEFT(parent, field) == elm)		\\
+				RB_LEFT(parent, field) = child;		\\
+			else						\\
+				RB_RIGHT(parent, field) = child;	\\
+			RB_AUGMENT(parent);				\\
+		} else							\\
+			RB_ROOT(head) = child;				\\
+		if (RB_PARENT(elm, field) == old)			\\
+			parent = elm;					\\
+		(elm)->field = (old)->field;				\\
+		if (RB_PARENT(old, field)) {				\\
+			if (RB_LEFT(RB_PARENT(old, field), field) == old)\\
+				RB_LEFT(RB_PARENT(old, field), field) = elm;\\
+			else						\\
+				RB_RIGHT(RB_PARENT(old, field), field) = elm;\\
+			RB_AUGMENT(RB_PARENT(old, field));		\\
+		} else							\\
+			RB_ROOT(head) = elm;				\\
+		RB_PARENT(RB_LEFT(old, field), field) = elm;		\\
+		if (RB_RIGHT(old, field))				\\
+			RB_PARENT(RB_RIGHT(old, field), field) = elm;	\\
+		if (parent) {						\\
+			left = parent;					\\
+			do {						\\
+				RB_AUGMENT(left);			\\
+			} while ((left = RB_PARENT(left, field)));	\\
+		}							\\
+		goto color;						\\
+	}								\\
+	parent = RB_PARENT(elm, field);					\\
+	color = RB_COLOR(elm, field);					\\
+	if (child)							\\
+		RB_PARENT(child, field) = parent;			\\
+	if (parent) {							\\
+		if (RB_LEFT(parent, field) == elm)			\\
+			RB_LEFT(parent, field) = child;			\\
+		else							\\
+			RB_RIGHT(parent, field) = child;		\\
+		RB_AUGMENT(parent);					\\
+	} else								\\
+		RB_ROOT(head) = child;					\\
+color:									\\
+	if (color == RB_BLACK)						\\
+		name##_RB_REMOVE_COLOR(head, parent, child);		\\
+	return (old);							\\
+}									\\
+									\\
+/* Inserts a node into the RB tree */					\\
+attr struct type *							\\
+name##_RB_INSERT(struct name *head, struct type *elm)			\\
+{									\\
+	struct type *tmp;						\\
+	struct type *parent = NULL;					\\
+	int comp = 0;							\\
+	tmp = RB_ROOT(head);						\\
+	while (tmp) {							\\
+		parent = tmp;						\\
+		comp = (cmp)(elm, parent);				\\
+		if (comp < 0)						\\
+			tmp = RB_LEFT(tmp, field);			\\
+		else if (comp > 0)					\\
+			tmp = RB_RIGHT(tmp, field);			\\
+		else							\\
+			return (tmp);					\\
+	}								\\
+	RB_SET(elm, parent, field);					\\
+	if (parent != NULL) {						\\
+		if (comp < 0)						\\
+			RB_LEFT(parent, field) = elm;			\\
+		else							\\
+			RB_RIGHT(parent, field) = elm;			\\
+		RB_AUGMENT(parent);					\\
+	} else								\\
+		RB_ROOT(head) = elm;					\\
+	name##_RB_INSERT_COLOR(head, elm);				\\
+	return (NULL);							\\
+}									\\
+									\\
+/* Finds the node with the same key as elm */				\\
+attr struct type *							\\
+name##_RB_FIND(struct name *head, struct type *elm)			\\
+{									\\
+	struct type *tmp = RB_ROOT(head);				\\
+	int comp;							\\
+	while (tmp) {							\\
+		comp = cmp(elm, tmp);					\\
+		if (comp < 0)						\\
+			tmp = RB_LEFT(tmp, field);			\\
+		else if (comp > 0)					\\
+			tmp = RB_RIGHT(tmp, field);			\\
+		else							\\
+			return (tmp);					\\
+	}								\\
+	return (NULL);							\\
+}									\\
+									\\
+/* Finds the first node greater than or equal to the search key */	\\
+attr struct type *							\\
+name##_RB_NFIND(struct name *head, struct type *elm)			\\
+{									\\
+	struct type *tmp = RB_ROOT(head);				\\
+	struct type *res = NULL;					\\
+	int comp;							\\
+	while (tmp) {							\\
+		comp = cmp(elm, tmp);					\\
+		if (comp < 0) {						\\
+			res = tmp;					\\
+			tmp = RB_LEFT(tmp, field);			\\
+		}							\\
+		else if (comp > 0)					\\
+			tmp = RB_RIGHT(tmp, field);			\\
+		else							\\
+			return (tmp);					\\
+	}								\\
+	return (res);							\\
+}									\\
+									\\
+/* ARGSUSED */								\\
+attr struct type *							\\
+name##_RB_NEXT(struct type *elm)					\\
+{									\\
+	if (RB_RIGHT(elm, field)) {					\\
+		elm = RB_RIGHT(elm, field);				\\
+		while (RB_LEFT(elm, field))				\\
+			elm = RB_LEFT(elm, field);			\\
+	} else {							\\
+		if (RB_PARENT(elm, field) &&				\\
+		    (elm == RB_LEFT(RB_PARENT(elm, field), field)))	\\
+			elm = RB_PARENT(elm, field);			\\
+		else {							\\
+			while (RB_PARENT(elm, field) &&			\\
+			    (elm == RB_RIGHT(RB_PARENT(elm, field), field)))\\
+				elm = RB_PARENT(elm, field);		\\
+			elm = RB_PARENT(elm, field);			\\
+		}							\\
+	}								\\
+	return (elm);							\\
+}									\\
+									\\
+/* ARGSUSED */								\\
+attr struct type *							\\
+name##_RB_PREV(struct type *elm)					\\
+{									\\
+	if (RB_LEFT(elm, field)) {					\\
+		elm = RB_LEFT(elm, field);				\\
+		while (RB_RIGHT(elm, field))				\\
+			elm = RB_RIGHT(elm, field);			\\
+	} else {							\\
+		if (RB_PARENT(elm, field) &&				\\
+		    (elm == RB_RIGHT(RB_PARENT(elm, field), field)))	\\
+			elm = RB_PARENT(elm, field);			\\
+		else {							\\
+			while (RB_PARENT(elm, field) &&			\\
+			    (elm == RB_LEFT(RB_PARENT(elm, field), field)))\\
+				elm = RB_PARENT(elm, field);		\\
+			elm = RB_PARENT(elm, field);			\\
+		}							\\
+	}								\\
+	return (elm);							\\
+}									\\
+									\\
+attr struct type *							\\
+name##_RB_MINMAX(struct name *head, int val)				\\
+{									\\
+	struct type *tmp = RB_ROOT(head);				\\
+	struct type *parent = NULL;					\\
+	while (tmp) {							\\
+		parent = tmp;						\\
+		if (val < 0)						\\
+			tmp = RB_LEFT(tmp, field);			\\
+		else							\\
+			tmp = RB_RIGHT(tmp, field);			\\
+	}								\\
+	return (parent);						\\
+}
+
+#define RB_NEGINF	-1
+#define RB_INF	1
+
+#define RB_INSERT(name, x, y)	name##_RB_INSERT(x, y)
+#define RB_REMOVE(name, x, y)	name##_RB_REMOVE(x, y)
+#define RB_FIND(name, x, y)	name##_RB_FIND(x, y)
+#define RB_NFIND(name, x, y)	name##_RB_NFIND(x, y)
+#define RB_NEXT(name, x, y)	name##_RB_NEXT(y)
+#define RB_PREV(name, x, y)	name##_RB_PREV(y)
+#define RB_MIN(name, x)		name##_RB_MINMAX(x, RB_NEGINF)
+#define RB_MAX(name, x)		name##_RB_MINMAX(x, RB_INF)
+
+#define RB_FOREACH(x, name, head)					\\
+	for ((x) = RB_MIN(name, head);					\\
+	     (x) != NULL;						\\
+	     (x) = name##_RB_NEXT(x))
+
+#define RB_FOREACH_SAFE(x, name, head, y)				\\
+	for ((x) = RB_MIN(name, head);					\\
+	    ((x) != NULL) && ((y) = name##_RB_NEXT(x), 1);		\\
+	     (x) = (y))
+
+#define RB_FOREACH_REVERSE(x, name, head)				\\
+	for ((x) = RB_MAX(name, head);					\\
+	     (x) != NULL;						\\
+	     (x) = name##_RB_PREV(x))
+
+#define RB_FOREACH_REVERSE_SAFE(x, name, head, y)			\\
+	for ((x) = RB_MAX(name, head);					\\
+	    ((x) != NULL) && ((y) = name##_RB_PREV(x), 1);		\\
+	     (x) = (y))
+__HEREDOC__
+fi
+
+cat << __HEREDOC__
+#endif /*!OCONFIGURE_CONFIG_H*/
+__HEREDOC__
 
 echo "config.h: written" 1>&2
 echo "config.h: written" 1>&3
@@ -1189,6 +1966,9 @@ CC		= ${CC}
 CFLAGS		= ${CFLAGS}
 CPPFLAGS	= ${CPPFLAGS}
 LDADD		= ${LDADD}
+LDADD_B64_NTOP	= ${LDADD_B64_NTOP}
+LDADD_MD5	= ${LDADD_MD5}
+LDADD_ZLIB	= ${LDADD_ZLIB}
 LDFLAGS		= ${LDFLAGS}
 STATIC		= ${STATIC}
 PREFIX		= ${PREFIX}

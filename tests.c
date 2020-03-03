@@ -39,6 +39,15 @@ main(void)
 	return(0);
 }
 #endif /* TEST_CAPSICUM */
+#if TEST_ENDIAN_H
+#include <endian.h>
+
+int
+main(void)
+{
+	return !htole32(23);
+}
+#endif /* TEST_ENDIAN_H */
 #if TEST_ERR
 /*
  * Copyright (c) 2015 Ingo Schwarze <schwarze@openbsd.org>
@@ -80,6 +89,18 @@ main(void)
 	return(0);
 }
 #endif /* TEST_EXPLICIT_BZERO */
+#if TEST_GETEXECNAME
+#include <stdlib.h>
+
+int
+main(void)
+{
+	const char * progname;
+
+	progname = getexecname();
+	return progname == NULL;
+}
+#endif /* TEST_GETEXECNAME */
 #if TEST_GETPROGNAME
 #include <stdlib.h>
 
@@ -210,6 +231,16 @@ main(void)
 	return !program_invocation_short_name;
 }
 #endif /* TEST_PROGRAM_INVOCATION_SHORT_NAME */
+#if TEST_READPASSPHRASE
+#include <stddef.h>
+#include <readpassphrase.h>
+
+int
+main(void)
+{
+	return !!readpassphrase("prompt: ", NULL, 0, 0);
+}
+#endif /* TEST_READPASSPHRASE */
 #if TEST_REALLOCARRAY
 #include <stdlib.h>
 
@@ -392,6 +423,46 @@ main(void)
 	return 0;
 }
 #endif /* TEST_SYS_QUEUE */
+#if TEST_SYS_TREE
+#include <sys/tree.h>
+#include <stdlib.h>
+
+struct node {
+	RB_ENTRY(node) entry;
+	int i;
+};
+
+static int
+intcmp(struct node *e1, struct node *e2)
+{
+	return (e1->i < e2->i ? -1 : e1->i > e2->i);
+}
+
+RB_HEAD(inttree, node) head = RB_INITIALIZER(&head);
+RB_PROTOTYPE(inttree, node, entry, intcmp)
+RB_GENERATE(inttree, node, entry, intcmp)
+
+int testdata[] = {
+	20, 16, 17, 13, 3, 6, 1, 8, 2, 4
+};
+
+int
+main(void)
+{
+	size_t i;
+	struct node *n;
+
+	for (i = 0; i < sizeof(testdata) / sizeof(testdata[0]); i++) {
+		if ((n = malloc(sizeof(struct node))) == NULL)
+			return 1;
+		n->i = testdata[i];
+		RB_INSERT(inttree, &head, n);
+	}
+
+	return 0;
+}
+
+#endif /* TEST_SYS_TREE */
 #if TEST_SYSTRACE
 #include <sys/param.h>
 #include <dev/systrace.h>
