@@ -19,7 +19,12 @@
 #include <sys/types.h>
 
 #include <assert.h>
-#include <endian.h>
+#include <assert.h>
+#if HAVE_ENDIAN_H
+# include <endian.h>
+#else
+# include <sys/endian.h>
+#endif
 #include <stdint.h>
 #include <stdlib.h>
 
