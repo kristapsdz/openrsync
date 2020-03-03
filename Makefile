@@ -53,6 +53,19 @@ uninstall:
 clean:
 	rm -f $(ALLOBJS) openrsync $(AFLS)
 
+distcheck:
+	mandoc -Tlint -Werror *.[15]
+	rm -rf .distcheck
+	mkdir .distcheck
+	cp *.c extern.h md4.h *.[15] configure Makefile .distcheck
+	( cd .distcheck && ./configure PREFIX=prefix )
+	( cd .distcheck && $(MAKE) )
+	( cd .distcheck && $(MAKE) install )
+	rm -rf .distcheck
+
+regress:
+	# Do nothing.
+
 $(ALLOBJS) $(AFLS): extern.h config.h
 
 blocks.o downloader.o hash.o md4.o: md4.h
