@@ -69,7 +69,10 @@ enum	tmpmode {
 #ifndef O_RSYNC
 # define O_RSYNC 0
 #endif
-#define MKOTEMP_FLAGS	(O_APPEND | O_CLOEXEC | O_DSYNC | O_RSYNC | O_SYNC)
+#ifndef O_FSYNC
+# define O_FSYNC 0
+#endif
+#define MKOTEMP_FLAGS	(O_APPEND | O_CLOEXEC | O_DSYNC | O_RSYNC | O_SYNC | O_FSYNC)
 
 #ifndef nitems
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
