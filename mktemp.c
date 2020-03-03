@@ -63,6 +63,12 @@ enum	tmpmode {
 /*
  * The only flags we'll accept for creation of the temporary file.
  */
+#ifndef O_DSYNC
+# define O_DSYNC 0
+#endif
+#ifndef O_RSYNC
+# define O_RSYNC 0
+#endif
 #define MKOTEMP_FLAGS	(O_APPEND | O_CLOEXEC | O_DSYNC | O_RSYNC | O_SYNC)
 
 #ifndef nitems
