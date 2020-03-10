@@ -48,6 +48,15 @@ main(void)
 	return !htole32(23);
 }
 #endif /* TEST_ENDIAN_H */
+#if TEST_SYS_ENDIAN_H
+#include <sys/endian.h>
+
+int
+main(void)
+{
+	return !htole32(23);
+}
+#endif /* TEST_SYS_ENDIAN_H */
 #if TEST_ERR
 /*
  * Copyright (c) 2015 Ingo Schwarze <schwarze@openbsd.org>
@@ -179,6 +188,15 @@ int main(void)
 	return 0;
 }
 #endif /* TEST_MEMSET_S */
+#if TEST_OSBYTEORDER_H
+#include <libkern/OSByteOrder.h>
+
+int
+main(void)
+{
+	return !OSSwapHostToLittleInt32(23);
+}
+#endif /* TEST_OSBYTEORDER_H */
 #if TEST_PATH_MAX
 /*
  * POSIX allows PATH_MAX to not be defined, see

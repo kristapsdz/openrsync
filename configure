@@ -15,7 +15,7 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-OCONFIGURE_VERSION="0.1.18"
+OCONFIGURE_VERSION="0.1.20"
 
 #
 # This script outputs two files: config.h and Makefile.configure.
@@ -147,6 +147,7 @@ HAVE_MD5=
 HAVE_MEMMEM=
 HAVE_MEMRCHR=
 HAVE_MEMSET_S=
+HAVE_OSBYTEORDER_H=
 HAVE_PATH_MAX=
 HAVE_PLEDGE=
 HAVE_PROGRAM_INVOCATION_SHORT_NAME=
@@ -161,6 +162,7 @@ HAVE_STRLCPY=
 HAVE_STRNDUP=
 HAVE_STRNLEN=
 HAVE_STRTONUM=
+HAVE_SYS_ENDIAN_H=
 HAVE_SYS_QUEUE=
 HAVE_SYS_TREE=
 HAVE_SYSTRACE=
@@ -300,6 +302,7 @@ runtest md5		MD5 "" "" "-lmd"		  || true
 runtest memmem		MEMMEM			  	  || true
 runtest memrchr		MEMRCHR			  	  || true
 runtest memset_s	MEMSET_S			  || true
+runtest osbyteorder_h	OSBYTEORDER_H			  || true
 runtest PATH_MAX	PATH_MAX			  || true
 runtest pledge		PLEDGE				  || true
 runtest program_invocation_short_name	PROGRAM_INVOCATION_SHORT_NAME || true
@@ -314,6 +317,7 @@ runtest strlcpy		STRLCPY				  || true
 runtest strndup		STRNDUP				  || true
 runtest strnlen		STRNLEN				  || true
 runtest strtonum	STRTONUM			  || true
+runtest sys_endian_h	SYS_ENDIAN_H			  || true
 runtest sys_queue	SYS_QUEUE			  || true
 runtest sys_tree	SYS_TREE			  || true
 runtest systrace	SYSTRACE			  || true
@@ -394,6 +398,7 @@ cat << __HEREDOC__
 #define HAVE_MEMMEM ${HAVE_MEMMEM}
 #define HAVE_MEMRCHR ${HAVE_MEMRCHR}
 #define HAVE_MEMSET_S ${HAVE_MEMSET_S}
+#define HAVE_OSBYTEORDER_H ${HAVE_OSBYTEORDER_H}
 #define HAVE_PATH_MAX ${HAVE_PATH_MAX}
 #define HAVE_PLEDGE ${HAVE_PLEDGE}
 #define HAVE_PROGRAM_INVOCATION_SHORT_NAME ${HAVE_PROGRAM_INVOCATION_SHORT_NAME}
@@ -408,12 +413,49 @@ cat << __HEREDOC__
 #define HAVE_STRNDUP ${HAVE_STRNDUP}
 #define HAVE_STRNLEN ${HAVE_STRNLEN}
 #define HAVE_STRTONUM ${HAVE_STRTONUM}
+#define HAVE_SYS_ENDIAN_H ${HAVE_SYS_ENDIAN_H}
 #define HAVE_SYS_QUEUE ${HAVE_SYS_QUEUE}
 #define HAVE_SYS_TREE ${HAVE_SYS_TREE}
 #define HAVE_SYSTRACE ${HAVE_SYSTRACE}
 #define HAVE_UNVEIL ${HAVE_UNVEIL}
 #define HAVE_ZLIB ${HAVE_ZLIB}
 #define HAVE___PROGNAME ${HAVE___PROGNAME}
+__HEREDOC__
+
+# Compat for libkern/OSByteOrder.h in place of endian.h.
+
+[ ${HAVE_OSBYTEORDER_H} -eq 1 -a \
+  ${HAVE_ENDIAN_H} -eq 0 -a \
+  ${HAVE_SYS_ENDIAN_H} -eq 0 ] \
+	&& cat << __HEREDOC__
+#define htobe16(x) OSSwapHostToBigInt16(x)
+#define htole16(x) OSSwapHostToLittleInt16(x)
+#define be16toh(x) OSSwapBigToHostInt16(x)
+#define le16toh(x) OSSwapLittleToHostInt16(x)
+#define htobe32(x) OSSwapHostToBigInt32(x)
+#define htole32(x) OSSwapHostToLittleInt32(x)
+#define be32toh(x) OSSwapBigToHostInt32(x)
+#define le32toh(x) OSSwapLittleToHostInt32(x)
+#define htobe64(x) OSSwapHostToBigInt64(x)
+#define htole64(x) OSSwapHostToLittleInt64(x)
+#define be64toh(x) OSSwapBigToHostInt64(x)
+#define le64toh(x) OSSwapLittleToHostInt64(x)
+__HEREDOC__
+
+# Make endian.h easier by providing a COMPAT_ENDIAN_H.
+
+cat << __HEREDOC__
+#if HAVE_ENDIAN_H
+# define COMPAT_ENDIAN_H <endian.h>
+#elif HAVE_SYS_ENDIAN_H
+# define COMPAT_ENDIAN_H <sys/endian.h>
+#elif HAVE_OSBYTEORDER_H
+# define COMPAT_ENDIAN_H <libkern/OSByteOrder.h>
+#else
+# warning No suitable endian.h could be found.
+# warning Please e-mail the maintainers with your OS.
+# define COMPAT_ENDIAN_H <endian.h>
+#endif
 __HEREDOC__
 
 # Now we do our function declarations for missing functions.
