@@ -147,6 +147,7 @@ HAVE_MD5=
 HAVE_MEMMEM=
 HAVE_MEMRCHR=
 HAVE_MEMSET_S=
+HAVE_MKFIFOAT=
 HAVE_OSBYTEORDER_H=
 HAVE_PATH_MAX=
 HAVE_PLEDGE=
@@ -302,6 +303,7 @@ runtest md5		MD5 "" "" "-lmd"		  || true
 runtest memmem		MEMMEM			  	  || true
 runtest memrchr		MEMRCHR			  	  || true
 runtest memset_s	MEMSET_S			  || true
+runtest mkfifoat	MKFIFOAT			  || true
 runtest osbyteorder_h	OSBYTEORDER_H			  || true
 runtest PATH_MAX	PATH_MAX			  || true
 runtest pledge		PLEDGE				  || true
@@ -355,6 +357,7 @@ cat << __HEREDOC__
 #if !defined(__END_DECLS)
 # define __END_DECLS
 #endif
+
 __HEREDOC__
 
 # This is just for size_t.
@@ -362,29 +365,45 @@ __HEREDOC__
 # someting that pulls in support for size_t.
 # Our function declarations are standalone, so specify them here.
 
-[ ${HAVE_MD5} -eq 0 -o \
-  ${HAVE_READPASSPHRASE} -eq 0 -o \
-  ${HAVE_REALLOCARRAY} -eq 0 -o \
-  ${HAVE_RECALLOCARRAY} -eq 0 -o \
-  ${HAVE_STRLCAT} -eq 0 -o \
-  ${HAVE_STRLCPY} -eq 0 -o \
-  ${HAVE_STRNDUP} -eq 0 -o \
-  ${HAVE_STRNLEN} -eq 0 ] \
-	&& echo "#include <sys/types.h>"
+if [ ${HAVE_MD5} -eq 0 -o \
+     ${HAVE_MKFIFOAT} -eq 0 -o \
+     ${HAVE_READPASSPHRASE} -eq 0 -o \
+     ${HAVE_REALLOCARRAY} -eq 0 -o \
+     ${HAVE_RECALLOCARRAY} -eq 0 -o \
+     ${HAVE_STRLCAT} -eq 0 -o \
+     ${HAVE_STRLCPY} -eq 0 -o \
+     ${HAVE_STRNDUP} -eq 0 -o \
+     ${HAVE_STRNLEN} -eq 0 ]
+then
+	echo "#include <sys/types.h> /* size_t, mode_t */ "
+	echo
+fi
 
-[ ${HAVE_ERR} -eq 0 ] \
-	&& echo "#include <stdarg.h>"
+if [ ${HAVE_ERR} -eq 0 ]
+then
+	echo "#include <stdarg.h> /* err(3) */"
+	echo
+fi
 
 # Now we handle our HAVE_xxxx values.
 # Most will just be defined as 0 or 1.
 
-[ ${HAVE_PATH_MAX} -eq 0 ] \
-	&& echo "#define PATH_MAX 4096"
+if [ ${HAVE_PATH_MAX} -eq 0 ]
+then
+	echo "#define PATH_MAX 4096"
+	echo
+fi
 
-[ ${HAVE_INFTIM} -eq 0 ] \
-	&& echo "#define INFTIM (-1)"
+if [ ${HAVE_INFTIM} -eq 0 ]
+then
+	echo "#define INFTIM (-1)"
+	echo
+fi
 
 cat << __HEREDOC__
+/*
+ * Results of configuration feature-testing.
+ */
 #define HAVE_ARC4RANDOM ${HAVE_ARC4RANDOM}
 #define HAVE_B64_NTOP ${HAVE_B64_NTOP}
 #define HAVE_CAPSICUM ${HAVE_CAPSICUM}
@@ -398,6 +417,7 @@ cat << __HEREDOC__
 #define HAVE_MEMMEM ${HAVE_MEMMEM}
 #define HAVE_MEMRCHR ${HAVE_MEMRCHR}
 #define HAVE_MEMSET_S ${HAVE_MEMSET_S}
+#define HAVE_MKFIFOAT ${HAVE_MKFIFOAT}
 #define HAVE_OSBYTEORDER_H ${HAVE_OSBYTEORDER_H}
 #define HAVE_PATH_MAX ${HAVE_PATH_MAX}
 #define HAVE_PLEDGE ${HAVE_PLEDGE}
@@ -420,6 +440,7 @@ cat << __HEREDOC__
 #define HAVE_UNVEIL ${HAVE_UNVEIL}
 #define HAVE_ZLIB ${HAVE_ZLIB}
 #define HAVE___PROGNAME ${HAVE___PROGNAME}
+
 __HEREDOC__
 
 # Compat for libkern/OSByteOrder.h in place of endian.h.
@@ -428,6 +449,9 @@ __HEREDOC__
   ${HAVE_ENDIAN_H} -eq 0 -a \
   ${HAVE_SYS_ENDIAN_H} -eq 0 ] \
 	&& cat << __HEREDOC__
+/*
+ * endian.h compatibility with libkern/OSByteOrder.h.
+ */
 #define htobe16(x) OSSwapHostToBigInt16(x)
 #define htole16(x) OSSwapHostToLittleInt16(x)
 #define be16toh(x) OSSwapBigToHostInt16(x)
@@ -440,11 +464,15 @@ __HEREDOC__
 #define htole64(x) OSSwapHostToLittleInt64(x)
 #define be64toh(x) OSSwapBigToHostInt64(x)
 #define le64toh(x) OSSwapLittleToHostInt64(x)
+
 __HEREDOC__
 
 # Make endian.h easier by providing a COMPAT_ENDIAN_H.
 
 cat << __HEREDOC__
+/*
+ * Make it easier to include endian.h forms.
+ */
 #if HAVE_ENDIAN_H
 # define COMPAT_ENDIAN_H <endian.h>
 #elif HAVE_SYS_ENDIAN_H
@@ -456,40 +484,50 @@ cat << __HEREDOC__
 # warning Please e-mail the maintainers with your OS.
 # define COMPAT_ENDIAN_H <endian.h>
 #endif
+
 __HEREDOC__
 
 # Now we do our function declarations for missing functions.
 
-if [ ${HAVE_ERR} -eq 0 ]; then
-	echo "extern void err(int, const char *, ...);"
-	echo "extern void errx(int, const char *, ...);"
-	echo "extern void warn(const char *, ...);"
-	echo "extern void warnx(const char *, ...);"
-	echo "extern void vwarn(const char *, va_list);"
-	echo "extern void vwarnx(const char *, va_list);"
-fi
+[ ${HAVE_ERR} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility functions for err(3).
+ */
+extern void err(int, const char *, ...);
+extern void errx(int, const char *, ...);
+extern void warn(const char *, ...);
+extern void warnx(const char *, ...);
+extern void vwarn(const char *, va_list);
+extern void vwarnx(const char *, va_list);
+__HEREDOC__
 
-if [ ${HAVE_MD5} -eq 0 ]; then
-	echo "#define MD5_BLOCK_LENGTH 64"
-	echo "#define MD5_DIGEST_LENGTH 16"
-	echo "#define MD5_DIGEST_STRING_LENGTH (MD5_DIGEST_LENGTH * 2 + 1)"
-	cat <<!!
+[ ${HAVE_MD5} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for md4(3).
+ */
+#define MD5_BLOCK_LENGTH 64
+#define MD5_DIGEST_LENGTH 16
+#define MD5_DIGEST_STRING_LENGTH (MD5_DIGEST_LENGTH * 2 + 1)
+
 typedef struct MD5Context {
 	u_int32_t state[4];
 	u_int64_t count;
 	u_int8_t buffer[MD5_BLOCK_LENGTH];
 } MD5_CTX;
-!!
-	echo "extern void MD5Init(MD5_CTX *);"
-	echo "extern void MD5Update(MD5_CTX *, const u_int8_t *, size_t);"
-	echo "extern void MD5Pad(MD5_CTX *);"
-	echo "extern void MD5Transform(u_int32_t [4], const u_int8_t [MD5_BLOCK_LENGTH]);"
-	echo "extern char *MD5End(MD5_CTX *, char *);"
-	echo "extern void MD5Final(u_int8_t [MD5_DIGEST_LENGTH], MD5_CTX *);";
-fi
+
+extern void MD5Init(MD5_CTX *);
+extern void MD5Update(MD5_CTX *, const u_int8_t *, size_t);
+extern void MD5Pad(MD5_CTX *);
+extern void MD5Transform(u_int32_t [4], const u_int8_t [MD5_BLOCK_LENGTH]);
+extern char *MD5End(MD5_CTX *, char *);
+extern void MD5Final(u_int8_t [MD5_DIGEST_LENGTH], MD5_CTX *);
+
+__HEREDOC__
 
 if [ ${HAVE_SECCOMP_FILTER} -eq 1 ]; then
-	arch=`uname -m 2>/dev/null || echo unknown`
+	arch=$(uname -m 2>/dev/null || echo unknown)
 	case "$arch" in
 		x86_64)
 			echo "#define SECCOMP_AUDIT_ARCH AUDIT_ARCH_X86_64"
@@ -504,70 +542,150 @@ if [ ${HAVE_SECCOMP_FILTER} -eq 1 ]; then
 			echo "#define SECCOMP_AUDIT_ARCH AUDIT_ARCH_AARCH64"
 			;;
 	esac
+	echo
 fi
 
-if [ ${HAVE_B64_NTOP} -eq 0 ]; then
-	echo "extern int b64_ntop(unsigned char const *, size_t, char *, size_t);";
-	echo "extern int b64_pton(char const *, unsigned char *, size_t);"
-fi
+[ ${HAVE_B64_NTOP} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for b64_ntop(3).
+ */
+extern int b64_ntop(unsigned char const *, size_t, char *, size_t);
+extern int b64_pton(char const *, unsigned char *, size_t);
 
-if [ ${HAVE_EXPLICIT_BZERO} -eq 0 ]; then
-	echo "extern void explicit_bzero(void *, size_t);"
-fi
+__HEREDOC__
 
-if [ ${HAVE_MEMMEM} -eq 0 ]; then
-	echo "void *memmem(const void *, size_t, const void *, size_t);"
-fi
+[ ${HAVE_EXPLICIT_BZERO} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for explicit_bzero(3).
+ */
+extern void explicit_bzero(void *, size_t);
 
-if [ ${HAVE_MEMRCHR} -eq 0 ]; then
-	echo "void *memrchr(const void *b, int, size_t);"
-fi
+__HEREDOC__
 
-if [ ${HAVE_GETPROGNAME} -eq 0 ]; then
-	echo "extern const char *getprogname(void);"
-fi
+[ ${HAVE_MEMMEM} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for memmem(3).
+ */
+void *memmem(const void *, size_t, const void *, size_t);
 
-if [ ${HAVE_READPASSPHRASE} -eq 0 ]; then
-	echo "#define RPP_ECHO_OFF 0x00"
-	echo "#define RPP_ECHO_ON 0x01"
-	echo "#define RPP_REQUIRE_TTY 0x02"
-	echo "#define RPP_FORCELOWER 0x04"
-	echo "#define RPP_FORCEUPPER 0x08"
-	echo "#define RPP_SEVENBIT 0x10"
-	echo "#define RPP_STDIN 0x20"
-	echo "char *readpassphrase(const char *, char *, size_t, int);"
-fi
+__HEREDOC__
 
-if [ ${HAVE_REALLOCARRAY} -eq 0 ]; then
-	echo "extern void *reallocarray(void *, size_t, size_t);"
-fi
+[ ${HAVE_MEMRCHR} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for memrchr(3).
+ */
+void *memrchr(const void *b, int, size_t);
 
-if [ ${HAVE_RECALLOCARRAY} -eq 0 ]; then
-	echo "extern void *recallocarray(void *, size_t, size_t, size_t);"
-fi
+__HEREDOC__
 
-if [ ${HAVE_STRLCAT} -eq 0 ]; then
-	echo "extern size_t strlcat(char *, const char *, size_t);"
-fi
+[ ${HAVE_GETPROGNAME} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for getprogname(3).
+ */
+extern const char *getprogname(void);
 
-if [ ${HAVE_STRLCPY} -eq 0 ]; then
-	echo "extern size_t strlcpy(char *, const char *, size_t);"
-fi
+__HEREDOC__
 
-if [ ${HAVE_STRNDUP} -eq 0 ]; then
-	echo "extern char *strndup(const char *, size_t);"
-fi
+[ ${HAVE_READPASSPHRASE} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Macros and function required for readpassphrase(3).
+ */
+#define RPP_ECHO_OFF 0x00
+#define RPP_ECHO_ON 0x01
+#define RPP_REQUIRE_TTY 0x02
+#define RPP_FORCELOWER 0x04
+#define RPP_FORCEUPPER 0x08
+#define RPP_SEVENBIT 0x10
+#define RPP_STDIN 0x20
+char *readpassphrase(const char *, char *, size_t, int);
 
-if [ ${HAVE_STRNLEN} -eq 0 ]; then
-	echo "extern size_t strnlen(const char *, size_t);"
-fi
+__HEREDOC__
 
-if [ ${HAVE_STRTONUM} -eq 0 ]; then
-	echo "extern long long strtonum(const char *, long long, long long, const char **);"
-fi
+[ ${HAVE_REALLOCARRAY} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for reallocarray(3).
+ */
+extern void *reallocarray(void *, size_t, size_t);
+
+__HEREDOC__
+
+[ ${HAVE_RECALLOCARRAY} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for recallocarray(3).
+ */
+extern void *recallocarray(void *, size_t, size_t, size_t);
+
+__HEREDOC__
+
+[ ${HAVE_STRLCAT} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for strlcat(3).
+ */
+extern size_t strlcat(char *, const char *, size_t);
+
+__HEREDOC__
+
+[ ${HAVE_STRLCPY} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for strlcpy(3).
+ */
+extern size_t strlcpy(char *, const char *, size_t);
+
+__HEREDOC__
+
+[ ${HAVE_STRNDUP} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for strndup(3).
+ */
+extern char *strndup(const char *, size_t);
+
+__HEREDOC__
+
+[ ${HAVE_STRNLEN} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for strnlen(3).
+ */
+extern size_t strnlen(const char *, size_t);
+
+__HEREDOC__
+
+[ ${HAVE_STRTONUM} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for strotnum(3).
+ */
+extern long long strtonum(const char *, long long, long long, const char **);
+
+__HEREDOC__
+
+[ ${HAVE_MKFIFOAT} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for mkfifoat(2).
+ * The AT_FDCWD is arbitrary negative (using OpenBSD version).
+ */
+#define AT_FDCWD -100
+int mkfifoat(int, const char *, mode_t);
+
+__HEREDOC__
 
 if [ ${HAVE_SYS_QUEUE} -eq 0 ]; then
 	cat << __HEREDOC__
+/*
+ * A compatible version of OpenBSD <sys/queue.h>.
+ */
 /*	\$OpenBSD$	*/
 /*	\$NetBSD: queue.h,v 1.11 1996/05/16 05:17:14 mycroft Exp \$	*/
 
@@ -1222,11 +1340,15 @@ struct {								\\
 	_Q_INVALIDATE((elm)->field.cqe_prev);				\\
 	_Q_INVALIDATE((elm)->field.cqe_next);				\\
 } while (0)
+
 __HEREDOC__
 fi
 
 if [ ${HAVE_SYS_TREE} -eq 0 ]; then
 	cat << __HEREDOC__
+/*
+ * A compatible version of OpenBSD <sys/tree.h>.
+ */
 /*	\$OpenBSD$	*/
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
@@ -1972,6 +2094,7 @@ name##_RB_MINMAX(struct name *head, int val)				\\
 	for ((x) = RB_MAX(name, head);					\\
 	    ((x) != NULL) && ((y) = name##_RB_PREV(x), 1);		\\
 	     (x) = (y))
+
 __HEREDOC__
 fi
 

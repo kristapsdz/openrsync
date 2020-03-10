@@ -188,6 +188,15 @@ int main(void)
 	return 0;
 }
 #endif /* TEST_MEMSET_S */
+#if TEST_MKFIFOAT
+#include <sys/stat.h>
+#include <fcntl.h>
+
+int main(void) {
+	mkfifoat(AT_FDCWD, "this/path/should/not/exist", 0600);
+	return 0;
+}
+#endif /* TEST_MKFIFOAT */
 #if TEST_OSBYTEORDER_H
 #include <libkern/OSByteOrder.h>
 
