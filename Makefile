@@ -53,6 +53,9 @@ uninstall:
 clean:
 	rm -f $(ALLOBJS) openrsync $(AFLS)
 
+distclean: clean
+	rm -f Makefile.configure config.h config.log
+
 distcheck:
 	mandoc -Tlint -Werror *.[15]
 	rm -rf .distcheck
