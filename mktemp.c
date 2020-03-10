@@ -196,9 +196,20 @@ mktemp_internalat(int pfd, char *path, int slen, enum tmpmode mode,
 				errno = EINVAL;
 				return(-1);
 			}
+#ifdef HAVE_SOCK_NONBLOCK
 			if ((fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC |
 			    SOCK_NONBLOCK, 0)) == -1)
 				return -1;
+#else
+			if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+				return -1;
+			if (fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) |
+			    O_NONBLOCK) == -1)
+				return -1;
+			if (fcntl(fd, F_SETFD, fcntl(fd, F_GETFD, 0) |
+			    FD_CLOEXEC) == -1)
+				return -1;
+#endif
 			if (bind(fd, (struct sockaddr *)&sun, sizeof(sun)) ==
 			    0) {
 				close(fd);
