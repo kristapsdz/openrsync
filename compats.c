@@ -877,10 +877,15 @@ memrchr(const void *s, int c, size_t n)
 }
 #endif /* !HAVE_MEMRCHR */
 #if !HAVE_MKFIFOAT
+#include <sys/stat.h>
+
+#include <fcntl.h>
+#include <unistd.h>
+
 int
 mkfifoat(int fd, const char *path, mode_t mode)
 {
-	int	curfd;
+	int	curfd, newfd;
 
 	/* Get our current directory then switch to the given one. */
 
@@ -891,10 +896,15 @@ mkfifoat(int fd, const char *path, mode_t mode)
 			return -1;
 	}
 
-	if (mkfifof(path, mode) == -1)
+	if ((newfd = mkfifo(path, mode)) == -1)
 		return -1;
+
+	/* This leaves the file if it fails. */
+
 	if (fd != AT_FDCWD && fchdir(curfd) == -1)
 		return -1;
+
+	return newfd;
 }
 #endif /* !HAVE_MKFIFOAT */
 #if !HAVE_READPASSPHRASE
