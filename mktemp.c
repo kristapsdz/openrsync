@@ -196,7 +196,7 @@ mktemp_internalat(int pfd, char *path, int slen, enum tmpmode mode,
 				errno = EINVAL;
 				return(-1);
 			}
-#ifdef HAVE_SOCK_NONBLOCK
+#if HAVE_SOCK_NONBLOCK
 			if ((fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC |
 			    SOCK_NONBLOCK, 0)) == -1)
 				return -1;

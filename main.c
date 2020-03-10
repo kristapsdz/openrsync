@@ -22,6 +22,9 @@
 
 #include <assert.h>
 #include <err.h>
+#if !HAVE_SOCK_NONBLOCK
+# include <fcntl.h>
+#endif
 #include <getopt.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -464,8 +467,17 @@ main(int argc, char *argv[])
 
 	/* Create a bidirectional socket and start our child. */
 
+#if HAVE_SOCK_NONBLOCK
 	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0, fds) == -1)
 		err(1, "socketpair");
+#else
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == -1)
+		err(1, "socketpair");
+	if (fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL, 0) | O_NONBLOCK) == -1)
+		err(1, "fcntl");
+	if (fcntl(fds[1], F_SETFL, fcntl(fds[1], F_GETFL, 0) | O_NONBLOCK) == -1)
+		err(1, "fcntl");
+#endif
 
 	switch ((child = fork())) {
 	case -1:
