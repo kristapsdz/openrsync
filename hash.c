@@ -17,14 +17,10 @@
 #include "config.h"
 
 #include <sys/types.h>
+#include COMPAT_ENDIAN_H
 
 #include <assert.h>
 #include <assert.h>
-#if HAVE_ENDIAN_H
-# include <endian.h>
-#else
-# include <sys/endian.h>
-#endif
 #include <stdint.h>
 #include <stdlib.h>
 

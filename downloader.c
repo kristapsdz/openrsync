@@ -18,13 +18,9 @@
 
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include COMPAT_ENDIAN_H
 
 #include <assert.h>
-#if HAVE_ENDIAN_H
-# include <endian.h>
-#else
-# include <sys/endian.h>
-#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
