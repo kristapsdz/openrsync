@@ -148,6 +148,7 @@ HAVE_MEMMEM=
 HAVE_MEMRCHR=
 HAVE_MEMSET_S=
 HAVE_MKFIFOAT=
+HAVE_MKNODAT=
 HAVE_OSBYTEORDER_H=
 HAVE_PATH_MAX=
 HAVE_PLEDGE=
@@ -304,6 +305,7 @@ runtest memmem		MEMMEM			  	  || true
 runtest memrchr		MEMRCHR			  	  || true
 runtest memset_s	MEMSET_S			  || true
 runtest mkfifoat	MKFIFOAT			  || true
+runtest mknodat		MKNODAT				  || true
 runtest osbyteorder_h	OSBYTEORDER_H			  || true
 runtest PATH_MAX	PATH_MAX			  || true
 runtest pledge		PLEDGE				  || true
@@ -367,6 +369,7 @@ __HEREDOC__
 
 if [ ${HAVE_MD5} -eq 0 -o \
      ${HAVE_MKFIFOAT} -eq 0 -o \
+     ${HAVE_MKNODAT} -eq 0 -o \
      ${HAVE_READPASSPHRASE} -eq 0 -o \
      ${HAVE_REALLOCARRAY} -eq 0 -o \
      ${HAVE_RECALLOCARRAY} -eq 0 -o \
@@ -375,7 +378,7 @@ if [ ${HAVE_MD5} -eq 0 -o \
      ${HAVE_STRNDUP} -eq 0 -o \
      ${HAVE_STRNLEN} -eq 0 ]
 then
-	echo "#include <sys/types.h> /* size_t, mode_t */ "
+	echo "#include <sys/types.h> /* size_t, mode_t, dev_t */ "
 	echo
 fi
 
@@ -418,6 +421,7 @@ cat << __HEREDOC__
 #define HAVE_MEMRCHR ${HAVE_MEMRCHR}
 #define HAVE_MEMSET_S ${HAVE_MEMSET_S}
 #define HAVE_MKFIFOAT ${HAVE_MKFIFOAT}
+#define HAVE_MKNODAT ${HAVE_MKNODAT}
 #define HAVE_OSBYTEORDER_H ${HAVE_OSBYTEORDER_H}
 #define HAVE_PATH_MAX ${HAVE_PATH_MAX}
 #define HAVE_PLEDGE ${HAVE_PLEDGE}
@@ -674,10 +678,17 @@ __HEREDOC__
 	cat << __HEREDOC__
 /*
  * Compatibility for mkfifoat(2).
- * The AT_FDCWD is arbitrary negative (using OpenBSD version).
  */
-#define AT_FDCWD -100
 int mkfifoat(int, const char *, mode_t);
+
+__HEREDOC__
+
+[ ${HAVE_MKNODAT} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for mknodat(2).
+ */
+int mknodat(int, const char *, mode_t, dev_t);
 
 __HEREDOC__
 
