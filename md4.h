@@ -38,12 +38,8 @@ typedef struct {
 	MD4_u32plus block[16];
 } MD4_CTX;
 
-__BEGIN_DECLS
-
 extern void MD4_Init(MD4_CTX *ctx);
 extern void MD4_Update(MD4_CTX *ctx, const void *data, unsigned long size);
 extern void MD4_Final(unsigned char *result, MD4_CTX *ctx);
-
-__END_DECLS
 
 #endif
