@@ -435,6 +435,8 @@ explicit_bzero(void *p, size_t n)
 
 #else /* HAVE_MEMSET_S */
 
+#include <strings.h>
+
 /*
  * Indirect bzero through a volatile pointer to hopefully avoid
  * dead-store optimisation eliminating the call.
@@ -548,7 +550,7 @@ getprogname(void)
 	(cp)[1] = (value) >> 8;						\
 	(cp)[0] = (value); } while (0)
 
-static u_int8_t PADDING[MD5_BLOCK_LENGTH] = {
+static uint8_t PADDING[MD5_BLOCK_LENGTH] = {
 	0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
@@ -582,7 +584,7 @@ MD5Update(MD5_CTX *ctx, const unsigned char *input, size_t len)
 	need = MD5_BLOCK_LENGTH - have;
 
 	/* Update bitcount */
-	ctx->count += (u_int64_t)len << 3;
+	ctx->count += (uint64_t)len << 3;
 
 	if (len >= need) {
 		if (have != 0) {
@@ -613,7 +615,7 @@ MD5Update(MD5_CTX *ctx, const unsigned char *input, size_t len)
 void
 MD5Pad(MD5_CTX *ctx)
 {
-	u_int8_t count[8];
+	uint8_t count[8];
 	size_t padlen;
 
 	/* Convert count to 8 bytes in little endian order. */
@@ -661,19 +663,19 @@ MD5Final(unsigned char digest[MD5_DIGEST_LENGTH], MD5_CTX *ctx)
  * the data and converts bytes into longwords for this routine.
  */
 void
-MD5Transform(u_int32_t state[4], const u_int8_t block[MD5_BLOCK_LENGTH])
+MD5Transform(uint32_t state[4], const uint8_t block[MD5_BLOCK_LENGTH])
 {
-	u_int32_t a, b, c, d, in[MD5_BLOCK_LENGTH / 4];
+	uint32_t a, b, c, d, in[MD5_BLOCK_LENGTH / 4];
 
 #if BYTE_ORDER == LITTLE_ENDIAN
 	memcpy(in, block, sizeof(in));
 #else
 	for (a = 0; a < MD5_BLOCK_LENGTH / 4; a++) {
-		in[a] = (u_int32_t)(
-		    (u_int32_t)(block[a * 4 + 0]) |
-		    (u_int32_t)(block[a * 4 + 1]) <<  8 |
-		    (u_int32_t)(block[a * 4 + 2]) << 16 |
-		    (u_int32_t)(block[a * 4 + 3]) << 24);
+		in[a] = (uint32_t)(
+		    (uint32_t)(block[a * 4 + 0]) |
+		    (uint32_t)(block[a * 4 + 1]) <<  8 |
+		    (uint32_t)(block[a * 4 + 2]) << 16 |
+		    (uint32_t)(block[a * 4 + 3]) << 24);
 	}
 #endif
 
@@ -1004,11 +1006,11 @@ out:
 #include <termios.h>
 #include <unistd.h>
 
-#if defined(_NSIG)
-static volatile sig_atomic_t readpassphrase_signo[_NSIG];
-#else
-static volatile sig_atomic_t readpassphrase_signo[NSIG];
+#if !defined(_NSIG) && defined(NSIG)
+# define _NSIG NSIG
 #endif
+
+static volatile sig_atomic_t readpassphrase_signo[_NSIG];
 
 static void
 readpassphrase_handler(int s)

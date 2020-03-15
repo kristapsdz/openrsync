@@ -48,15 +48,6 @@ main(void)
 	return !htole32(23);
 }
 #endif /* TEST_ENDIAN_H */
-#if TEST_SYS_ENDIAN_H
-#include <sys/endian.h>
-
-int
-main(void)
-{
-	return !htole32(23);
-}
-#endif /* TEST_SYS_ENDIAN_H */
 #if TEST_ERR
 /*
  * Copyright (c) 2015 Ingo Schwarze <schwarze@openbsd.org>
@@ -144,9 +135,11 @@ main(void)
 int main(void)
 {
 	MD5_CTX ctx;
+	char result[MD5_DIGEST_STRING_LENGTH];
 
 	MD5Init(&ctx);
 	MD5Update(&ctx, "abcd", 4);
+	MD5End(&ctx, result);
 
 	return 0;
 }
@@ -429,6 +422,24 @@ main(void)
 	return 0;
 }
 #endif /* TEST_STRTONUM */
+#if TEST_SYS_BYTEORDER_H
+#include <sys/byteorder.h>
+
+int
+main(void)
+{
+	return !LE_32(23);
+}
+#endif /* TEST_SYS_BYTEORDER_H */
+#if TEST_SYS_ENDIAN_H
+#include <sys/endian.h>
+
+int
+main(void)
+{
+	return !htole32(23);
+}
+#endif /* TEST_SYS_ENDIAN_H */
 #if TEST_SYS_QUEUE
 #include <sys/queue.h>
 #include <stddef.h>

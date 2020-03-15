@@ -15,7 +15,7 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-OCONFIGURE_VERSION="0.1.22"
+OCONFIGURE_VERSION="0.1.24"
 
 #
 # This script outputs two files: config.h and Makefile.configure.
@@ -82,6 +82,29 @@ INSTALL_PROGRAM=
 INSTALL_LIB=
 INSTALL_MAN=
 INSTALL_DATA=
+
+# SunOS sets "cc", but this doesn't exist.
+# It does have gcc, so try that instead.
+# Prefer clang, though.
+
+if [ -z "$(which ${CC} 2>/dev/null)" ]
+then
+	echo "${CC} not found: trying clang" 1>&2
+	echo "${CC} not found: trying clang" 1>&3
+	CC=clang
+	if [ -z "$(which ${CC} 2>/dev/null)" ]
+	then
+		echo "${CC} not found: trying gcc" 1>&2
+		echo "${CC} not found: trying gcc" 1>&3
+		CC=gcc
+		if [ -z "$(which ${CC} 2>/dev/null)" ]
+		then
+			echo "gcc not found: giving up" 1>&2
+			echo "gcc not found: giving up" 1>&3
+			exit 1
+		fi
+	fi
+fi
 
 #----------------------------------------------------------------------
 # Allow certain variables to be overriden on the command line.
@@ -164,6 +187,7 @@ HAVE_STRLCPY=
 HAVE_STRNDUP=
 HAVE_STRNLEN=
 HAVE_STRTONUM=
+HAVE_SYS_BYTEORDER_H=
 HAVE_SYS_ENDIAN_H=
 HAVE_SYS_QUEUE=
 HAVE_SYS_TREE=
@@ -321,6 +345,7 @@ runtest strlcpy		STRLCPY				  || true
 runtest strndup		STRNDUP				  || true
 runtest strnlen		STRNLEN				  || true
 runtest strtonum	STRTONUM			  || true
+runtest sys_byteorder_h	SYS_BYTEORDER_H			  || true
 runtest sys_endian_h	SYS_ENDIAN_H			  || true
 runtest sys_queue	SYS_QUEUE			  || true
 runtest sys_tree	SYS_TREE			  || true
@@ -382,6 +407,12 @@ then
 	echo
 fi
 
+if [ ${HAVE_MD5} -eq 0 ]
+then
+	echo "#include <stdint.h> /* C99 [u]int[nn]_t types */"
+	echo
+fi
+
 if [ ${HAVE_ERR} -eq 0 ]
 then
 	echo "#include <stdarg.h> /* err(3) */"
@@ -437,6 +468,7 @@ cat << __HEREDOC__
 #define HAVE_STRNDUP ${HAVE_STRNDUP}
 #define HAVE_STRNLEN ${HAVE_STRNLEN}
 #define HAVE_STRTONUM ${HAVE_STRTONUM}
+#define HAVE_SYS_BYTEORDER_H ${HAVE_SYS_BYTEORDER_H}
 #define HAVE_SYS_ENDIAN_H ${HAVE_SYS_ENDIAN_H}
 #define HAVE_SYS_QUEUE ${HAVE_SYS_QUEUE}
 #define HAVE_SYS_TREE ${HAVE_SYS_TREE}
@@ -451,6 +483,7 @@ __HEREDOC__
 
 [ ${HAVE_OSBYTEORDER_H} -eq 1 -a \
   ${HAVE_ENDIAN_H} -eq 0 -a \
+  ${HAVE_SYS_BYTEORDER_H} -eq 0 -a \
   ${HAVE_SYS_ENDIAN_H} -eq 0 ] \
 	&& cat << __HEREDOC__
 /*
@@ -471,6 +504,29 @@ __HEREDOC__
 
 __HEREDOC__
 
+[ ${HAVE_SYS_BYTEORDER_H} -eq 1 -a \
+  ${HAVE_ENDIAN_H} -eq 0 -a \
+  ${HAVE_OSBYTEORDER_H} -eq 0 -a \
+  ${HAVE_SYS_ENDIAN_H} -eq 0 ] \
+	&& cat << __HEREDOC__
+/*
+ * endian.h compatibility with sys/byteorder.h.
+ */
+#define htobe16(x) BE_16(x)
+#define htole16(x) LE_16(x)
+#define be16toh(x) BE_16(x)
+#define le16toh(x) LE_16(x)
+#define htobe32(x) BE_32(x)
+#define htole32(x) LE_32(x)
+#define be32toh(x) BE_32(x)
+#define le32toh(x) LE_32(x)
+#define htobe64(x) BE_64(x)
+#define htole64(x) LE_64(x)
+#define be64toh(x) BE_64(x)
+#define le64toh(x) LE_64(x)
+
+__HEREDOC__
+
 # Make endian.h easier by providing a COMPAT_ENDIAN_H.
 
 cat << __HEREDOC__
@@ -483,6 +539,8 @@ cat << __HEREDOC__
 # define COMPAT_ENDIAN_H <sys/endian.h>
 #elif HAVE_OSBYTEORDER_H
 # define COMPAT_ENDIAN_H <libkern/OSByteOrder.h>
+#elif HAVE_SYS_BYTEORDER_H
+# define COMPAT_ENDIAN_H <sys/byteorder.h>
 #else
 # warning No suitable endian.h could be found.
 # warning Please e-mail the maintainers with your OS.
@@ -516,17 +574,17 @@ __HEREDOC__
 #define MD5_DIGEST_STRING_LENGTH (MD5_DIGEST_LENGTH * 2 + 1)
 
 typedef struct MD5Context {
-	u_int32_t state[4];
-	u_int64_t count;
-	u_int8_t buffer[MD5_BLOCK_LENGTH];
+	uint32_t state[4];
+	uint64_t count;
+	uint8_t buffer[MD5_BLOCK_LENGTH];
 } MD5_CTX;
 
 extern void MD5Init(MD5_CTX *);
-extern void MD5Update(MD5_CTX *, const u_int8_t *, size_t);
+extern void MD5Update(MD5_CTX *, const uint8_t *, size_t);
 extern void MD5Pad(MD5_CTX *);
-extern void MD5Transform(u_int32_t [4], const u_int8_t [MD5_BLOCK_LENGTH]);
+extern void MD5Transform(uint32_t [4], const uint8_t [MD5_BLOCK_LENGTH]);
 extern char *MD5End(MD5_CTX *, char *);
-extern void MD5Final(u_int8_t [MD5_DIGEST_LENGTH], MD5_CTX *);
+extern void MD5Final(uint8_t [MD5_DIGEST_LENGTH], MD5_CTX *);
 
 __HEREDOC__
 
