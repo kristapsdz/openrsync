@@ -23,6 +23,9 @@
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/stat.h>
+#ifdef __sun
+# include <sys/mkdev.h>
+#endif
 
 #include <assert.h>
 #include <errno.h>
