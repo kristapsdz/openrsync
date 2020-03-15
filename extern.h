@@ -250,6 +250,10 @@ extern int verbose;
 	rsync_warn(1, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
 #define WARN2(_fmt, ...) \
 	rsync_warn(2, __FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
+
+#if defined(__sun) && defined(ERR)
+# undef ERR
+#endif
 #define ERR(_fmt, ...) \
 	rsync_err(__FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
 #define ERRX(_fmt, ...) \
