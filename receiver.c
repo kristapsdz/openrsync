@@ -184,6 +184,9 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 	char		*tofree;
 	int		 rc = 0, dfd = -1, phase = 0, c;
 	int32_t		 ioerror;
+#ifndef	O_DIRECTORY
+	struct stat	 st;
+#endif
 	struct pollfd	 pfd[PFD__MAX];
 	struct download	*dl = NULL;
 	struct upload	*ul = NULL;
@@ -268,11 +271,24 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 	oumask = umask(0);
 
 	if (!sess->opts->dry_run) {
+#ifdef O_DIRECTORY
 		dfd = open(root, O_RDONLY | O_DIRECTORY, 0);
 		if (dfd == -1) {
 			ERR("%s: open", root);
 			goto out;
 		}
+#else
+		if ((dfd = open(root, O_RDONLY, 0)) == -1) {
+			ERR("%s: open", root);
+			goto out;
+		} else if (fstat(dfd, &st) == -1) {
+			ERR("%s: fstat", root);
+			goto out;
+		} else if (!S_ISDIR(st.st_mode)) {
+			ERRX("%s: not a directory", root);
+			goto out;
+		}
+#endif
 	}
 
 	/*
