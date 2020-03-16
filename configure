@@ -66,6 +66,7 @@ CFLAGS="${CFLAGS} -Wwrite-strings -Wno-unused-parameter"
 LDADD=
 LDADD_B64_NTOP=
 LDADD_MD5=
+LDADD_LIB_SOCKET=
 LDADD_ZLIB=
 CPPFLAGS=
 LDFLAGS=
@@ -87,24 +88,21 @@ INSTALL_DATA=
 # It does have gcc, so try that instead.
 # Prefer clang, though.
 
-if [ -z "$(which ${CC} 2>/dev/null)" ]
-then
+which ${CC} 2>/dev/null 1>&2 || {
 	echo "${CC} not found: trying clang" 1>&2
 	echo "${CC} not found: trying clang" 1>&3
 	CC=clang
-	if [ -z "$(which ${CC} 2>/dev/null)" ]
-	then
+	which ${CC} 2>/dev/null 1>&2 || {
 		echo "${CC} not found: trying gcc" 1>&2
 		echo "${CC} not found: trying gcc" 1>&3
 		CC=gcc
-		if [ -z "$(which ${CC} 2>/dev/null)" ]
-		then
+		which ${CC} 2>/dev/null 1>&2 || {
 			echo "gcc not found: giving up" 1>&2
 			echo "gcc not found: giving up" 1>&3
 			exit 1
-		fi
-	fi
-fi
+		}
+	}
+}
 
 #----------------------------------------------------------------------
 # Allow certain variables to be overriden on the command line.
@@ -191,7 +189,7 @@ HAVE_SYS_BYTEORDER_H=
 HAVE_SYS_ENDIAN_H=
 HAVE_SYS_QUEUE=
 HAVE_SYS_TREE=
-HAVE_SYSTRACE=
+HAVE_SYSTRACE=0
 HAVE_UNVEIL=
 HAVE_ZLIB=
 HAVE___PROGNAME=
@@ -273,10 +271,10 @@ __HEREDOC__
 
 	if [ -n "${extralib}" ] 
 	then
-		eval LDADD_${2}="${5}"
+		eval "LDADD_${2}=\"${5}\""
 	elif [ -n "${4}" ]
 	then
-		eval LDADD_${2}="${4}"
+		eval "LDADD_${2}=\"${4}\""
 	fi
 
 	echo "${1}: yes ${extralib}" 1>&2
@@ -340,6 +338,7 @@ runtest recallocarray	RECALLOCARRAY			  || true
 runtest sandbox_init	SANDBOX_INIT	"-Wno-deprecated" || true
 runtest seccomp-filter	SECCOMP_FILTER			  || true
 runtest SOCK_NONBLOCK	SOCK_NONBLOCK			  || true
+runtest lib_socket	LIB_SOCKET "" "" "-lsocket -lnsl" || true
 runtest strlcat		STRLCAT				  || true
 runtest strlcpy		STRLCPY				  || true
 runtest strndup		STRNDUP				  || true
@@ -349,7 +348,6 @@ runtest sys_byteorder_h	SYS_BYTEORDER_H			  || true
 runtest sys_endian_h	SYS_ENDIAN_H			  || true
 runtest sys_queue	SYS_QUEUE			  || true
 runtest sys_tree	SYS_TREE			  || true
-runtest systrace	SYSTRACE			  || true
 runtest unveil		UNVEIL				  || true
 runtest zlib		ZLIB		"" "-lz"	  || true
 runtest __progname	__PROGNAME			  || true
@@ -381,6 +379,11 @@ cat << __HEREDOC__
 #if defined(__NetBSD__)
 #define _OPENBSD_SOURCE /* reallocarray, etc. */
 #endif
+#if defined(__sun) /* really illumos */
+#define _XOPEN_SOURCE
+#define _XOPEN_SOURCE_EXTENDED 1 /* XP4v2 */
+#define __EXTENSIONS__ /* reallocarray, etc. */
+#endif
 #if !defined(__BEGIN_DECLS)
 # define __BEGIN_DECLS
 #endif
@@ -390,12 +393,14 @@ cat << __HEREDOC__
 
 __HEREDOC__
 
-# This is just for size_t.
+# This is just for size_t, mode_t, and dev_t.
 # Most of these functions, in the real world, pull in <string.h> or
 # someting that pulls in support for size_t.
 # Our function declarations are standalone, so specify them here.
 
 if [ ${HAVE_MD5} -eq 0 -o \
+     ${HAVE_MEMMEM} -eq 0 -o \
+     ${HAVE_MEMRCHR} -eq 0 -o \
      ${HAVE_MKFIFOAT} -eq 0 -o \
      ${HAVE_MKNODAT} -eq 0 -o \
      ${HAVE_READPASSPHRASE} -eq 0 -o \
@@ -758,9 +763,6 @@ if [ ${HAVE_SYS_QUEUE} -eq 0 ]; then
 /*
  * A compatible version of OpenBSD <sys/queue.h>.
  */
-/*	\$OpenBSD$	*/
-/*	\$NetBSD: queue.h,v 1.11 1996/05/16 05:17:14 mycroft Exp \$	*/
-
 /*
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -777,7 +779,7 @@ if [ ${HAVE_SYS_QUEUE} -eq 0 ]; then
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
@@ -1421,7 +1423,6 @@ if [ ${HAVE_SYS_TREE} -eq 0 ]; then
 /*
  * A compatible version of OpenBSD <sys/tree.h>.
  */
-/*	\$OpenBSD$	*/
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
  * All rights reserved.
@@ -1435,7 +1436,7 @@ if [ ${HAVE_SYS_TREE} -eq 0 ]; then
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR "AS IS" AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
  * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
@@ -2199,27 +2200,28 @@ exec > Makefile.configure
 [ -z "${INSTALL_DATA}"    ] && INSTALL_DATA="${INSTALL} -m 0444"
 
 cat << __HEREDOC__
-CC		= ${CC}
-CFLAGS		= ${CFLAGS}
-CPPFLAGS	= ${CPPFLAGS}
-LDADD		= ${LDADD}
-LDADD_B64_NTOP	= ${LDADD_B64_NTOP}
-LDADD_MD5	= ${LDADD_MD5}
-LDADD_ZLIB	= ${LDADD_ZLIB}
-LDFLAGS		= ${LDFLAGS}
-STATIC		= ${STATIC}
-PREFIX		= ${PREFIX}
-BINDIR		= ${BINDIR}
-SHAREDIR	= ${SHAREDIR}
-SBINDIR		= ${SBINDIR}
-INCLUDEDIR	= ${INCLUDEDIR}
-LIBDIR		= ${LIBDIR}
-MANDIR		= ${MANDIR}
-INSTALL		= ${INSTALL}
-INSTALL_PROGRAM	= ${INSTALL_PROGRAM}
-INSTALL_LIB	= ${INSTALL_LIB}
-INSTALL_MAN	= ${INSTALL_MAN}
-INSTALL_DATA	= ${INSTALL_DATA}
+CC		 = ${CC}
+CFLAGS		 = ${CFLAGS}
+CPPFLAGS	 = ${CPPFLAGS}
+LDADD		 = ${LDADD}
+LDADD_B64_NTOP	 = ${LDADD_B64_NTOP}
+LDADD_LIB_SOCKET = ${LDADD_LIB_SOCKET}
+LDADD_MD5	 = ${LDADD_MD5}
+LDADD_ZLIB	 = ${LDADD_ZLIB}
+LDFLAGS		 = ${LDFLAGS}
+STATIC		 = ${STATIC}
+PREFIX		 = ${PREFIX}
+BINDIR		 = ${BINDIR}
+SHAREDIR	 = ${SHAREDIR}
+SBINDIR		 = ${SBINDIR}
+INCLUDEDIR	 = ${INCLUDEDIR}
+LIBDIR		 = ${LIBDIR}
+MANDIR		 = ${MANDIR}
+INSTALL		 = ${INSTALL}
+INSTALL_PROGRAM	 = ${INSTALL_PROGRAM}
+INSTALL_LIB	 = ${INSTALL_LIB}
+INSTALL_MAN	 = ${INSTALL_MAN}
+INSTALL_DATA	 = ${INSTALL_DATA}
 __HEREDOC__
 
 echo "Makefile.configure: written" 1>&2

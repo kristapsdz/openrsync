@@ -128,6 +128,18 @@ main(void)
 	return 0;
 }
 #endif /* TEST_INFTIM */
+#if TEST_LIB_SOCKET
+#include <sys/socket.h>
+
+int
+main(void)
+{
+	int fds[2], c;
+
+	c = socketpair(AF_UNIX, SOCK_STREAM, 0, fds);
+	return c == -1;
+}
+#endif /* TEST_LIB_SOCKET */
 #if TEST_MD5
 #include <sys/types.h>
 #include <md5.h>
@@ -515,19 +527,6 @@ main(void)
 }
 
 #endif /* TEST_SYS_TREE */
-#if TEST_SYSTRACE
-#include <sys/param.h>
-#include <dev/systrace.h>
-
-#include <stdlib.h>
-
-int
-main(void)
-{
-
-	return(0);
-}
-#endif /* TEST_SYSTRACE */
 #if TEST_UNVEIL
 #include <unistd.h>
 
