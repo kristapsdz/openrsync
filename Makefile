@@ -31,7 +31,7 @@ all: openrsync
 afl: $(AFLS)
 
 openrsync: $(ALLOBJS)
-	$(CC) -o $@ $(ALLOBJS) -lm
+	$(CC) -o $@ $(ALLOBJS) -lm $(LDADD_LIB_SOCKET)
 
 $(AFLS): $(OBJS)
 	$(CC) -o $@ $*.c $(OBJS)
