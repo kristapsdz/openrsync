@@ -40,6 +40,9 @@ main(void)
 }
 #endif /* TEST_CAPSICUM */
 #if TEST_ENDIAN_H
+#ifdef __linux__
+# define _DEFAULT_SOURCE
+#endif
 #include <endian.h>
 
 int
@@ -346,6 +349,13 @@ main(void)
 	return 0;
 }
 #endif /* TEST_SOCK_NONBLOCK */
+#if TEST_STATIC
+int
+main(void)
+{
+	return 0; /* not meant to do anything */
+}
+#endif /* TEST_STATIC */
 #if TEST_STRLCAT
 #include <string.h>
 
@@ -566,19 +576,3 @@ main(void)
 	return waitpid(WAIT_ANY, &st, WNOHANG) != -1;
 }
 #endif /* TEST_WAIT_ANY */
-#if TEST_ZLIB
-#include <stddef.h>
-#include <zlib.h>
-
-int
-main(void)
-{
-	gzFile		 gz;
-
-	if (NULL == (gz = gzopen("/dev/null", "w")))
-		return(1);
-	gzputs(gz, "foo");
-	gzclose(gz);
-	return(0);
-}
-#endif /* TEST_ZLIB */
