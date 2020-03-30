@@ -15,7 +15,7 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-OCONFIGURE_VERSION="0.2.2"
+OCONFIGURE_VERSION="0.2.4"
 
 #
 # This script outputs two files: config.h and Makefile.configure.
@@ -65,6 +65,7 @@ CFLAGS="${CFLAGS} -g -W -Wall -Wextra -Wmissing-prototypes -Wstrict-prototypes"
 CFLAGS="${CFLAGS} -Wwrite-strings -Wno-unused-parameter"
 LDADD=
 LDADD_B64_NTOP=
+LDADD_CRYPT=
 LDADD_MD5=
 LDADD_LIB_SOCKET=
 LDADD_STATIC=
@@ -158,9 +159,11 @@ done
 HAVE_ARC4RANDOM=
 HAVE_B64_NTOP=
 HAVE_CAPSICUM=
+HAVE_CRYPT=
 HAVE_ENDIAN_H=
 HAVE_ERR=
 HAVE_EXPLICIT_BZERO=
+HAVE_FTS=
 HAVE_GETEXECNAME=
 HAVE_GETPROGNAME=
 HAVE_INFTIM=
@@ -179,6 +182,8 @@ HAVE_REALLOCARRAY=
 HAVE_RECALLOCARRAY=
 HAVE_SANDBOX_INIT=
 HAVE_SECCOMP_FILTER=
+HAVE_SETRESGID=
+HAVE_SETRESUID=
 HAVE_SOCK_NONBLOCK=
 HAVE_STRLCAT=
 HAVE_STRLCPY=
@@ -318,12 +323,15 @@ runtest() {
 runtest arc4random	ARC4RANDOM			  || true
 runtest b64_ntop	B64_NTOP "" "" "-lresolv"	  || true
 runtest capsicum	CAPSICUM			  || true
+runtest crypt		CRYPT "" "" "-lcrypt"	  	  || true
 runtest endian_h	ENDIAN_H			  || true
 runtest err		ERR				  || true
 runtest explicit_bzero	EXPLICIT_BZERO			  || true
+runtest fts		FTS				  || true
 runtest getexecname	GETEXECNAME			  || true
 runtest getprogname	GETPROGNAME			  || true
 runtest INFTIM		INFTIM				  || true
+runtest lib_socket	LIB_SOCKET "" "" "-lsocket -lnsl" || true
 runtest md5		MD5 "" "" "-lmd"		  || true
 runtest memmem		MEMMEM			  	  || true
 runtest memrchr		MEMRCHR			  	  || true
@@ -339,8 +347,9 @@ runtest reallocarray	REALLOCARRAY			  || true
 runtest recallocarray	RECALLOCARRAY			  || true
 runtest sandbox_init	SANDBOX_INIT	"-Wno-deprecated" || true
 runtest seccomp-filter	SECCOMP_FILTER			  || true
+runtest setresgid	SETRESGID			  || true
+runtest setresuid	SETRESUID			  || true
 runtest SOCK_NONBLOCK	SOCK_NONBLOCK			  || true
-runtest lib_socket	LIB_SOCKET "" "" "-lsocket -lnsl" || true
 runtest static		STATIC "" "-static"		  || true
 runtest strlcat		STRLCAT				  || true
 runtest strlcpy		STRLCPY				  || true
@@ -380,8 +389,8 @@ cat << __HEREDOC__
 # define __attribute__(x)
 #endif
 #if defined(__linux__) || defined(__MINT__)
-# define _GNU_SOURCE /* memmem, memrchr... */
-# define _DEFAULT_SOURCE /* le32toh */
+# define _GNU_SOURCE /* memmem, memrchr, setresuid... */
+# define _DEFAULT_SOURCE /* le32toh, crypt, ... */
 #endif
 #if defined(__NetBSD__)
 # define _OPENBSD_SOURCE /* reallocarray, etc. */
@@ -409,7 +418,8 @@ __HEREDOC__
 # someting that pulls in support for size_t.
 # Our function declarations are standalone, so specify them here.
 
-if [ ${HAVE_MD5} -eq 0 -o \
+if [ ${HAVE_FTS} -eq 0 -o \
+     ${HAVE_MD5} -eq 0 -o \
      ${HAVE_MEMMEM} -eq 0 -o \
      ${HAVE_MEMRCHR} -eq 0 -o \
      ${HAVE_MKFIFOAT} -eq 0 -o \
@@ -417,6 +427,8 @@ if [ ${HAVE_MD5} -eq 0 -o \
      ${HAVE_READPASSPHRASE} -eq 0 -o \
      ${HAVE_REALLOCARRAY} -eq 0 -o \
      ${HAVE_RECALLOCARRAY} -eq 0 -o \
+     ${HAVE_SETRESGID} -eq 0 -o \
+     ${HAVE_SETRESUID} -eq 0 -o \
      ${HAVE_STRLCAT} -eq 0 -o \
      ${HAVE_STRLCPY} -eq 0 -o \
      ${HAVE_STRNDUP} -eq 0 -o \
@@ -468,9 +480,11 @@ cat << __HEREDOC__
 #define HAVE_ARC4RANDOM ${HAVE_ARC4RANDOM}
 #define HAVE_B64_NTOP ${HAVE_B64_NTOP}
 #define HAVE_CAPSICUM ${HAVE_CAPSICUM}
+#define HAVE_CRYPT ${HAVE_CRYPT}
 #define HAVE_ENDIAN_H ${HAVE_ENDIAN_H}
 #define HAVE_ERR ${HAVE_ERR}
 #define HAVE_EXPLICIT_BZERO ${HAVE_EXPLICIT_BZERO}
+#define HAVE_FTS ${HAVE_FTS}
 #define HAVE_GETEXECNAME ${HAVE_GETEXECNAME}
 #define HAVE_GETPROGNAME ${HAVE_GETPROGNAME}
 #define HAVE_INFTIM ${HAVE_INFTIM}
@@ -489,6 +503,8 @@ cat << __HEREDOC__
 #define HAVE_RECALLOCARRAY ${HAVE_RECALLOCARRAY}
 #define HAVE_SANDBOX_INIT ${HAVE_SANDBOX_INIT}
 #define HAVE_SECCOMP_FILTER ${HAVE_SECCOMP_FILTER}
+#define HAVE_SETRESGID ${HAVE_SETRESGID}
+#define HAVE_SETRESUID ${HAVE_SETRESUID}
 #define HAVE_SOCK_NONBLOCK ${HAVE_SOCK_NONBLOCK}
 #define HAVE_STRLCAT ${HAVE_STRLCAT}
 #define HAVE_STRLCPY ${HAVE_STRLCPY}
@@ -794,6 +810,24 @@ __HEREDOC__
  * Compatibility for mknodat(2).
  */
 int mknodat(int, const char *, mode_t, dev_t);
+
+__HEREDOC__
+
+[ ${HAVE_SETRESGID} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for setresgid(2).
+ */
+int setresgid(gid_t rgid, gid_t egid, gid_t sgid);
+
+__HEREDOC__
+
+[ ${HAVE_SETRESUID} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for setresuid(2).
+ */
+int setresuid(uid_t ruid, uid_t euid, uid_t suid);
 
 __HEREDOC__
 
@@ -2214,6 +2248,90 @@ cat << __HEREDOC__
 #endif /*!OCONFIGURE_CONFIG_H*/
 __HEREDOC__
 
+if [ ${HAVE_FTS} -eq 0 ]; then
+	cat << __HEREDOC__
+/*
+ * Compatibility for fts(3) functions.
+ */
+typedef struct {
+	struct _ftsent *fts_cur;	/* current node */
+	struct _ftsent *fts_child;	/* linked list of children */
+	struct _ftsent **fts_array;	/* sort array */
+	dev_t fts_dev;			/* starting device # */
+	char *fts_path;			/* path for this descent */
+	int fts_rfd;			/* fd for root */
+	size_t fts_pathlen;		/* sizeof(path) */
+	int fts_nitems;			/* elements in the sort array */
+	int (*fts_compar)(const struct _ftsent **, const struct _ftsent **); /* compare function */
+#define	FTS_COMFOLLOW	0x0001		/* follow command line symlinks */
+#define	FTS_LOGICAL	0x0002		/* logical walk */
+#define	FTS_NOCHDIR	0x0004		/* don't change directories */
+#define	FTS_NOSTAT	0x0008		/* don't get stat info */
+#define	FTS_PHYSICAL	0x0010		/* physical walk */
+#define	FTS_SEEDOT	0x0020		/* return dot and dot-dot */
+#define	FTS_XDEV	0x0040		/* don't cross devices */
+#define	FTS_OPTIONMASK	0x00ff		/* valid user option mask */
+#define	FTS_NAMEONLY	0x1000		/* (private) child names only */
+#define	FTS_STOP	0x2000		/* (private) unrecoverable error */
+	int fts_options;		/* fts_open options, global flags */
+} FTS;
+
+typedef struct _ftsent {
+	struct _ftsent *fts_cycle;	/* cycle node */
+	struct _ftsent *fts_parent;	/* parent directory */
+	struct _ftsent *fts_link;	/* next file in directory */
+	long fts_number;	        /* local numeric value */
+	void *fts_pointer;	        /* local address value */
+	char *fts_accpath;		/* access path */
+	char *fts_path;			/* root path */
+	int fts_errno;			/* errno for this node */
+	int fts_symfd;			/* fd for symlink */
+	size_t fts_pathlen;		/* strlen(fts_path) */
+	size_t fts_namelen;		/* strlen(fts_name) */
+	ino_t fts_ino;			/* inode */
+	dev_t fts_dev;			/* device */
+	nlink_t fts_nlink;		/* link count */
+#define	FTS_ROOTPARENTLEVEL	-1
+#define	FTS_ROOTLEVEL		 0
+#define	FTS_MAXLEVEL		 0x7fffffff
+	int fts_level;		/* depth (-1 to N) */
+#define	FTS_D		 1		/* preorder directory */
+#define	FTS_DC		 2		/* directory that causes cycles */
+#define	FTS_DEFAULT	 3		/* none of the above */
+#define	FTS_DNR		 4		/* unreadable directory */
+#define	FTS_DOT		 5		/* dot or dot-dot */
+#define	FTS_DP		 6		/* postorder directory */
+#define	FTS_ERR		 7		/* error; errno is set */
+#define	FTS_F		 8		/* regular file */
+#define	FTS_INIT	 9		/* initialized only */
+#define	FTS_NS		10		/* stat(2) failed */
+#define	FTS_NSOK	11		/* no stat(2) requested */
+#define	FTS_SL		12		/* symbolic link */
+#define	FTS_SLNONE	13		/* symbolic link without target */
+	unsigned short fts_info;	/* user flags for FTSENT structure */
+#define	FTS_DONTCHDIR	 0x01		/* don't chdir .. to the parent */
+#define	FTS_SYMFOLLOW	 0x02		/* followed a symlink to get here */
+	unsigned short fts_flags;	/* private flags for FTSENT structure */
+#define	FTS_AGAIN	 1		/* read node again */
+#define	FTS_FOLLOW	 2		/* follow symbolic link */
+#define	FTS_NOINSTR	 3		/* no instructions */
+#define	FTS_SKIP	 4		/* discard node */
+	unsigned short fts_instr;	/* fts_set() instructions */
+	unsigned short fts_spare;	/* unused */
+	struct stat *fts_statp;		/* stat(2) information */
+	char fts_name[1];		/* file name */
+} FTSENT;
+
+FTSENT	*fts_children(FTS *, int);
+int	 fts_close(FTS *);
+FTS	*fts_open(char * const *, int,
+	    int (*)(const FTSENT **, const FTSENT **));
+FTSENT	*fts_read(FTS *);
+int	 fts_set(FTS *, FTSENT *, int);
+
+__HEREDOC__
+fi
+
 echo "config.h: written" 1>&2
 echo "config.h: written" 1>&3
 
@@ -2244,6 +2362,7 @@ CFLAGS		 = ${CFLAGS}
 CPPFLAGS	 = ${CPPFLAGS}
 LDADD		 = ${LDADD}
 LDADD_B64_NTOP	 = ${LDADD_B64_NTOP}
+LDADD_CRYPT	 = ${LDADD_CRYPT}
 LDADD_LIB_SOCKET = ${LDADD_LIB_SOCKET}
 LDADD_MD5	 = ${LDADD_MD5}
 LDADD_STATIC	 = ${LDADD_STATIC}
