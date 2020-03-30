@@ -28,7 +28,9 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <fts.h>
+#if HAVE_FTS
+# include <fts.h>
+#endif
 #include <inttypes.h>
 #include <search.h>
 #include <stdio.h>
