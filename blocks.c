@@ -16,7 +16,9 @@
  */
 #include "config.h"
 
-#include <sys/queue.h>
+#if HAVE_SYS_QUEUE
+# include <sys/queue.h>
+#endif
 #include <sys/stat.h>
 #include COMPAT_ENDIAN_H
 

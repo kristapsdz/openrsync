@@ -17,7 +17,9 @@
 #include "config.h"
 
 #include <sys/mman.h>
-#include <sys/queue.h>
+#if HAVE_SYS_QUEUE
+# include <sys/queue.h>
+#endif
 #include <sys/stat.h>
 
 #include <assert.h>
