@@ -362,11 +362,6 @@ destination directory.
 After the creation of the destination directory, only targets within
 that directory may be accessed or modified.
 
-On the sender side, input files (and directories) are
-[unveil(2)](https://man.openbsd.org/unveil.2)ed.
-After the generation of the file list, only sources specified or within
-specified directories may be accessed.
-
 Lastly, the MD4 hashs are seeded with
 [arc4random(3)](https://man.openbsd.org/arc4random.3) instead of with
 [time(3)](https://man.openbsd.org/time.3).  (This function is provided
