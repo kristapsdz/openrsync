@@ -63,6 +63,7 @@ enum	tmpmode {
 /*
  * The only flags we'll accept for creation of the temporary file.
  */
+#define MKOTEMP_FLAGS	(O_APPEND | O_CLOEXEC | O_DSYNC | O_RSYNC | O_SYNC)
 #ifndef O_DSYNC
 # define O_DSYNC 0
 #endif
@@ -72,7 +73,6 @@ enum	tmpmode {
 #ifndef O_FSYNC
 # define O_FSYNC 0
 #endif
-#define MKOTEMP_FLAGS	(O_APPEND | O_CLOEXEC | O_DSYNC | O_RSYNC | O_SYNC | O_FSYNC)
 
 #ifndef nitems
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
@@ -89,7 +89,7 @@ mktemp_internalat(int pfd, char *path, int slen, enum tmpmode mode,
 	const char	 tempchars[] = TEMPCHARS;
 	unsigned int	 tries;
 	struct stat	 sb;
-	struct sockaddr_un un;
+	struct sockaddr_un sun;
 	size_t		 len;
 	int		 fd, saved_errno;
 
@@ -176,23 +176,23 @@ mktemp_internalat(int pfd, char *path, int slen, enum tmpmode mode,
 				return(-1);
 			break;
 		case MKTEMP_SOCK:
-			memset(&un, 0, sizeof(un));
-			un.sun_family = AF_UNIX;
-			if ((len = strlcpy(un.sun_path, link,
-			    sizeof(un.sun_path))) >= sizeof(un.sun_path)) {
+			memset(&sun, 0, sizeof(sun));
+			sun.sun_family = AF_UNIX;
+			if ((len = strlcpy(sun.sun_path, link,
+			    sizeof(sun.sun_path))) >= sizeof(sun.sun_path)) {
 				errno = EINVAL;
 				return(-1);
 			}
-			if (un.sun_path[len] != '/') {
-				if (strlcat(un.sun_path, "/",
-				    sizeof(un.sun_path)) >=
-				    sizeof(un.sun_path)) {
+			if (sun.sun_path[len] != '/') {
+				if (strlcat(sun.sun_path, "/",
+				    sizeof(sun.sun_path)) >=
+				    sizeof(sun.sun_path)) {
 					errno = EINVAL;
 					return(-1);
 				}
 			}
-			if (strlcat(un.sun_path, path, sizeof(un.sun_path)) >=
-			    sizeof(un.sun_path)) {
+			if (strlcat(sun.sun_path, path, sizeof(sun.sun_path)) >=
+			    sizeof(sun.sun_path)) {
 				errno = EINVAL;
 				return(-1);
 			}
@@ -210,7 +210,7 @@ mktemp_internalat(int pfd, char *path, int slen, enum tmpmode mode,
 			    FD_CLOEXEC) == -1)
 				return -1;
 #endif
-			if (bind(fd, (struct sockaddr *)&un, sizeof(un)) ==
+			if (bind(fd, (struct sockaddr *)&sun, sizeof(sun)) ==
 			    0) {
 				close(fd);
 				return(0);
@@ -238,7 +238,6 @@ mktemp_internalat(int pfd, char *path, int slen, enum tmpmode mode,
 int
 mkstempat(int fd, char *path)
 {
-
 	return mktemp_internalat(fd, path, 0, MKTEMP_FILE, 0, NULL, 0, 0);
 }
 
