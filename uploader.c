@@ -17,7 +17,6 @@
  */
 #include "config.h"
 
-#include <sys/mman.h>
 #include <sys/stat.h>
 
 #include <assert.h>
@@ -152,16 +151,13 @@ init_blk(struct blk *p, const struct blkset *set, off_t offs,
 	size_t idx, const void *map, const struct sess *sess)
 {
 
-	assert(map != MAP_FAILED);
-
-	/* Block length inherits for all but the last. */
-
 	p->idx = idx;
+	/* Block length inherits for all but the last. */
 	p->len = idx < set->blksz - 1 ? set->len : set->rem;
 	p->offs = offs;
 
-	p->chksum_short = hash_fast(map + offs, p->len);
-	hash_slow(map + offs, p->len, p->chksum_long, sess);
+	p->chksum_short = hash_fast(map, p->len);
+	hash_slow(map, p->len, p->chksum_long, sess);
 }
 
 /*
@@ -743,8 +739,9 @@ rsync_uploader(struct upload *u, int *fileinfd,
 {
 	struct blkset	    blk;
 	struct stat	    st;
-	void		   *map, *bufp;
-	size_t		    i, mapsz, pos, sz;
+	void		   *mbuf, *bufp;
+	ssize_t		    msz;
+	size_t		    i, pos, sz;
 	off_t		    offs;
 	int		    c;
 	const struct flist *f;
@@ -911,35 +908,46 @@ rsync_uploader(struct upload *u, int *fileinfd,
 	blk.csum = u->csumlen;
 
 	if (*fileinfd != -1 && st.st_size > 0) {
-		mapsz = st.st_size;
-		map = mmap(NULL, mapsz, PROT_READ, MAP_SHARED, *fileinfd, 0);
-		if (map == MAP_FAILED) {
-			ERR("%s: mmap", u->fl[u->idx].path);
-			close(*fileinfd);
-			*fileinfd = -1;
-			return -1;
-		}
-
 		init_blkset(&blk, st.st_size);
 		assert(blk.blksz);
 
 		blk.blks = calloc(blk.blksz, sizeof(struct blk));
 		if (blk.blks == NULL) {
 			ERR("calloc");
-			munmap(map, mapsz);
+			close(*fileinfd);
+			*fileinfd = -1;
+			return -1;
+		}
+
+		if ((mbuf = calloc(1, blk.len)) == NULL) {
+			ERR("calloc");
 			close(*fileinfd);
 			*fileinfd = -1;
 			return -1;
 		}
 
 		offs = 0;
-		for (i = 0; i < blk.blksz; i++) {
-			init_blk(&blk.blks[i],
-				&blk, offs, i, map, sess);
+		i = 0;
+		do {
+			msz = pread(*fileinfd, mbuf, blk.len, offs);
+			if (msz < 0) {
+				ERR("pread");
+				close(*fileinfd);
+				*fileinfd = -1;
+				return -1;
+			}
+			if ((size_t)msz != blk.len && (size_t)msz != blk.rem) {
+				/* short read, try again */
+				continue;
+			}
+			init_blk(&blk.blks[i], &blk, offs, i, mbuf, sess);
 			offs += blk.len;
-		}
+			LOG3(
+			    "i=%ld, offs=%lld, msz=%ld, blk.len=%lu, blk.rem=%lu",
+			    i, offs, msz, blk.len, blk.rem);
+			i++;
+		} while (i < blk.blksz);
 
-		munmap(map, mapsz);
 		close(*fileinfd);
 		*fileinfd = -1;
 		LOG3("%s: mapped %jd B with %zu blocks",
