@@ -15,7 +15,7 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-OCONFIGURE_VERSION="0.2.4"
+OCONFIGURE_VERSION="0.3.4"
 
 #
 # This script outputs two files: config.h and Makefile.configure.
@@ -54,19 +54,39 @@ set -e
 exec 3> config.log
 echo "config.log: writing..."
 
+# GNU submake prints different output if invoked recursively, which
+# messes up CC and CFLAGS detection.  Pass --no-print-directory if
+# we have a MAKELEVEL (GNU and FreeBSD make) and the argument is
+# allowed.
+
+MAKE_FLAGS=""
+
+if [ -n "${MAKELEVEL}" ]; then
+	if [ "${MAKELEVEL}" -gt 0 ] ; then
+		MAKE_FLAGS="--no-print-directory"
+		echo "all:" | make ${MAKE_FLAGS} -sf - 2>/dev/null || MAKE_FLAGS=""
+	fi
+fi
+
+if [ -n "$MAKE_FLAGS" ]; then 
+	echo "GNU submake detected: using --no-print-directory" 1>&2
+	echo "GNU submake detected: using --no-print-directory" 1>&3
+fi
+
 #----------------------------------------------------------------------
 # Initialize all variables here such that nothing can leak in from the
 # environment except for CC and CFLAGS, which we might have passed in.
 #----------------------------------------------------------------------
 
-CC=`printf "all:\\n\\t@echo \\\$(CC)\\n" | make -sf -`
-CFLAGS=`printf "all:\\n\\t@echo \\\$(CFLAGS)\\n" | make -sf -`
+CC=`printf "all:\\n\\t@echo \\\$(CC)\\n" | make ${MAKE_FLAGS} -sf -`
+CFLAGS=`printf "all:\\n\\t@echo \\\$(CFLAGS)\\n" | make ${MAKE_FLAGS} -sf -`
 CFLAGS="${CFLAGS} -g -W -Wall -Wextra -Wmissing-prototypes -Wstrict-prototypes"
 CFLAGS="${CFLAGS} -Wwrite-strings -Wno-unused-parameter"
 LDADD=
 LDADD_B64_NTOP=
 LDADD_CRYPT=
 LDADD_MD5=
+LDADD_SHA2=
 LDADD_LIB_SOCKET=
 LDADD_STATIC=
 CPPFLAGS=
@@ -89,15 +109,15 @@ INSTALL_DATA=
 # It does have gcc, so try that instead.
 # Prefer clang, though.
 
-which ${CC} 2>/dev/null 1>&2 || {
+command -v ${CC} 2>/dev/null 1>&2 || {
 	echo "${CC} not found: trying clang" 1>&2
 	echo "${CC} not found: trying clang" 1>&3
 	CC=clang
-	which ${CC} 2>/dev/null 1>&2 || {
+	command -v ${CC} 2>/dev/null 1>&2 || {
 		echo "${CC} not found: trying gcc" 1>&2
 		echo "${CC} not found: trying gcc" 1>&3
 		CC=gcc
-		which ${CC} 2>/dev/null 1>&2 || {
+		command -v ${CC} 2>/dev/null 1>&2 || {
 			echo "gcc not found: giving up" 1>&2
 			echo "gcc not found: giving up" 1>&3
 			exit 1
@@ -185,6 +205,8 @@ HAVE_SECCOMP_FILTER=
 HAVE_SETRESGID=
 HAVE_SETRESUID=
 HAVE_SOCK_NONBLOCK=
+HAVE_SHA2=
+HAVE_SHA2_H=
 HAVE_STRLCAT=
 HAVE_STRLCPY=
 HAVE_STRNDUP=
@@ -250,18 +272,18 @@ singletest() {
 	extralib=""
 	cat 1>&3 << __HEREDOC__
 ${1}: testing...
-${COMP} -DTEST_${2} ${3} -o test-${1} tests.c ${4}
+${COMP} -DTEST_${2} ${3} -o test-${1} tests.c ${LDFLAGS} ${4}
 __HEREDOC__
-	if ${COMP} -DTEST_${2} ${3} -o "test-${1}" tests.c ${4} 1>&3 2>&3; then
+	if ${COMP} -DTEST_${2} ${3} -o "test-${1}" tests.c ${LDFLAGS} ${4} 1>&3 2>&3; then
 		echo "${1}: ${CC} succeeded" 1>&3
 	else 
 		if [ -n "${5}" ] ; then
 			echo "${1}: ${CC} failed with $? (retrying)" 1>&3
 			cat 1>&3 << __HEREDOC__
 ${1}: testing...
-${COMP} -DTEST_${2} ${3} -o test-${1} tests.c ${5}
+${COMP} -DTEST_${2} ${3} -o test-${1} tests.c ${LDFLAGS} ${5}
 __HEREDOC__
-			if ${COMP} -DTEST_${2} ${3} -o "test-${1}" tests.c ${5} 1>&3 2>&3; then
+			if ${COMP} -DTEST_${2} ${3} -o "test-${1}" tests.c ${LDFLAGS} ${5} 1>&3 2>&3; then
 				echo "${1}: ${CC} succeeded" 1>&3
 				extralib="(with ${5})"
 			else 
@@ -349,6 +371,7 @@ runtest sandbox_init	SANDBOX_INIT	"-Wno-deprecated" || true
 runtest seccomp-filter	SECCOMP_FILTER			  || true
 runtest setresgid	SETRESGID			  || true
 runtest setresuid	SETRESUID			  || true
+runtest sha2		SHA2 "" "" "-lmd"		  || true
 runtest SOCK_NONBLOCK	SOCK_NONBLOCK			  || true
 runtest static		STATIC "" "-static"		  || true
 runtest strlcat		STRLCAT				  || true
@@ -429,6 +452,7 @@ if [ ${HAVE_FTS} -eq 0 -o \
      ${HAVE_RECALLOCARRAY} -eq 0 -o \
      ${HAVE_SETRESGID} -eq 0 -o \
      ${HAVE_SETRESUID} -eq 0 -o \
+     ${HAVE_SHA2} -eq 0 -o \
      ${HAVE_STRLCAT} -eq 0 -o \
      ${HAVE_STRLCPY} -eq 0 -o \
      ${HAVE_STRNDUP} -eq 0 -o \
@@ -438,7 +462,8 @@ then
 	echo
 fi
 
-if [ ${HAVE_MD5} -eq 0 ]
+if [ ${HAVE_MD5} -eq 0 -o \
+     ${HAVE_SHA2} -eq 0 ]
 then
 	echo "#include <stdint.h> /* C99 [u]int[nn]_t types */"
 	echo
@@ -505,6 +530,8 @@ cat << __HEREDOC__
 #define HAVE_SECCOMP_FILTER ${HAVE_SECCOMP_FILTER}
 #define HAVE_SETRESGID ${HAVE_SETRESGID}
 #define HAVE_SETRESUID ${HAVE_SETRESUID}
+#define HAVE_SHA2 ${HAVE_SHA2}
+#define HAVE_SHA2_H ${HAVE_SHA2}
 #define HAVE_SOCK_NONBLOCK ${HAVE_SOCK_NONBLOCK}
 #define HAVE_STRLCAT ${HAVE_STRLCAT}
 #define HAVE_STRLCPY ${HAVE_STRLCPY}
@@ -619,11 +646,17 @@ __HEREDOC__
 /*
  * Compatibility functions for err(3).
  */
-extern void err(int, const char *, ...);
-extern void errx(int, const char *, ...);
+extern void err(int, const char *, ...) __attribute__((noreturn));
+extern void errc(int, int, const char *, ...) __attribute__((noreturn));
+extern void errx(int, const char *, ...) __attribute__((noreturn));
+extern void verr(int, const char *, va_list) __attribute__((noreturn));
+extern void verrc(int, int, const char *, va_list) __attribute__((noreturn));
+extern void verrx(int, const char *, va_list) __attribute__((noreturn));
 extern void warn(const char *, ...);
 extern void warnx(const char *, ...);
+extern void warnc(int, const char *, ...);
 extern void vwarn(const char *, va_list);
+extern void vwarnc(int, const char *, va_list);
 extern void vwarnx(const char *, va_list);
 __HEREDOC__
 
@@ -648,6 +681,68 @@ extern void MD5Pad(MD5_CTX *);
 extern void MD5Transform(uint32_t [4], const uint8_t [MD5_BLOCK_LENGTH]);
 extern char *MD5End(MD5_CTX *, char *);
 extern void MD5Final(uint8_t [MD5_DIGEST_LENGTH], MD5_CTX *);
+
+__HEREDOC__
+
+[ ${HAVE_SHA2} -eq 0 ] && \
+	cat << __HEREDOC__
+/*
+ * Compatibility for sha2(3).
+ */
+
+/*** SHA-256/384/512 Various Length Definitions ***********************/
+#define SHA256_BLOCK_LENGTH		64
+#define SHA256_DIGEST_LENGTH		32
+#define SHA256_DIGEST_STRING_LENGTH	(SHA256_DIGEST_LENGTH * 2 + 1)
+#define SHA384_BLOCK_LENGTH		128
+#define SHA384_DIGEST_LENGTH		48
+#define SHA384_DIGEST_STRING_LENGTH	(SHA384_DIGEST_LENGTH * 2 + 1)
+#define SHA512_BLOCK_LENGTH		128
+#define SHA512_DIGEST_LENGTH		64
+#define SHA512_DIGEST_STRING_LENGTH	(SHA512_DIGEST_LENGTH * 2 + 1)
+#define SHA512_256_BLOCK_LENGTH		128
+#define SHA512_256_DIGEST_LENGTH	32
+#define SHA512_256_DIGEST_STRING_LENGTH	(SHA512_256_DIGEST_LENGTH * 2 + 1)
+
+/*** SHA-224/256/384/512 Context Structure *******************************/
+typedef struct _SHA2_CTX {
+	union {
+		uint32_t	st32[8];
+		uint64_t	st64[8];
+	} state;
+	uint64_t	bitcount[2];
+	uint8_t		buffer[SHA512_BLOCK_LENGTH];
+} SHA2_CTX;
+
+void SHA256Init(SHA2_CTX *);
+void SHA256Transform(uint32_t state[8], const uint8_t [SHA256_BLOCK_LENGTH]);
+void SHA256Update(SHA2_CTX *, const uint8_t *, size_t);
+void SHA256Pad(SHA2_CTX *);
+void SHA256Final(uint8_t [SHA256_DIGEST_LENGTH], SHA2_CTX *);
+char *SHA256End(SHA2_CTX *, char *);
+char *SHA256File(const char *, char *);
+char *SHA256FileChunk(const char *, char *, off_t, off_t);
+char *SHA256Data(const uint8_t *, size_t, char *);
+
+void SHA384Init(SHA2_CTX *);
+void SHA384Transform(uint64_t state[8], const uint8_t [SHA384_BLOCK_LENGTH]);
+void SHA384Update(SHA2_CTX *, const uint8_t *, size_t);
+void SHA384Pad(SHA2_CTX *);
+void SHA384Final(uint8_t [SHA384_DIGEST_LENGTH], SHA2_CTX *);
+char *SHA384End(SHA2_CTX *, char *);
+char *SHA384File(const char *, char *);
+char *SHA384FileChunk(const char *, char *, off_t, off_t);
+char *SHA384Data(const uint8_t *, size_t, char *);
+
+void SHA512Init(SHA2_CTX *);
+void SHA512Transform(uint64_t state[8], const uint8_t [SHA512_BLOCK_LENGTH]);
+void SHA512Update(SHA2_CTX *, const uint8_t *, size_t);
+void SHA512Pad(SHA2_CTX *);
+void SHA512Final(uint8_t [SHA512_DIGEST_LENGTH], SHA2_CTX *);
+char *SHA512End(SHA2_CTX *, char *);
+char *SHA512File(const char *, char *);
+char *SHA512FileChunk(const char *, char *, off_t, off_t);
+char *SHA512Data(const uint8_t *, size_t, char *);
 
 __HEREDOC__
 
@@ -852,7 +947,7 @@ if [ ${HAVE_SYS_QUEUE} -eq 0 ]; then
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS "AS IS" AND
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ''AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
@@ -873,94 +968,93 @@ if [ ${HAVE_SYS_QUEUE} -eq 0 ]; then
  * Require for OS/X and other platforms that have old/broken/incomplete
  * <sys/queue.h>.
  */
-#undef SLIST_HEAD
-#undef SLIST_HEAD_INITIALIZER
-#undef SLIST_ENTRY
-#undef SLIST_FOREACH_PREVPTR
-#undef SLIST_FOREACH_SAFE
-#undef SLIST_FIRST
-#undef SLIST_END
-#undef SLIST_EMPTY
-#undef SLIST_NEXT
-#undef SLIST_FOREACH
-#undef SLIST_INIT
-#undef SLIST_INSERT_AFTER
-#undef SLIST_INSERT_HEAD
-#undef SLIST_REMOVE_HEAD
-#undef SLIST_REMOVE_AFTER
-#undef SLIST_REMOVE
-#undef SLIST_REMOVE_NEXT
-#undef LIST_HEAD
-#undef LIST_HEAD_INITIALIZER
+
+#undef LIST_EMPTY
+#undef LIST_END
 #undef LIST_ENTRY
 #undef LIST_FIRST
-#undef LIST_END
-#undef LIST_EMPTY
-#undef LIST_NEXT
 #undef LIST_FOREACH
 #undef LIST_FOREACH_SAFE
+#undef LIST_HEAD
+#undef LIST_HEAD_INITIALIZER
 #undef LIST_INIT
 #undef LIST_INSERT_AFTER
 #undef LIST_INSERT_BEFORE
 #undef LIST_INSERT_HEAD
+#undef LIST_NEXT
 #undef LIST_REMOVE
 #undef LIST_REPLACE
-#undef SIMPLEQ_HEAD
-#undef SIMPLEQ_HEAD_INITIALIZER
+#undef SIMPLEQ_CONCAT
+#undef SIMPLEQ_EMPTY
+#undef SIMPLEQ_END
 #undef SIMPLEQ_ENTRY
 #undef SIMPLEQ_FIRST
-#undef SIMPLEQ_END
-#undef SIMPLEQ_EMPTY
-#undef SIMPLEQ_NEXT
 #undef SIMPLEQ_FOREACH
 #undef SIMPLEQ_FOREACH_SAFE
+#undef SIMPLEQ_HEAD
+#undef SIMPLEQ_HEAD_INITIALIZER
 #undef SIMPLEQ_INIT
+#undef SIMPLEQ_INSERT_AFTER
 #undef SIMPLEQ_INSERT_HEAD
 #undef SIMPLEQ_INSERT_TAIL
-#undef SIMPLEQ_INSERT_AFTER
+#undef SIMPLEQ_NEXT
+#undef SIMPLEQ_REMOVE_AFTER
 #undef SIMPLEQ_REMOVE_HEAD
-#undef TAILQ_HEAD
-#undef TAILQ_HEAD_INITIALIZER
+#undef SLIST_EMPTY
+#undef SLIST_END
+#undef SLIST_ENTRY
+#undef SLIST_FIRST
+#undef SLIST_FOREACH
+#undef SLIST_FOREACH_SAFE
+#undef SLIST_HEAD
+#undef SLIST_HEAD_INITIALIZER
+#undef SLIST_INIT
+#undef SLIST_INSERT_AFTER
+#undef SLIST_INSERT_HEAD
+#undef SLIST_NEXT
+#undef SLIST_REMOVE
+#undef SLIST_REMOVE_AFTER
+#undef SLIST_REMOVE_HEAD
+#undef TAILQ_CONCAT
+#undef TAILQ_EMPTY
+#undef TAILQ_END
 #undef TAILQ_ENTRY
 #undef TAILQ_FIRST
-#undef TAILQ_END
-#undef TAILQ_NEXT
-#undef TAILQ_LAST
-#undef TAILQ_PREV
-#undef TAILQ_EMPTY
 #undef TAILQ_FOREACH
 #undef TAILQ_FOREACH_REVERSE
-#undef TAILQ_FOREACH_SAFE
 #undef TAILQ_FOREACH_REVERSE_SAFE
+#undef TAILQ_FOREACH_SAFE
+#undef TAILQ_HEAD
+#undef TAILQ_HEAD_INITIALIZER
 #undef TAILQ_INIT
-#undef TAILQ_INSERT_HEAD
-#undef TAILQ_INSERT_TAIL
 #undef TAILQ_INSERT_AFTER
 #undef TAILQ_INSERT_BEFORE
+#undef TAILQ_INSERT_HEAD
+#undef TAILQ_INSERT_TAIL
+#undef TAILQ_LAST
+#undef TAILQ_NEXT
+#undef TAILQ_PREV
 #undef TAILQ_REMOVE
 #undef TAILQ_REPLACE
-#undef CIRCLEQ_HEAD
-#undef CIRCLEQ_HEAD_INITIALIZER
-#undef CIRCLEQ_ENTRY
-#undef CIRCLEQ_FIRST
-#undef CIRCLEQ_LAST
-#undef CIRCLEQ_END
-#undef CIRCLEQ_NEXT
-#undef CIRCLEQ_PREV
-#undef CIRCLEQ_EMPTY
-#undef CIRCLEQ_FOREACH
-#undef CIRCLEQ_FOREACH_REVERSE
-#undef CIRCLEQ_INIT
-#undef CIRCLEQ_INSERT_AFTER
-#undef CIRCLEQ_INSERT_BEFORE
-#undef CIRCLEQ_INSERT_HEAD
-#undef CIRCLEQ_INSERT_TAIL
-#undef CIRCLEQ_REMOVE
-#undef CIRCLEQ_REPLACE
+#undef XSIMPLEQ_EMPTY
+#undef XSIMPLEQ_END
+#undef XSIMPLEQ_ENTRY
+#undef XSIMPLEQ_FIRST
+#undef XSIMPLEQ_FOREACH
+#undef XSIMPLEQ_FOREACH_SAFE
+#undef XSIMPLEQ_HEAD
+#undef XSIMPLEQ_INIT
+#undef XSIMPLEQ_INSERT_AFTER
+#undef XSIMPLEQ_INSERT_HEAD
+#undef XSIMPLEQ_INSERT_TAIL
+#undef XSIMPLEQ_NEXT
+#undef XSIMPLEQ_REMOVE_AFTER
+#undef XSIMPLEQ_REMOVE_HEAD
+#undef XSIMPLEQ_XOR
 
 /*
- * This file defines five types of data structures: singly-linked lists, 
- * lists, simple queues, tail queues, and circular queues.
+ * This file defines five types of data structures: singly-linked lists,
+ * lists, simple queues, tail queues and XOR simple queues.
  *
  *
  * A singly-linked list is headed by a single forward pointer. The elements
@@ -980,7 +1074,7 @@ if [ ${HAVE_SYS_QUEUE} -eq 0 ]; then
  * or after an existing element or at the head of the list. A list
  * may only be traversed in the forward direction.
  *
- * A simple queue is headed by a pair of pointers, one the head of the
+ * A simple queue is headed by a pair of pointers, one to the head of the
  * list and the other to the tail of the list. The elements are singly
  * linked to save space, so elements can only be removed from the
  * head of the list. New elements can be added to the list before or after
@@ -994,19 +1088,17 @@ if [ ${HAVE_SYS_QUEUE} -eq 0 ]; then
  * after an existing element, at the head of the list, or at the end of
  * the list. A tail queue may be traversed in either direction.
  *
- * A circle queue is headed by a pair of pointers, one to the head of the
- * list and the other to the tail of the list. The elements are doubly
- * linked so that an arbitrary element can be removed without a need to
- * traverse the list. New elements can be added to the list before or after
- * an existing element, at the head of the list, or at the end of the list.
- * A circle queue may be traversed in either direction, but has a more
- * complex end of list detection.
+ * An XOR simple queue is used in the same way as a regular simple queue.
+ * The difference is that the head structure also includes a "cookie" that
+ * is XOR'd with the queue pointer (first, last or next) to generate the
+ * real pointer value.
  *
  * For details on the use of these macros, see the queue(3) manual page.
  */
 
 #if defined(QUEUE_MACRO_DEBUG) || (defined(_KERNEL) && defined(DIAGNOSTIC))
-#define _Q_INVALIDATE(a) (a) = ((void *)-1)
+#define _Q_INVALID ((void *)-1)
+#define _Q_INVALIDATE(a) (a) = _Q_INVALID
 #else
 #define _Q_INVALIDATE(a)
 #endif
@@ -1018,15 +1110,15 @@ if [ ${HAVE_SYS_QUEUE} -eq 0 ]; then
 struct name {								\\
 	struct type *slh_first;	/* first element */			\\
 }
- 
+
 #define	SLIST_HEAD_INITIALIZER(head)					\\
 	{ NULL }
- 
+
 #define SLIST_ENTRY(type)						\\
 struct {								\\
 	struct type *sle_next;	/* next element */			\\
 }
- 
+
 /*
  * Singly-linked List access methods.
  */
@@ -1080,8 +1172,8 @@ struct {								\\
 			curelm = curelm->field.sle_next;		\\
 		curelm->field.sle_next =				\\
 		    curelm->field.sle_next->field.sle_next;		\\
-		_Q_INVALIDATE((elm)->field.sle_next);			\\
 	}								\\
+	_Q_INVALIDATE((elm)->field.sle_next);				\\
 } while (0)
 
 /*
@@ -1102,7 +1194,7 @@ struct {								\\
 }
 
 /*
- * List access methods
+ * List access methods.
  */
 #define	LIST_FIRST(head)		((head)->lh_first)
 #define	LIST_END(head)			NULL
@@ -1239,6 +1331,94 @@ struct {								\\
 		(head)->sqh_last = &(elm)->field.sqe_next;		\\
 } while (0)
 
+#define SIMPLEQ_CONCAT(head1, head2) do {				\\
+	if (!SIMPLEQ_EMPTY((head2))) {					\\
+		*(head1)->sqh_last = (head2)->sqh_first;		\\
+		(head1)->sqh_last = (head2)->sqh_last;			\\
+		SIMPLEQ_INIT((head2));					\\
+	}								\\
+} while (0)
+
+/*
+ * XOR Simple queue definitions.
+ */
+#define XSIMPLEQ_HEAD(name, type)					\\
+struct name {								\\
+	struct type *sqx_first;	/* first element */			\\
+	struct type **sqx_last;	/* addr of last next element */		\\
+	unsigned long sqx_cookie;					\\
+}
+
+#define XSIMPLEQ_ENTRY(type)						\\
+struct {								\\
+	struct type *sqx_next;	/* next element */			\\
+}
+
+/*
+ * XOR Simple queue access methods.
+ */
+#define XSIMPLEQ_XOR(head, ptr)	    ((__typeof(ptr))((head)->sqx_cookie ^ \\
+					(unsigned long)(ptr)))
+#define	XSIMPLEQ_FIRST(head)	    XSIMPLEQ_XOR(head, ((head)->sqx_first))
+#define	XSIMPLEQ_END(head)	    NULL
+#define	XSIMPLEQ_EMPTY(head)	    (XSIMPLEQ_FIRST(head) == XSIMPLEQ_END(head))
+#define	XSIMPLEQ_NEXT(head, elm, field)    XSIMPLEQ_XOR(head, ((elm)->field.sqx_next))
+
+
+#define XSIMPLEQ_FOREACH(var, head, field)				\\
+	for ((var) = XSIMPLEQ_FIRST(head);				\\
+	    (var) != XSIMPLEQ_END(head);				\\
+	    (var) = XSIMPLEQ_NEXT(head, var, field))
+
+#define	XSIMPLEQ_FOREACH_SAFE(var, head, field, tvar)			\\
+	for ((var) = XSIMPLEQ_FIRST(head);				\\
+	    (var) && ((tvar) = XSIMPLEQ_NEXT(head, var, field), 1);	\\
+	    (var) = (tvar))
+
+/*
+ * XOR Simple queue functions.
+ */
+#define	XSIMPLEQ_INIT(head) do {					\\
+	arc4random_buf(&(head)->sqx_cookie, sizeof((head)->sqx_cookie)); \\
+	(head)->sqx_first = XSIMPLEQ_XOR(head, NULL);			\\
+	(head)->sqx_last = XSIMPLEQ_XOR(head, &(head)->sqx_first);	\\
+} while (0)
+
+#define XSIMPLEQ_INSERT_HEAD(head, elm, field) do {			\\
+	if (((elm)->field.sqx_next = (head)->sqx_first) ==		\\
+	    XSIMPLEQ_XOR(head, NULL))					\\
+		(head)->sqx_last = XSIMPLEQ_XOR(head, &(elm)->field.sqx_next); \\
+	(head)->sqx_first = XSIMPLEQ_XOR(head, (elm));			\\
+} while (0)
+
+#define XSIMPLEQ_INSERT_TAIL(head, elm, field) do {			\\
+	(elm)->field.sqx_next = XSIMPLEQ_XOR(head, NULL);		\\
+	*(XSIMPLEQ_XOR(head, (head)->sqx_last)) = XSIMPLEQ_XOR(head, (elm)); \\
+	(head)->sqx_last = XSIMPLEQ_XOR(head, &(elm)->field.sqx_next);	\\
+} while (0)
+
+#define XSIMPLEQ_INSERT_AFTER(head, listelm, elm, field) do {		\\
+	if (((elm)->field.sqx_next = (listelm)->field.sqx_next) ==	\\
+	    XSIMPLEQ_XOR(head, NULL))					\\
+		(head)->sqx_last = XSIMPLEQ_XOR(head, &(elm)->field.sqx_next); \\
+	(listelm)->field.sqx_next = XSIMPLEQ_XOR(head, (elm));		\\
+} while (0)
+
+#define XSIMPLEQ_REMOVE_HEAD(head, field) do {				\\
+	if (((head)->sqx_first = XSIMPLEQ_XOR(head,			\\
+	    (head)->sqx_first)->field.sqx_next) == XSIMPLEQ_XOR(head, NULL)) \\
+		(head)->sqx_last = XSIMPLEQ_XOR(head, &(head)->sqx_first); \\
+} while (0)
+
+#define XSIMPLEQ_REMOVE_AFTER(head, elm, field) do {			\\
+	if (((elm)->field.sqx_next = XSIMPLEQ_XOR(head,			\\
+	    (elm)->field.sqx_next)->field.sqx_next)			\\
+	    == XSIMPLEQ_XOR(head, NULL))				\\
+		(head)->sqx_last = 					\\
+		    XSIMPLEQ_XOR(head, &(elm)->field.sqx_next);		\\
+} while (0)
+
+
 /*
  * Tail queue definitions.
  */
@@ -1257,8 +1437,8 @@ struct {								\\
 	struct type **tqe_prev;	/* address of previous next element */	\\
 }
 
-/* 
- * tail queue access methods 
+/*
+ * Tail queue access methods.
  */
 #define	TAILQ_FIRST(head)		((head)->tqh_first)
 #define	TAILQ_END(head)			NULL
@@ -1359,133 +1539,13 @@ struct {								\\
 	_Q_INVALIDATE((elm)->field.tqe_next);				\\
 } while (0)
 
-/*
- * Circular queue definitions.
- */
-#define CIRCLEQ_HEAD(name, type)					\\
-struct name {								\\
-	struct type *cqh_first;		/* first element */		\\
-	struct type *cqh_last;		/* last element */		\\
-}
-
-#define CIRCLEQ_HEAD_INITIALIZER(head)					\\
-	{ CIRCLEQ_END(&head), CIRCLEQ_END(&head) }
-
-#define CIRCLEQ_ENTRY(type)						\\
-struct {								\\
-	struct type *cqe_next;		/* next element */		\\
-	struct type *cqe_prev;		/* previous element */		\\
-}
-
-/*
- * Circular queue access methods 
- */
-#define	CIRCLEQ_FIRST(head)		((head)->cqh_first)
-#define	CIRCLEQ_LAST(head)		((head)->cqh_last)
-#define	CIRCLEQ_END(head)		((void *)(head))
-#define	CIRCLEQ_NEXT(elm, field)	((elm)->field.cqe_next)
-#define	CIRCLEQ_PREV(elm, field)	((elm)->field.cqe_prev)
-#define	CIRCLEQ_EMPTY(head)						\\
-	(CIRCLEQ_FIRST(head) == CIRCLEQ_END(head))
-
-#define CIRCLEQ_FOREACH(var, head, field)				\\
-	for((var) = CIRCLEQ_FIRST(head);				\\
-	    (var) != CIRCLEQ_END(head);					\\
-	    (var) = CIRCLEQ_NEXT(var, field))
-
-#define	CIRCLEQ_FOREACH_SAFE(var, head, field, tvar)			\\
-	for ((var) = CIRCLEQ_FIRST(head);				\\
-	    (var) != CIRCLEQ_END(head) &&				\\
-	    ((tvar) = CIRCLEQ_NEXT(var, field), 1);			\\
-	    (var) = (tvar))
-
-#define CIRCLEQ_FOREACH_REVERSE(var, head, field)			\\
-	for((var) = CIRCLEQ_LAST(head);					\\
-	    (var) != CIRCLEQ_END(head);					\\
-	    (var) = CIRCLEQ_PREV(var, field))
-
-#define	CIRCLEQ_FOREACH_REVERSE_SAFE(var, head, headname, field, tvar)	\\
-	for ((var) = CIRCLEQ_LAST(head, headname);			\\
-	    (var) != CIRCLEQ_END(head) && 				\\
-	    ((tvar) = CIRCLEQ_PREV(var, headname, field), 1);		\\
-	    (var) = (tvar))
-
-/*
- * Circular queue functions.
- */
-#define	CIRCLEQ_INIT(head) do {						\\
-	(head)->cqh_first = CIRCLEQ_END(head);				\\
-	(head)->cqh_last = CIRCLEQ_END(head);				\\
-} while (0)
-
-#define CIRCLEQ_INSERT_AFTER(head, listelm, elm, field) do {		\\
-	(elm)->field.cqe_next = (listelm)->field.cqe_next;		\\
-	(elm)->field.cqe_prev = (listelm);				\\
-	if ((listelm)->field.cqe_next == CIRCLEQ_END(head))		\\
-		(head)->cqh_last = (elm);				\\
-	else								\\
-		(listelm)->field.cqe_next->field.cqe_prev = (elm);	\\
-	(listelm)->field.cqe_next = (elm);				\\
-} while (0)
-
-#define CIRCLEQ_INSERT_BEFORE(head, listelm, elm, field) do {		\\
-	(elm)->field.cqe_next = (listelm);				\\
-	(elm)->field.cqe_prev = (listelm)->field.cqe_prev;		\\
-	if ((listelm)->field.cqe_prev == CIRCLEQ_END(head))		\\
-		(head)->cqh_first = (elm);				\\
-	else								\\
-		(listelm)->field.cqe_prev->field.cqe_next = (elm);	\\
-	(listelm)->field.cqe_prev = (elm);				\\
-} while (0)
-
-#define CIRCLEQ_INSERT_HEAD(head, elm, field) do {			\\
-	(elm)->field.cqe_next = (head)->cqh_first;			\\
-	(elm)->field.cqe_prev = CIRCLEQ_END(head);			\\
-	if ((head)->cqh_last == CIRCLEQ_END(head))			\\
-		(head)->cqh_last = (elm);				\\
-	else								\\
-		(head)->cqh_first->field.cqe_prev = (elm);		\\
-	(head)->cqh_first = (elm);					\\
-} while (0)
-
-#define CIRCLEQ_INSERT_TAIL(head, elm, field) do {			\\
-	(elm)->field.cqe_next = CIRCLEQ_END(head);			\\
-	(elm)->field.cqe_prev = (head)->cqh_last;			\\
-	if ((head)->cqh_first == CIRCLEQ_END(head))			\\
-		(head)->cqh_first = (elm);				\\
-	else								\\
-		(head)->cqh_last->field.cqe_next = (elm);		\\
-	(head)->cqh_last = (elm);					\\
-} while (0)
-
-#define	CIRCLEQ_REMOVE(head, elm, field) do {				\\
-	if ((elm)->field.cqe_next == CIRCLEQ_END(head))			\\
-		(head)->cqh_last = (elm)->field.cqe_prev;		\\
-	else								\\
-		(elm)->field.cqe_next->field.cqe_prev =			\\
-		    (elm)->field.cqe_prev;				\\
-	if ((elm)->field.cqe_prev == CIRCLEQ_END(head))			\\
-		(head)->cqh_first = (elm)->field.cqe_next;		\\
-	else								\\
-		(elm)->field.cqe_prev->field.cqe_next =			\\
-		    (elm)->field.cqe_next;				\\
-	_Q_INVALIDATE((elm)->field.cqe_prev);				\\
-	_Q_INVALIDATE((elm)->field.cqe_next);				\\
-} while (0)
-
-#define CIRCLEQ_REPLACE(head, elm, elm2, field) do {			\\
-	if (((elm2)->field.cqe_next = (elm)->field.cqe_next) ==		\\
-	    CIRCLEQ_END(head))						\\
-		(head).cqh_last = (elm2);				\\
-	else								\\
-		(elm2)->field.cqe_next->field.cqe_prev = (elm2);	\\
-	if (((elm2)->field.cqe_prev = (elm)->field.cqe_prev) ==		\\
-	    CIRCLEQ_END(head))						\\
-		(head).cqh_first = (elm2);				\\
-	else								\\
-		(elm2)->field.cqe_prev->field.cqe_next = (elm2);	\\
-	_Q_INVALIDATE((elm)->field.cqe_prev);				\\
-	_Q_INVALIDATE((elm)->field.cqe_next);				\\
+#define TAILQ_CONCAT(head1, head2, field) do {				\\
+	if (!TAILQ_EMPTY(head2)) {					\\
+		*(head1)->tqh_last = (head2)->tqh_first;		\\
+		(head2)->tqh_first->field.tqe_prev = (head1)->tqh_last;	\\
+		(head1)->tqh_last = (head2)->tqh_last;			\\
+		TAILQ_INIT((head2));					\\
+	}								\\
 } while (0)
 
 __HEREDOC__
@@ -2365,6 +2425,7 @@ LDADD_B64_NTOP	 = ${LDADD_B64_NTOP}
 LDADD_CRYPT	 = ${LDADD_CRYPT}
 LDADD_LIB_SOCKET = ${LDADD_LIB_SOCKET}
 LDADD_MD5	 = ${LDADD_MD5}
+LDADD_SHA2	 = ${LDADD_SHA2}
 LDADD_STATIC	 = ${LDADD_STATIC}
 LDFLAGS		 = ${LDFLAGS}
 STATIC		 = ${STATIC}
