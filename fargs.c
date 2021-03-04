@@ -40,7 +40,7 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 	assert(f->sourcesz > 0);
 
 	if ((rsync_path = sess->opts->rsync_path) == NULL)
-		rsync_path = RSYNC_PATH;
+		rsync_path = (char *)RSYNC_PATH;
 
 	if (f->host != NULL) {
 		/*
