@@ -843,10 +843,6 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
 			ERRX1("flist_append");
 			return 0;
 		}
-		if (unveil(root, "r") == -1) {
-			ERR("%s: unveil", root);
-			return 0;
-		}
 		return 1;
 	} else if (S_ISLNK(st.st_mode)) {
 		if (!sess->opts->preserve_links) {
@@ -861,10 +857,6 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
 
 		if (!flist_append(f, &st, root)) {
 			ERRX1("flist_append");
-			return 0;
-		}
-		if (unveil(root, "r") == -1) {
-			ERR("%s: unveil", root);
 			return 0;
 		}
 		return 1;
@@ -1003,10 +995,6 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
 		ERR("fts_read");
 		goto out;
 	}
-	if (unveil(root, "r") == -1) {
-		ERR("%s: unveil", root);
-		goto out;
-	}
 
 	LOG3("generated %zu filenames: %s", flsz, root);
 	rc = 1;
@@ -1099,10 +1087,6 @@ flist_gen_files(struct sess *sess, size_t argc, char **argv,
 
 		/* Add this file to our file-system worldview. */
 
-		if (unveil(argv[i], "r") == -1) {
-			ERR("%s: unveil", argv[i]);
-			goto out;
-		}
 		if (!flist_append(f, &st, argv[i])) {
 			ERRX1("flist_append");
 			goto out;
@@ -1126,7 +1110,6 @@ out:
  * the arguments given on the command line.
  * This overrides everything we're given on the command line.
  * TODO: mmap() the file to avoid the billion reads.
- * FIXME: unveil().
  * Returns zero on failure, non-zero on success.
  */
 static int
@@ -1309,10 +1292,6 @@ flist_gen(struct sess *sess, size_t argc, char **argv, struct flist **flp,
 
 	/* After scanning, lock our file-system view. */
 
-	if (unveil(NULL, NULL) == -1) {
-		ERR("unveil");
-		return 0;
-	}
 	if (!rc)
 		return 0;
 
