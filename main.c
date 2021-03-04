@@ -35,6 +35,7 @@
 #include "extern.h"
 
 int verbose;
+int poll_timeout;
 
 /*
  * A remote host is has a colon before the first path separator.
@@ -287,12 +288,13 @@ main(int argc, char *argv[])
 	struct sess	  sess;
 	struct fargs	*fargs;
 	char		**args;
-	struct option	 lopts[] = {
+	const char 	*errstr;
+	const struct option	 lopts[] = {
 		{ "port",	required_argument, NULL,		3 },
 		{ "rsh",	required_argument, NULL,		'e' },
 		{ "rsync-path",	required_argument, NULL,		1 },
 #if 0
-		{ "sync-file",	required_argument, NULL,		5 },
+		{ "sync-file",	required_argument, NULL,		6 },
 #endif
 		{ "sender",	no_argument,	&opts.sender,		1 },
 		{ "server",	no_argument,	&opts.server,		1 },
@@ -318,6 +320,7 @@ main(int argc, char *argv[])
 		{ "no-recursive", no_argument,	&opts.recursive,	0 },
 		{ "specials",	no_argument,	&opts.specials,		1 },
 		{ "no-specials", no_argument,	&opts.specials,		0 },
+		{ "timeout",	required_argument, NULL,		5 },
 		{ "times",	no_argument,	&opts.preserve_times,	1 },
 		{ "no-times",	no_argument,	&opts.preserve_times,	0 },
 		{ "verbose",	no_argument,	&verbose,		1 },
@@ -399,8 +402,13 @@ main(int argc, char *argv[])
 		case 4:
 			opts.address = optarg;
 			break;
-#if 0
 		case 5:
+			poll_timeout = strtonum(optarg, 0, 60*60, &errstr);
+			if (errstr != NULL)
+				errx(1, "timeout is %s: %s", errstr, optarg);
+			break;
+#if 0
+		case 6:
 			opts.syncfile = optarg;
 			break;
 #endif
@@ -420,6 +428,12 @@ main(int argc, char *argv[])
 
 	if (opts.port == NULL)
 		opts.port = (char *)"rsync";
+
+	/* by default and for --timeout=0 disable poll_timeout */
+	if (poll_timeout == 0)
+		poll_timeout = -1;
+	else
+		poll_timeout *= 1000;
 
 	/*
 	 * This is what happens when we're started with the "hidden"
@@ -540,9 +554,9 @@ main(int argc, char *argv[])
 	exit(rc);
 usage:
 	fprintf(stderr, "usage: %s"
-	    " [-aDglnoprtvx] [-e program] [--address=bind_address] [--del]\n"
+	    " [-aDglnoprtvx] [-e program] [--address=sourceaddr] [--del]\n"
 	    "\t[--numeric-ids] [--port=portnumber] [--rsync-path=program]\n"
-	    "\t[--version] source ... directory\n",
+	    "\t[--timeout=seconds] [--version] source ... directory\n",
 	    getprogname());
 	exit(1);
 }

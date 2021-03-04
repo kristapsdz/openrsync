@@ -354,7 +354,7 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 	LOG2("%s: ready for phase 1 data", root);
 
 	for (;;) {
-		if ((c = poll(pfd, PFD__MAX, POLL_TIMEOUT)) == -1) {
+		if ((c = poll(pfd, PFD__MAX, poll_timeout)) == -1) {
 			ERR("poll");
 			goto out;
 		} else if (c == 0) {

@@ -49,10 +49,10 @@
 #define	CSUM_LENGTH_PHASE2 (16)
 
 /*
- * Use this for debugging deadlocks.
+ * Use this for --timeout.
  * All poll events will use it and catch time-outs.
  */
-#define POLL_TIMEOUT	(INFTIM)
+extern int poll_timeout;
 
 /*
  * Operating mode for a client or a server.
