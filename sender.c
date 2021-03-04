@@ -373,7 +373,7 @@ rsync_sender(struct sess *sess, int fdin,
 	size_t		    wbufpos = 0, wbufsz = 0, wbufmax = 0;
 	ssize_t		    ssz;
 
-	if (pledge("stdio getpw rpath unveil", NULL) == -1) {
+	if (pledge("stdio getpw rpath", NULL) == -1) {
 		ERR("pledge");
 		return 0;
 	}
