@@ -29,7 +29,6 @@
 #include <netdb.h>
 #include <poll.h>
 #include <resolv.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -104,6 +103,8 @@ inet_connect(int *sd, const struct source *src, const char *host,
 
 	c = connect(*sd, (const struct sockaddr *)&src->sa, src->salen);
 	if (c == -1) {
+		if (errno == EADDRNOTAVAIL)
+			return 0;
 		if (errno == ECONNREFUSED || errno == EHOSTUNREACH) {
 			WARNX("connect refused: %s, %s",
 			    src->ip, host);
