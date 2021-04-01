@@ -31,10 +31,10 @@ all: openrsync
 afl: $(AFLS)
 
 openrsync: $(ALLOBJS)
-	$(CC) -o $@ $(ALLOBJS) -lm $(LDADD_LIB_SOCKET)
+	$(CC) $(LDFLAGS) -o $@ $(ALLOBJS) -lm $(LDADD_LIB_SOCKET)
 
 $(AFLS): $(OBJS)
-	$(CC) -o $@ $*.c $(OBJS)
+	$(CC) $(LDFLAGS) -o $@ $*.c $(OBJS)
 
 install: all
 	mkdir -p $(DESTDIR)$(BINDIR)
