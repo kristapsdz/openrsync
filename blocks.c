@@ -1,4 +1,3 @@
-/*	$Id$ */
 /*
  * Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
  *
@@ -20,9 +19,9 @@
 # include <sys/queue.h>
 #endif
 #include <sys/stat.h>
-#include COMPAT_ENDIAN_H
 
 #include <assert.h>
+#include COMPAT_ENDIAN_H
 #include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>

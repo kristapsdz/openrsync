@@ -1,4 +1,3 @@
-/* $OpenBSD$ */
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
  * Copyright (c) 2005,2006 Damien Miller.  All rights reserved.
@@ -25,14 +24,14 @@
  */
 #include "config.h"
 
+#include <stdint.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdarg.h>
 #if HAVE_ERR
 # include <err.h>
 #endif
-#include <stdint.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdarg.h>
-#include <unistd.h>
 
 #include "extern.h"
 

@@ -1,4 +1,3 @@
-/*	$OpenBSD$ */
 /*
  * Copyright (c) 1996-1998, 2008 Theo de Raadt
  * Copyright (c) 1997, 2008-2009 Todd C. Miller

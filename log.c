@@ -1,4 +1,3 @@
-/*	$Id$ */
 /*
  * Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
  *
@@ -33,7 +32,7 @@ extern int verbose;
  * at one).
  */
 void
-rsync_log(const char *fname, size_t line, int level, const char *fmt, ...)
+rsync_log(int level, const char *fmt, ...)
 {
 	char	*buf = NULL;
 	va_list	 ap;
@@ -53,7 +52,7 @@ rsync_log(const char *fname, size_t line, int level, const char *fmt, ...)
 	if (level <= 0 && buf != NULL)
 		fprintf(stderr, "%s\n", buf);
 	else if (level > 0)
-		fprintf(stderr, "%s:%zu%s%s\n", fname, line,
+		fprintf(stderr, "%s: %s%s\n", getprogname(),
 		    (buf != NULL) ? ": " : "",
 		    (buf != NULL) ? buf : "");
 	free(buf);
@@ -64,7 +63,7 @@ rsync_log(const char *fname, size_t line, int level, const char *fmt, ...)
  * However, it is not like errx(3) in that it does not exit.
  */
 void
-rsync_errx(const char *fname, size_t line, const char *fmt, ...)
+rsync_errx(const char *fmt, ...)
 {
 	char	*buf = NULL;
 	va_list	 ap;
@@ -78,7 +77,7 @@ rsync_errx(const char *fname, size_t line, const char *fmt, ...)
 		va_end(ap);
 	}
 
-	fprintf(stderr, "%s:%zu: error%s%s\n", fname, line,
+	fprintf(stderr, "%s: error%s%s\n", getprogname(),
 	   (buf != NULL) ? ": " : "",
 	   (buf != NULL) ? buf : "");
 	free(buf);
@@ -89,7 +88,7 @@ rsync_errx(const char *fname, size_t line, const char *fmt, ...)
  * However, it is not like err(3) in that it does not exit.
  */
 void
-rsync_err(const char *fname, size_t line, const char *fmt, ...)
+rsync_err(const char *fmt, ...)
 {
 	char	*buf = NULL;
 	va_list	 ap;
@@ -104,7 +103,7 @@ rsync_err(const char *fname, size_t line, const char *fmt, ...)
 		va_end(ap);
 	}
 
-	fprintf(stderr, "%s:%zu: error%s%s: %s\n", fname, line,
+	fprintf(stderr, "%s: error%s%s: %s\n", getprogname(),
 	   (buf != NULL) ? ": " : "",
 	   (buf != NULL) ? buf : "", strerror(er));
 	free(buf);
@@ -115,7 +114,7 @@ rsync_err(const char *fname, size_t line, const char *fmt, ...)
  * chain of functions from which the actual warning occurred.
  */
 void
-rsync_errx1(const char *fname, size_t line, const char *fmt, ...)
+rsync_errx1(const char *fmt, ...)
 {
 	char	*buf = NULL;
 	va_list	 ap;
@@ -132,7 +131,7 @@ rsync_errx1(const char *fname, size_t line, const char *fmt, ...)
 		va_end(ap);
 	}
 
-	fprintf(stderr, "%s:%zu: error%s%s\n", fname, line,
+	fprintf(stderr, "%s: error%s%s\n", getprogname(),
 	   (buf != NULL) ? ": " : "",
 	   (buf != NULL) ? buf : "");
 	free(buf);
@@ -142,7 +141,7 @@ rsync_errx1(const char *fname, size_t line, const char *fmt, ...)
  * Prints a warning message.
  */
 void
-rsync_warnx(const char *fname, size_t line, const char *fmt, ...)
+rsync_warnx(const char *fmt, ...)
 {
 	char	*buf = NULL;
 	va_list	 ap;
@@ -156,7 +155,7 @@ rsync_warnx(const char *fname, size_t line, const char *fmt, ...)
 		va_end(ap);
 	}
 
-	fprintf(stderr, "%s:%zu: warning%s%s\n", fname, line,
+	fprintf(stderr, "%s: warning%s%s\n", getprogname(),
 	   (buf != NULL) ? ": " : "",
 	   (buf != NULL) ? buf : "");
 	free(buf);
@@ -167,7 +166,7 @@ rsync_warnx(const char *fname, size_t line, const char *fmt, ...)
  * It uses a level detector for when to inhibit printing.
  */
 void
-rsync_warn(int level, const char *fname, size_t line, const char *fmt, ...)
+rsync_warn(int level, const char *fmt, ...)
 {
 	char	*buf = NULL;
 	va_list	 ap;
@@ -185,7 +184,7 @@ rsync_warn(int level, const char *fname, size_t line, const char *fmt, ...)
 		va_end(ap);
 	}
 
-	fprintf(stderr, "%s:%zu: warning%s%s: %s\n", fname, line,
+	fprintf(stderr, "%s: warning%s%s: %s\n", getprogname(),
 	   (buf != NULL) ? ": " : "",
 	   (buf != NULL) ? buf : "", strerror(er));
 	free(buf);
