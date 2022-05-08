@@ -31,6 +31,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#if HAVE_SCAN_SCALED
+# include <util.h>
+#endif
 
 #include "extern.h"
 
@@ -88,18 +91,18 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 	/* Allocations. */
 
 	if ((f = calloc(1, sizeof(struct fargs))) == NULL)
-		err(1, "calloc");
+		err(ERR_NOMEM, NULL);
 
 	f->sourcesz = argc - 1;
 	if ((f->sources = calloc(f->sourcesz, sizeof(char *))) == NULL)
-		err(1, "calloc");
+		err(ERR_NOMEM, NULL);
 
 	for (i = 0; i < argc - 1; i++)
 		if ((f->sources[i] = strdup(argv[i])) == NULL)
-			err(1, "strdup");
+			err(ERR_NOMEM, NULL);
 
 	if ((f->sink = strdup(argv[i])) == NULL)
-		err(1, "strdup");
+		err(ERR_NOMEM, NULL);
 
 	/*
 	 * Test files for its locality.
@@ -114,15 +117,16 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 	if (fargs_is_remote(f->sink)) {
 		f->mode = FARGS_SENDER;
 		if ((f->host = strdup(f->sink)) == NULL)
-			err(1, "strdup");
+			err(ERR_NOMEM, NULL);
 	}
 
 	if (fargs_is_remote(f->sources[0])) {
 		if (f->host != NULL)
-			errx(1, "both source and destination cannot be remote files");
+			errx(ERR_SYNTAX, "both source and destination "
+			    "cannot be remote files");
 		f->mode = FARGS_RECEIVER;
 		if ((f->host = strdup(f->sources[0])) == NULL)
-			err(1, "strdup");
+			err(ERR_NOMEM, NULL);
 	}
 
 	if (f->host != NULL) {
@@ -132,7 +136,8 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 			len = strlen(f->host) - 8 + 1;
 			memmove(f->host, f->host + 8, len);
 			if ((cp = strchr(f->host, '/')) == NULL)
-				errx(1, "rsync protocol requires a module name");
+				errx(ERR_SYNTAX,
+				    "rsync protocol requires a module name");
 			*cp++ = '\0';
 			f->module = cp;
 			if ((cp = strchr(f->module, '/')) != NULL)
@@ -157,9 +162,9 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 			}
 		}
 		if ((len = strlen(f->host)) == 0)
-			errx(1, "empty remote host");
+			errx(ERR_SYNTAX, "empty remote host");
 		if (f->remote && strlen(f->module) == 0)
-			errx(1, "empty remote module");
+			errx(ERR_SYNTAX, "empty remote module");
 	}
 
 	/* Make sure we have the same "hostspec" for all files. */
@@ -169,7 +174,7 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 			for (i = 0; i < f->sourcesz; i++) {
 				if (!fargs_is_remote(f->sources[i]))
 					continue;
-				errx(1,
+				errx(ERR_SYNTAX,
 				    "remote file in list of local sources: %s",
 				    f->sources[i]);
 			}
@@ -179,20 +184,20 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 				    !fargs_is_daemon(f->sources[i]))
 					continue;
 				if (fargs_is_daemon(f->sources[i]))
-					errx(1, "remote daemon in list of "
-					    "remote sources: %s",
-					    f->sources[i]);
-				errx(1, "local file in list of remote sources: %s",
-				    f->sources[i]);
+					errx(ERR_SYNTAX,
+					    "remote daemon in list of remote "
+					    "sources: %s", f->sources[i]);
+				errx(ERR_SYNTAX, "local file in list of "
+				    "remote sources: %s", f->sources[i]);
 			}
 	} else {
 		if (f->mode != FARGS_RECEIVER)
-			errx(1, "sender mode for remote "
+			errx(ERR_SYNTAX, "sender mode for remote "
 				"daemon receivers not yet supported");
 		for (i = 0; i < f->sourcesz; i++) {
 			if (fargs_is_daemon(f->sources[i]))
 				continue;
-			errx(1, "non-remote daemon file "
+			errx(ERR_SYNTAX, "non-remote daemon file "
 				"in list of remote daemon sources: "
 				"%s", f->sources[i]);
 		}
@@ -245,7 +250,7 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 				*ccp = '\0';
 			if (strncmp(cp, f->host, len) ||
 			    (cp[len] != '/' && cp[len] != '\0'))
-				errx(1, "different remote host: %s",
+				errx(ERR_SYNTAX, "different remote host: %s",
 				    f->sources[i]);
 			memmove(f->sources[i],
 				f->sources[i] + len + 8 + 1,
@@ -258,7 +263,7 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 			/* host::path */
 			if (strncmp(cp, f->host, len) ||
 			    (cp[len] != ':' && cp[len] != '\0'))
-				errx(1, "different remote host: %s",
+				errx(ERR_SYNTAX, "different remote host: %s",
 				    f->sources[i]);
 			memmove(f->sources[i], f->sources[i] + len + 2,
 			    j - len - 1);
@@ -269,7 +274,7 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 			/* host:path */
 			if (strncmp(cp, f->host, len) ||
 			    (cp[len] != ':' && cp[len] != '\0'))
-				errx(1, "different remote host: %s",
+				errx(ERR_SYNTAX, "different remote host: %s",
 				    f->sources[i]);
 			memmove(f->sources[i],
 				f->sources[i] + len + 1, j - len);
@@ -279,64 +284,95 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 	return f;
 }
 
+static struct opts	 opts;
+
+#define OP_ADDRESS	1000
+#define OP_PORT		1001
+#define OP_RSYNCPATH	1002
+#define OP_TIMEOUT	1003
+#define OP_VERSION	1004
+#define OP_EXCLUDE	1005
+#define OP_INCLUDE	1006
+#define OP_EXCLUDE_FROM	1007
+#define OP_INCLUDE_FROM	1008
+#define OP_COMP_DEST	1009
+#define OP_COPY_DEST	1010
+#define OP_LINK_DEST	1011
+#define OP_MAX_SIZE	1012
+#define OP_MIN_SIZE	1013
+
+const struct option	 lopts[] = {
+    { "address",	required_argument, NULL,		OP_ADDRESS },
+    { "archive",	no_argument,	NULL,			'a' },
+    { "compare-dest",	required_argument, NULL,		OP_COMP_DEST },
+#if 0
+    { "copy-dest",	required_argument, NULL,		OP_COPY_DEST },
+    { "link-dest",	required_argument, NULL,		OP_LINK_DEST },
+#endif
+    { "compress",	no_argument,	NULL,			'z' },
+    { "del",		no_argument,	&opts.del,		1 },
+    { "delete",		no_argument,	&opts.del,		1 },
+    { "devices",	no_argument,	&opts.devices,		1 },
+    { "no-devices",	no_argument,	&opts.devices,		0 },
+    { "dry-run",	no_argument,	&opts.dry_run,		1 },
+    { "exclude",	required_argument, NULL,		OP_EXCLUDE },
+    { "exclude-from",	required_argument, NULL,		OP_EXCLUDE_FROM },
+    { "group",		no_argument,	&opts.preserve_gids,	1 },
+    { "no-group",	no_argument,	&opts.preserve_gids,	0 },
+    { "help",		no_argument,	NULL,			'h' },
+    { "include",	required_argument, NULL,		OP_INCLUDE },
+    { "include-from",	required_argument, NULL,		OP_INCLUDE_FROM },
+    { "links",		no_argument,	&opts.preserve_links,	1 },
+    { "max-size",	required_argument, NULL,		OP_MAX_SIZE },
+    { "min-size",	required_argument, NULL,		OP_MIN_SIZE },
+    { "no-links",	no_argument,	&opts.preserve_links,	0 },
+    { "no-motd",	no_argument,	&opts.no_motd,		1 },
+    { "numeric-ids",	no_argument,	&opts.numeric_ids,	1 },
+    { "owner",		no_argument,	&opts.preserve_uids,	1 },
+    { "no-owner",	no_argument,	&opts.preserve_uids,	0 },
+    { "perms",		no_argument,	&opts.preserve_perms,	1 },
+    { "no-perms",	no_argument,	&opts.preserve_perms,	0 },
+    { "port",		required_argument, NULL,		OP_PORT },
+    { "recursive",	no_argument,	&opts.recursive,	1 },
+    { "no-recursive",	no_argument,	&opts.recursive,	0 },
+    { "rsh",		required_argument, NULL,		'e' },
+    { "rsync-path",	required_argument, NULL,		OP_RSYNCPATH },
+    { "sender",		no_argument,	&opts.sender,		1 },
+    { "server",		no_argument,	&opts.server,		1 },
+    { "specials",	no_argument,	&opts.specials,		1 },
+#if 0
+    { "sync-file",	required_argument, NULL,		6 },
+#endif
+    { "no-specials",	no_argument,	&opts.specials,		0 },
+    { "timeout",	required_argument, NULL,		OP_TIMEOUT },
+    { "times",		no_argument,	&opts.preserve_times,	1 },
+    { "no-times",	no_argument,	&opts.preserve_times,	0 },
+    { "verbose",	no_argument,	&verbose,		1 },
+    { "no-verbose",	no_argument,	&verbose,		0 },
+    { "version",	no_argument,	NULL,			OP_VERSION },
+    { NULL,		0,		NULL,			0 }
+};
+
 int
 main(int argc, char *argv[])
 {
-	struct opts	 opts;
 	pid_t		 child;
-	int		 fds[2], sd = -1, rc, c, st, i;
-	struct sess	  sess;
+	int		 fds[2], sd = -1, rc, c, st, i, lidx;
+	size_t		 basedir_cnt = 0;
+	struct sess	 sess;
 	struct fargs	*fargs;
 	char		**args;
-	const char 	*errstr;
-	const struct option	 lopts[] = {
-		{ "port",	required_argument, NULL,		3 },
-		{ "rsh",	required_argument, NULL,		'e' },
-		{ "rsync-path",	required_argument, NULL,		1 },
-#if 0
-		{ "sync-file",	required_argument, NULL,		6 },
-#endif
-		{ "sender",	no_argument,	&opts.sender,		1 },
-		{ "server",	no_argument,	&opts.server,		1 },
-		{ "dry-run",	no_argument,	&opts.dry_run,		1 },
-		{ "version",	no_argument,	NULL,			2 },
-		{ "archive",	no_argument,	NULL,			'a' },
-		{ "help",	no_argument,	NULL,			'h' },
-		{ "compress",	no_argument,	NULL,			'z' },
-		{ "del",	no_argument,	&opts.del,		1 },
-		{ "delete",	no_argument,	&opts.del,		1 },
-		{ "devices",	no_argument,	&opts.devices,		1 },
-		{ "no-devices",	no_argument,	&opts.devices,		0 },
-		{ "group",	no_argument,	&opts.preserve_gids,	1 },
-		{ "no-group",	no_argument,	&opts.preserve_gids,	0 },
-		{ "links",	no_argument,	&opts.preserve_links,	1 },
-		{ "no-links",	no_argument,	&opts.preserve_links,	0 },
-		{ "owner",	no_argument,	&opts.preserve_uids,	1 },
-		{ "no-owner",	no_argument,	&opts.preserve_uids,	0 },
-		{ "perms",	no_argument,	&opts.preserve_perms,	1 },
-		{ "no-perms",	no_argument,	&opts.preserve_perms,	0 },
-		{ "numeric-ids", no_argument,	&opts.numeric_ids,	1 },
-		{ "recursive",	no_argument,	&opts.recursive,	1 },
-		{ "no-recursive", no_argument,	&opts.recursive,	0 },
-		{ "specials",	no_argument,	&opts.specials,		1 },
-		{ "no-specials", no_argument,	&opts.specials,		0 },
-		{ "timeout",	required_argument, NULL,		5 },
-		{ "times",	no_argument,	&opts.preserve_times,	1 },
-		{ "no-times",	no_argument,	&opts.preserve_times,	0 },
-		{ "verbose",	no_argument,	&verbose,		1 },
-		{ "no-verbose",	no_argument,	&verbose,		0 },
-		{ "address",	required_argument, NULL,		4 },
-		{ NULL,		0,		NULL,			0 }};
+	const char	*errstr;
 
 	/* Global pledge. */
 
 	if (pledge("stdio unix rpath wpath cpath dpath inet fattr chown dns getpw proc exec unveil",
 	    NULL) == -1)
-		err(1, "pledge");
+		err(ERR_IPC, "pledge");
 
-	memset(&opts, 0, sizeof(struct opts));
+	opts.max_size = opts.min_size = -1;
 
-	while ((c = getopt_long(argc, argv, "Dae:ghlnoprtvxz", lopts, NULL))
+	while ((c = getopt_long(argc, argv, "Dae:ghlnoprtvxz", lopts, &lidx))
 	    != -1) {
 		switch (c) {
 		case 'D':
@@ -389,29 +425,89 @@ main(int argc, char *argv[])
 		case 0:
 			/* Non-NULL flag values (e.g., --sender). */
 			break;
-		case 1:
-			opts.rsync_path = optarg;
-			break;
-		case 2:
-			fprintf(stderr, "openrsync: protocol version %u\n",
-			    RSYNC_PROTOCOL);
-			exit(0);
-		case 3:
-			opts.port = optarg;
-			break;
-		case 4:
-			opts.address = optarg;
-			break;
-		case 5:
-			poll_timeout = strtonum(optarg, 0, 60*60, &errstr);
-			if (errstr != NULL)
-				errx(1, "timeout is %s: %s", errstr, optarg);
-			break;
 #if 0
 		case 6:
 			opts.syncfile = optarg;
 			break;
 #endif
+		case OP_ADDRESS:
+			opts.address = optarg;
+			break;
+		case OP_PORT:
+			opts.port = optarg;
+			break;
+		case OP_RSYNCPATH:
+			opts.rsync_path = optarg;
+			break;
+		case OP_TIMEOUT:
+			poll_timeout = strtonum(optarg, 0, 60*60, &errstr);
+			if (errstr != NULL)
+				errx(ERR_SYNTAX, "timeout is %s: %s",
+				    errstr, optarg);
+			break;
+		case OP_EXCLUDE:
+			if (parse_rule(optarg, RULE_EXCLUDE) == -1)
+				errx(ERR_SYNTAX, "syntax error in exclude: %s",
+				    optarg);
+			break;
+		case OP_INCLUDE:
+			if (parse_rule(optarg, RULE_INCLUDE) == -1)
+				errx(ERR_SYNTAX, "syntax error in include: %s",
+				    optarg);
+			break;
+		case OP_EXCLUDE_FROM:
+			parse_file(optarg, RULE_EXCLUDE);
+			break;
+		case OP_INCLUDE_FROM:
+			parse_file(optarg, RULE_INCLUDE);
+			break;
+		case OP_COMP_DEST:
+			if (opts.alt_base_mode !=0 &&
+			    opts.alt_base_mode != BASE_MODE_COMPARE) {
+				errx(1, "option --%s conflicts with %s",
+				    lopts[lidx].name,
+				    alt_base_mode(opts.alt_base_mode));
+			}
+			opts.alt_base_mode = BASE_MODE_COMPARE;
+#if 0
+			goto basedir;
+		case OP_COPY_DEST:
+			if (opts.alt_base_mode !=0 &&
+			    opts.alt_base_mode != BASE_MODE_COPY) {
+				errx(1, "option --%s conflicts with %s",
+				    lopts[lidx].name,
+				    alt_base_mode(opts.alt_base_mode));
+			}
+			opts.alt_base_mode = BASE_MODE_COPY;
+			goto basedir;
+		case OP_LINK_DEST:
+			if (opts.alt_base_mode !=0 &&
+			    opts.alt_base_mode != BASE_MODE_LINK) {
+				errx(1, "option --%s conflicts with %s",
+				    lopts[lidx].name,
+				    alt_base_mode(opts.alt_base_mode));
+			}
+			opts.alt_base_mode = BASE_MODE_LINK;
+
+basedir:
+#endif
+			if (basedir_cnt >= MAX_BASEDIR)
+				errx(1, "too many --%s directories specified",
+				    lopts[lidx].name);
+			opts.basedir[basedir_cnt++] = optarg;
+			break;
+		case OP_MAX_SIZE:
+			if (scan_scaled(optarg, &opts.max_size) == -1)
+				err(1, "bad max-size");
+			break;
+		case OP_MIN_SIZE:
+			if (scan_scaled(optarg, &opts.min_size) == -1)
+				err(1, "bad min-size");
+			break;
+		case OP_VERSION:
+			fprintf(stderr, "openrsync: protocol version %u\n",
+			    RSYNC_PROTOCOL);
+			exit(0);
 		case 'h':
 		default:
 			goto usage;
@@ -477,54 +573,45 @@ main(int argc, char *argv[])
 
 	if (pledge("stdio unix rpath wpath cpath dpath fattr chown getpw proc exec unveil",
 	    NULL) == -1)
-		err(1, "pledge");
+		err(ERR_IPC, "pledge");
 
 	/* Create a bidirectional socket and start our child. */
 
 #if HAVE_SOCK_NONBLOCK
 	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0, fds) == -1)
-		err(1, "socketpair");
+		err(ERR_IPC, "socketpair");
 #else
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == -1)
-		err(1, "socketpair");
+		err(ERR_IPC, "socketpair");
 	if (fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL, 0) | O_NONBLOCK) == -1)
-		err(1, "fcntl");
+		err(ERR_IPC, "fcntl");
 	if (fcntl(fds[1], F_SETFL, fcntl(fds[1], F_GETFL, 0) | O_NONBLOCK) == -1)
-		err(1, "fcntl");
+		err(ERR_IPC, "fcntl");
 #endif
 
 	switch ((child = fork())) {
 	case -1:
-		err(1, "fork");
+		err(ERR_IPC, "fork");
 	case 0:
 		close(fds[0]);
 		if (pledge("stdio exec", NULL) == -1)
-			err(1, "pledge");
+			err(ERR_IPC, "pledge");
 
 		memset(&sess, 0, sizeof(struct sess));
 		sess.opts = &opts;
 
-		if ((args = fargs_cmdline(&sess, fargs, NULL)) == NULL) {
-			ERRX1("fargs_cmdline");
-			_exit(1);
-		}
+		args = fargs_cmdline(&sess, fargs, NULL);
 
 		for (i = 0; args[i] != NULL; i++)
 			LOG2("exec[%d] = %s", i, args[i]);
 
 		/* Make sure the child's stdin is from the sender. */
-
-		if (dup2(fds[1], STDIN_FILENO) == -1) {
-			ERR("dup2");
-			_exit(1);
-		}
-		if (dup2(fds[1], STDOUT_FILENO) == -1) {
-			ERR("dup2");
-			_exit(1);
-		}
-
+		if (dup2(fds[1], STDIN_FILENO) == -1)
+			err(ERR_IPC, "dup2");
+		if (dup2(fds[1], STDOUT_FILENO) == -1)
+			err(ERR_IPC, "dup2");
 		execvp(args[0], args);
-		_exit(1);
+		_exit(ERR_IPC);
 		/* NOTREACHED */
 	default:
 		close(fds[1]);
@@ -538,7 +625,7 @@ main(int argc, char *argv[])
 	close(fds[0]);
 
 	if (waitpid(child, &st, 0) == -1)
-		err(1, "waitpid");
+		err(ERR_WAITPID, "waitpid");
 
 	/*
 	 * If we don't already have an error (rc == 0), then inherit the
@@ -546,17 +633,23 @@ main(int argc, char *argv[])
 	 * If it hasn't exited, it overrides our return value.
 	 */
 
-	if (WIFEXITED(st) && rc == 0)
-		rc = WEXITSTATUS(st);
-	else if (!WIFEXITED(st))
-		rc = 1;
+	if (rc == 0) {
+		if (WIFEXITED(st))
+			rc = WEXITSTATUS(st);
+		else if (WIFSIGNALED(st))
+			rc = ERR_TERMIMATED;
+		else
+			rc = ERR_WAITPID;
+	}
 
 	exit(rc);
 usage:
 	fprintf(stderr, "usage: %s"
-	    " [-aDglnoprtvx] [-e program] [--address=sourceaddr] [--del]\n"
-	    "\t[--numeric-ids] [--port=portnumber] [--rsync-path=program]\n"
-	    "\t[--timeout=seconds] [--version] source ... directory\n",
+	    " [-aDglnoprtvx] [-e program] [--address=sourceaddr]\n"
+	    "\t[--compare-dest=dir] [--del] [--exclude] [--exclude-from=file]\n"
+	    "\t[--include] [--include-from=file] [--no-motd] [--numeric-ids]\n"
+	    "\t[--port=portnumber] [--rsync-path=program] [--timeout=seconds]\n"
+	    "\t[--version] source ... directory\n",
 	    getprogname());
-	exit(1);
+	exit(ERR_SYNTAX);
 }

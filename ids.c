@@ -301,6 +301,7 @@ idents_recv(struct sess *sess,
 		} else if (sz == 0)
 			WARNX("zero-length name in identifier list");
 
+		assert(id < INT32_MAX);
 		(*ids)[*idsz].id = id;
 		(*ids)[*idsz].name = calloc(sz + 1, 1);
 		if ((*ids)[*idsz].name == NULL) {

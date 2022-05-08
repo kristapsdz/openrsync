@@ -3,6 +3,7 @@ include Makefile.configure
 OBJS	   = blocks.o \
 	     client.o \
 	     compats.o \
+	     copy.o \
 	     downloader.o \
 	     fargs.o \
 	     flist.o \
@@ -15,6 +16,8 @@ OBJS	   = blocks.o \
 	     mkpath.o \
 	     mktemp.o \
 	     receiver.o \
+	     rmatch.o \
+	     rules.o \
 	     sender.o \
 	     server.o \
 	     session.o \
@@ -31,7 +34,7 @@ all: openrsync
 afl: $(AFLS)
 
 openrsync: $(ALLOBJS)
-	$(CC) -o $@ $(ALLOBJS) -lm $(LDADD_LIB_SOCKET)
+	$(CC) -o $@ $(ALLOBJS) -lm $(LDADD_LIB_SOCKET) $(LDADD_SCAN_SCALED)
 
 $(AFLS): $(OBJS)
 	$(CC) -o $@ $*.c $(OBJS)

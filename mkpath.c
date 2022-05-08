@@ -31,7 +31,6 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
-
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
@@ -48,28 +47,34 @@ mkpath(char *path)
 {
 	struct stat sb;
 	char *slash;
-	int done = 0;
+	int done;
 
 	slash = path;
 
-	while (!done) {
+	for (;;) {
 		slash += strspn(slash, "/");
 		slash += strcspn(slash, "/");
 
 		done = (*slash == '\0');
 		*slash = '\0';
 
-		if (stat(path, &sb)) {
-			if (errno != ENOENT || (mkdir(path, 0777) &&
-			    errno != EEXIST)) {
-				ERR("%s: stat", path);
+		if (mkdir(path, 0777) != 0) {
+			int mkdir_errno = errno;
+
+			if (stat(path, &sb) == -1) {
+				/* Not there; use mkdir()s errno */
+				errno = mkdir_errno;
 				return (-1);
 			}
-		} else if (!S_ISDIR(sb.st_mode)) {
-			errno = ENOTDIR;
-			ERR("%s: stat", path);
-			return (-1);
+			if (!S_ISDIR(sb.st_mode)) {
+				/* Is there, but isn't a directory */
+				errno = ENOTDIR;
+				return (-1);
+			}
 		}
+
+		if (done)
+			break;
 
 		*slash = '/';
 	}

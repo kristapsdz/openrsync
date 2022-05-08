@@ -19,6 +19,9 @@
 #include <sys/stat.h>
 
 #include <assert.h>
+#if HAVE_ERR
+# include <err.h>
+#endif
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,6 +29,21 @@
 #include "extern.h"
 
 #define	RSYNC_PATH	"rsync"
+
+const char *
+alt_base_mode(int mode)
+{
+	switch (mode) {
+	case BASE_MODE_COMPARE:
+		return "--compare-dest";
+	case BASE_MODE_COPY:
+		return "--copy-dest";
+	case BASE_MODE_LINK:
+		return "--link-dest";
+	default:
+		errx(1, "unknown base mode %d", mode);
+	}
+}
 
 char **
 fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
@@ -53,11 +71,11 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		if (sess->opts->ssh_prog) {
 			ap = strdup(sess->opts->ssh_prog);
 			if (ap == NULL)
-				goto out;
+				err(ERR_NOMEM, NULL);
 
 			while ((arg = strsep(&ap, " \t")) != NULL) {
 				if (arg[0] == '\0') {
-					ap++;	/* skip seperators */
+					ap++;	/* skip separators */
 					continue;
 				}
 
@@ -117,6 +135,22 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 	if (!sess->opts->specials && sess->opts->devices)
 		/* --devices is sent as -D --no-specials */
 		addargs(&args, "--no-specials");
+	if (sess->opts->max_size >= 0)
+		addargs(&args, "--max-size=%lld", sess->opts->max_size);
+	if (sess->opts->min_size >= 0)
+		addargs(&args, "--min-size=%lld", sess->opts->min_size);
+
+	/* only add --compare-dest, etc if this is the sender */
+	if (sess->opts->alt_base_mode != 0 &&
+	    f->mode == FARGS_SENDER) {
+		for (j = 0; j < MAX_BASEDIR; j++) {
+			if (sess->opts->basedir[j] == NULL)
+				break;
+			addargs(&args, "%s=%s",
+			    alt_base_mode(sess->opts->alt_base_mode),
+			    sess->opts->basedir[j]);
+		}
+	}
 
 	/* Terminate with a full-stop for reasons unknown. */
 
@@ -129,8 +163,4 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "%s", f->sink);
 
 	return args.list;
-out:
-	freeargs(&args);
-	ERR("calloc");
-	return NULL;
 }

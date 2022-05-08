@@ -17,15 +17,15 @@
 #include "config.h"
 
 #include <sys/types.h>
-#include COMPAT_ENDIAN_H
 
 #include <assert.h>
-#include <assert.h>
+#include COMPAT_ENDIAN_H
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "extern.h"
 #include "md4.h"
+
+#include "extern.h"
 
 /*
  * A fast 32-bit hash.

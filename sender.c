@@ -30,8 +30,9 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "extern.h"
 #include "md4.h"
+
+#include "extern.h"
 
 /*
  * A request from the receiver to download updated file data.
@@ -353,7 +354,7 @@ send_dl_enqueue(struct sess *sess, struct send_dlq *q,
  * It queues requests for updates as soon as it receives them.
  * Returns zero on failure, non-zero on success.
  *
- * Pledges: stdio, rpath, unveil.
+ * Pledges: stdio, getpw, rpath.
  */
 int
 rsync_sender(struct sess *sess, int fdin,
@@ -361,7 +362,7 @@ rsync_sender(struct sess *sess, int fdin,
 {
 	struct flist	   *fl = NULL;
 	const struct flist *f;
-	size_t		    i, flsz = 0, phase = 0, excl;
+	size_t		    i, flsz = 0, phase = 0;
 	int		    rc = 0, c;
 	int32_t		    idx;
 	struct pollfd	    pfd[3];
@@ -396,12 +397,8 @@ rsync_sender(struct sess *sess, int fdin,
 	}
 
 	/* Client sends zero-length exclusions if deleting. */
-
-	if (!sess->opts->server && sess->opts->del &&
-	     !io_write_int(sess, fdout, 0)) {
-		ERRX1("io_write_int");
-		goto out;
-	}
+	if (!sess->opts->server && sess->opts->del)
+		send_rules(sess, fdout);
 
 	/*
 	 * Then the file list in any mode.
@@ -430,15 +427,8 @@ rsync_sender(struct sess *sess, int fdin,
 	 * This is always 0 for now.
 	 */
 
-	if (sess->opts->server) {
-		if (!io_read_size(sess, fdin, &excl)) {
-			ERRX1("io_read_size");
-			goto out;
-		} else if (excl != 0) {
-			ERRX1("exclusion list is non-empty");
-			goto out;
-		}
-	}
+	if (sess->opts->server)
+		recv_rules(sess, fdin);
 
 	/*
 	 * Set up our poll events.
@@ -555,6 +545,7 @@ rsync_sender(struct sess *sess, int fdin,
 					goto out;
 				}
 			}
+
 			pfd[2].fd = -1;
 			pfd[1].fd = fdout;
 		}
@@ -570,8 +561,7 @@ rsync_sender(struct sess *sess, int fdin,
 		if ((pfd[1].revents & POLLOUT) && wbufsz > 0) {
 			assert(pfd[2].fd == -1);
 			assert(wbufsz - wbufpos);
-			ssz = write(fdout,
-				wbuf + wbufpos, wbufsz - wbufpos);
+			ssz = write(fdout, wbuf + wbufpos, wbufsz - wbufpos);
 			if (ssz == -1) {
 				ERR("write");
 				goto out;

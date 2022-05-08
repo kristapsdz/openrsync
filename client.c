@@ -19,11 +19,11 @@
 #include <sys/stat.h>
 
 #include <assert.h>
-#include <err.h>
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <err.h>
 
 #include "extern.h"
 
@@ -45,7 +45,7 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 
 	if (pledge("stdio unix rpath wpath cpath dpath fattr chown getpw unveil",
 	    NULL) == -1)
-		err(1, "pledge");
+		err(ERR_IPC, "pledge");
 
 	memset(&sess, 0, sizeof(struct sess));
 	sess.opts = opts;

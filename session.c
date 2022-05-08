@@ -16,8 +16,6 @@
  */
 #include "config.h"
 
-#include <sys/param.h>
-
 #include <assert.h>
 #include <stdint.h>
 #include <stdlib.h>

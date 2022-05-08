@@ -63,6 +63,24 @@ int main(void)
 	return v == NULL;
 }
 #endif /* TEST_CRYPT */
+#if TEST_CRYPT_NEWHASH
+#include <pwd.h> /* _PASSWORD_LEN */
+#include <unistd.h>
+
+int
+main(void)
+{
+	const char	*v = "password";
+	char		 hash[_PASSWORD_LEN];
+
+	if (crypt_newhash(v, "bcrypt,a", hash, sizeof(hash)) == -1)
+		return 1;
+	if (crypt_checkpass(v, hash) == -1)
+		return 1;
+
+	return 0;
+}
+#endif /* TEST_CRYPT_NEWHASH */
 #if TEST_ENDIAN_H
 #ifdef __linux__
 # define _DEFAULT_SOURCE
@@ -195,6 +213,45 @@ main(void)
 	return 0;
 }
 #endif /* TEST_INFTIM */
+#if TEST_LANDLOCK
+#include <linux/landlock.h>
+#include <linux/prctl.h>
+#include <stdlib.h>
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+#include <stdint.h>
+
+#ifndef landlock_create_ruleset
+static inline int landlock_create_ruleset(const struct landlock_ruleset_attr *const attr,
+	const size_t size, const __u32 flags)
+{
+	return syscall(__NR_landlock_create_ruleset, attr, size, flags);
+}
+#endif
+
+#ifndef landlock_restrict_self
+static inline int landlock_restrict_self(const int ruleset_fd,
+	const __u32 flags)
+{
+	return syscall(__NR_landlock_restrict_self, ruleset_fd, flags);
+}
+#endif
+
+int
+main(void)
+{
+	uint64_t mask = LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_WRITE_FILE;
+	struct landlock_ruleset_attr rules = {
+		.handled_access_fs = mask
+	};
+	int fd = landlock_create_ruleset(&rules, sizeof(rules), 0);
+
+	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0))
+		return 1;
+	return landlock_restrict_self(fd, 0) ? 1 : 0;
+}
+#endif /* TEST_LANDLOCK */
 #if TEST_LIB_SOCKET
 #include <sys/socket.h>
 
@@ -385,6 +442,17 @@ main(void)
 	return(-1 == rc);
 }
 #endif /* TEST_SANDBOX_INIT */
+#if TEST_SCAN_SCALED
+#include <util.h>
+
+int
+main(void)
+{
+	char *cinput = (char *)"1.5K", buf[FMT_SCALED_STRSIZE];
+	long long ninput = 10483892, result;
+	return scan_scaled(cinput, &result) == 0;
+}
+#endif /* TEST_SCAN_SCALED */
 #if TEST_SECCOMP_FILTER
 #include <sys/prctl.h>
 #include <linux/seccomp.h>

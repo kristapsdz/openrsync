@@ -17,9 +17,9 @@
 #include "config.h"
 
 #include <sys/stat.h>
-#include COMPAT_ENDIAN_H
 
 #include <assert.h>
+#include COMPAT_ENDIAN_H
 #include <errno.h>
 #include <poll.h>
 #include <stdint.h>
@@ -145,7 +145,7 @@ io_write_buf(struct sess *sess, int fd, const void *buf, size_t sz)
 	}
 
 	while (sz > 0) {
-		wsz = sz & 0xFFFFFF;
+		wsz = (sz < 0xFFFFFF) ? sz : 0xFFFFFF;
 		tag = (7 << 24) + wsz;
 		tagbuf = htole32(tag);
 		if (!io_write_blocking(fd, &tagbuf, sizeof(tagbuf))) {

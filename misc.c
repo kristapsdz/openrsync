@@ -48,9 +48,8 @@ addargs(arglist *args, const char *fmt, ...)
 	va_start(ap, fmt);
 	r = vasprintf(&cp, fmt, ap);
 	va_end(ap);
-
 	if (r == -1)
-		err(1, "addargs: argument too long");
+		err(ERR_NOMEM, "addargs: argument too long");
 
 	nalloc = args->nalloc;
 	if (args->list == NULL) {
@@ -59,10 +58,10 @@ addargs(arglist *args, const char *fmt, ...)
 	} else if (args->num+2 >= nalloc)
 		nalloc *= 2;
 
-	args->list = recallocarray(args->list, args->nalloc, nalloc, sizeof(char *));
+	args->list = recallocarray(args->list, args->nalloc, nalloc,
+	    sizeof(char *));
 	if (!args->list)
-		err(1, "malloc");
-
+		err(ERR_NOMEM, NULL);
 	args->nalloc = nalloc;
 	args->list[args->num++] = cp;
 	args->list[args->num] = NULL;

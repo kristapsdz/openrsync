@@ -20,6 +20,9 @@
 #include <sys/stat.h>
 
 #include <assert.h>
+#if HAVE_ERR
+# include <err.h>
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -34,8 +37,7 @@
 
 enum	uploadst {
 	UPLOAD_FIND_NEXT = 0, /* find next to upload to sender */
-	UPLOAD_WRITE_LOCAL, /* wait to write to sender */
-	UPLOAD_READ_LOCAL, /* wait to read from local file */
+	UPLOAD_WRITE, /* wait to write to sender */
 	UPLOAD_FINISHED /* nothing more to do in phase */
 };
 
@@ -81,7 +83,7 @@ log_dir(struct sess *sess, const struct flist *f)
  * operator that we're a link.
  */
 static void
-log_link(struct sess *sess, const struct flist *f)
+log_symlink(struct sess *sess, const struct flist *f)
 {
 
 	if (!sess->opts->server)
@@ -168,7 +170,7 @@ init_blk(struct blk *p, const struct blkset *set, off_t offs,
  * Return <0 on failure 0 on success.
  */
 static int
-pre_link(struct upload *p, struct sess *sess)
+pre_symlink(struct upload *p, struct sess *sess)
 {
 	struct stat		 st;
 	const struct flist	*f;
@@ -181,8 +183,9 @@ pre_link(struct upload *p, struct sess *sess)
 	if (!sess->opts->preserve_links) {
 		WARNX("%s: ignoring symlink", f->path);
 		return 0;
-	} else if (sess->opts->dry_run) {
-		log_link(sess, f);
+	}
+	if (sess->opts->dry_run) {
+		log_symlink(sess, f);
 		return 0;
 	}
 
@@ -195,6 +198,11 @@ pre_link(struct upload *p, struct sess *sess)
 
 	assert(p->rootfd != -1);
 	rc = fstatat(p->rootfd, f->path, &st, AT_SYMLINK_NOFOLLOW);
+
+	if (rc == -1 && errno != ENOENT) {
+		ERR("%s: fstatat", f->path);
+		return -1;
+	}
 	if (rc != -1 && !S_ISLNK(st.st_mode)) {
 		if (S_ISDIR(st.st_mode) &&
 		    unlinkat(p->rootfd, f->path, AT_REMOVEDIR) == -1) {
@@ -202,9 +210,6 @@ pre_link(struct upload *p, struct sess *sess)
 			return -1;
 		}
 		rc = -1;
-	} else if (rc == -1 && errno != ENOENT) {
-		ERR("%s: fstatat", f->path);
-		return -1;
 	}
 
 	/*
@@ -260,12 +265,12 @@ pre_link(struct upload *p, struct sess *sess)
 		free(temp);
 	}
 
-	log_link(sess, f);
+	log_symlink(sess, f);
 	return 0;
 }
 
 /*
- * See pre_link(), but for devices.
+ * See pre_symlink(), but for devices.
  * FIXME: this is very similar to the other pre_xxx() functions.
  * Return <0 on failure 0 on success.
  */
@@ -283,7 +288,8 @@ pre_dev(struct upload *p, struct sess *sess)
 	if (!sess->opts->devices || getuid() != 0) {
 		WARNX("skipping non-regular file %s", f->path);
 		return 0;
-	} else if (sess->opts->dry_run) {
+	}
+	if (sess->opts->dry_run) {
 		log_file(sess, f);
 		return 0;
 	}
@@ -297,6 +303,10 @@ pre_dev(struct upload *p, struct sess *sess)
 	assert(p->rootfd != -1);
 	rc = fstatat(p->rootfd, f->path, &st, AT_SYMLINK_NOFOLLOW);
 
+	if (rc == -1 && errno != ENOENT) {
+		ERR("%s: fstatat", f->path);
+		return -1;
+	}
 	if (rc != -1 && !(S_ISBLK(st.st_mode) || S_ISCHR(st.st_mode))) {
 		if (S_ISDIR(st.st_mode) &&
 		    unlinkat(p->rootfd, f->path, AT_REMOVEDIR) == -1) {
@@ -304,9 +314,6 @@ pre_dev(struct upload *p, struct sess *sess)
 			return -1;
 		}
 		rc = -1;
-	} else if (rc == -1 && errno != ENOENT) {
-		ERR("%s: fstatat", f->path);
-		return -1;
 	}
 
 	/* Make sure existing device is of the correct type. */
@@ -352,7 +359,7 @@ pre_dev(struct upload *p, struct sess *sess)
 }
 
 /*
- * See pre_link(), but for FIFOs.
+ * See pre_symlink(), but for FIFOs.
  * FIXME: this is very similar to the other pre_xxx() functions.
  * Return <0 on failure 0 on success.
  */
@@ -370,7 +377,8 @@ pre_fifo(struct upload *p, struct sess *sess)
 	if (!sess->opts->specials) {
 		WARNX("skipping non-regular file %s", f->path);
 		return 0;
-	} else if (sess->opts->dry_run) {
+	}
+	if (sess->opts->dry_run) {
 		log_file(sess, f);
 		return 0;
 	}
@@ -384,6 +392,10 @@ pre_fifo(struct upload *p, struct sess *sess)
 	assert(p->rootfd != -1);
 	rc = fstatat(p->rootfd, f->path, &st, AT_SYMLINK_NOFOLLOW);
 
+	if (rc == -1 && errno != ENOENT) {
+		ERR("%s: fstatat", f->path);
+		return -1;
+	}
 	if (rc != -1 && !S_ISFIFO(st.st_mode)) {
 		if (S_ISDIR(st.st_mode) &&
 		    unlinkat(p->rootfd, f->path, AT_REMOVEDIR) == -1) {
@@ -391,9 +403,6 @@ pre_fifo(struct upload *p, struct sess *sess)
 			return -1;
 		}
 		rc = -1;
-	} else if (rc == -1 && errno != ENOENT) {
-		ERR("%s: fstatat", f->path);
-		return -1;
 	}
 
 	if (rc == -1) {
@@ -427,7 +436,7 @@ pre_fifo(struct upload *p, struct sess *sess)
 }
 
 /*
- * See pre_link(), but for socket files.
+ * See pre_symlink(), but for socket files.
  * FIXME: this is very similar to the other pre_xxx() functions.
  * Return <0 on failure 0 on success.
  */
@@ -445,7 +454,8 @@ pre_sock(struct upload *p, struct sess *sess)
 	if (!sess->opts->specials) {
 		WARNX("skipping non-regular file %s", f->path);
 		return 0;
-	} else if (sess->opts->dry_run) {
+	}
+	if (sess->opts->dry_run) {
 		log_file(sess, f);
 		return 0;
 	}
@@ -459,6 +469,10 @@ pre_sock(struct upload *p, struct sess *sess)
 	assert(p->rootfd != -1);
 	rc = fstatat(p->rootfd, f->path, &st, AT_SYMLINK_NOFOLLOW);
 
+	if (rc == -1 && errno != ENOENT) {
+		ERR("%s: fstatat", f->path);
+		return -1;
+	}
 	if (rc != -1 && !S_ISSOCK(st.st_mode)) {
 		if (S_ISDIR(st.st_mode) &&
 		    unlinkat(p->rootfd, f->path, AT_REMOVEDIR) == -1) {
@@ -466,9 +480,6 @@ pre_sock(struct upload *p, struct sess *sess)
 			return -1;
 		}
 		rc = -1;
-	} else if (rc == -1 && errno != ENOENT) {
-		ERR("%s: fstatat", f->path);
-		return -1;
 	}
 
 	if (rc == -1) {
@@ -519,7 +530,8 @@ pre_dir(const struct upload *p, struct sess *sess)
 	if (!sess->opts->recursive) {
 		WARNX("%s: ignoring directory", f->path);
 		return 0;
-	} else if (sess->opts->dry_run) {
+	}
+	if (sess->opts->dry_run) {
 		log_dir(sess, f);
 		return 0;
 	}
@@ -530,7 +542,8 @@ pre_dir(const struct upload *p, struct sess *sess)
 	if (rc == -1 && errno != ENOENT) {
 		ERR("%s: fstatat", f->path);
 		return -1;
-	} else if (rc != -1 && !S_ISDIR(st.st_mode)) {
+	}
+	if (rc != -1 && !S_ISDIR(st.st_mode)) {
 		ERRX("%s: not a directory", f->path);
 		return -1;
 	} else if (rc != -1) {
@@ -580,13 +593,14 @@ post_dir(struct sess *sess, const struct upload *u, size_t idx)
 
 	if (!sess->opts->recursive)
 		return 1;
-	else if (sess->opts->dry_run)
+	if (sess->opts->dry_run)
 		return 1;
 
 	if (fstatat(u->rootfd, f->path, &st, AT_SYMLINK_NOFOLLOW) == -1) {
 		ERR("%s: fstatat", f->path);
 		return 0;
-	} else if (!S_ISDIR(st.st_mode)) {
+	}
+	if (!S_ISDIR(st.st_mode)) {
 		WARNX("%s: not a directory", f->path);
 		return 0;
 	}
@@ -631,15 +645,55 @@ post_dir(struct sess *sess, const struct upload *u, size_t idx)
 }
 
 /*
+ * Check if file exists in the specified root directory.
+ * Returns:
+ *    -1 on error
+ *     0 if file is considered the same
+ *     1 if file exists and is possible match
+ *     2 if file exists but quick check failed
+ *     3 if file does not exist
+ * The stat pointer st is only valid for 0, 1, and 2 returns.
+ */
+static int
+check_file(int rootfd, const struct flist *f, struct stat *st)
+{
+	if (fstatat(rootfd, f->path, st, AT_SYMLINK_NOFOLLOW) == -1) {
+		if (errno == ENOENT)
+			return 3;
+
+		ERR("%s: fstatat", f->path);
+		return -1;
+	}
+
+	/* non-regular file needs attention */
+	if (!S_ISREG(st->st_mode))
+		return 2;
+
+	/* quick check if file is the same */
+	/* TODO: add support for --checksum, --size-only and --ignore-times */
+	if (st->st_size == f->st.size) {
+		if (st->st_mtime == f->st.mtime)
+			return 0;
+		return 1;
+	}
+
+	/* file needs attention */
+	return 2;
+}
+
+/*
  * Try to open the file at the current index.
- * If the file does not exist, returns with success.
+ * If the file does not exist, returns with >0.
  * Return <0 on failure, 0 on success w/nothing to be done, >0 on
  * success and the file needs attention.
  */
 static int
-pre_file(const struct upload *p, int *filefd, struct sess *sess)
+pre_file(const struct upload *p, int *filefd, off_t *size,
+    struct sess *sess)
 {
 	const struct flist *f;
+	struct stat st;
+	int i, rc, match = -1;
 
 	f = &p->fl[p->idx];
 	assert(S_ISREG(f->st.mode));
@@ -653,21 +707,90 @@ pre_file(const struct upload *p, int *filefd, struct sess *sess)
 		return 0;
 	}
 
+	if (sess->opts->max_size >= 0 && f->st.size > sess->opts->max_size) {
+		WARNX("skipping over max-size file %s", f->path);
+		return 0;
+	}
+	if (sess->opts->min_size >= 0 && f->st.size < sess->opts->min_size) {
+		WARNX("skipping under min-size file %s", f->path);
+		return 0;
+	}
+
 	/*
 	 * For non dry-run cases, we'll write the acknowledgement later
-	 * in the rsync_uploader() function because we need to wait for
-	 * the open() call to complete.
-	 * If the call to openat() fails with ENOENT, there's a
-	 * fast-path between here and the write function, so we won't do
-	 * any blocking between now and then.
+	 * in the rsync_uploader() function.
 	 */
 
-	*filefd = openat(p->rootfd, f->path,
-		O_RDONLY | O_NOFOLLOW | O_NONBLOCK, 0);
-	if (*filefd != -1 || errno == ENOENT)
-		return 1;
-	ERR("%s: openat", f->path);
-	return -1;
+	*size = 0;
+	*filefd = -1;
+
+	rc = check_file(p->rootfd, f, &st);
+	if (rc == -1)
+		return -1;
+	if (rc == 2 && !S_ISREG(st.st_mode)) {
+		if (S_ISDIR(st.st_mode) &&
+		    unlinkat(p->rootfd, f->path, AT_REMOVEDIR) == -1) {
+			ERR("%s: unlinkat", f->path);
+			return -1;
+		}
+	}
+	if (rc == 0) {
+		if (!rsync_set_metadata_at(sess, 0, p->rootfd, f, f->path)) {
+			ERRX1("rsync_set_metadata");
+			return -1;
+		}
+		LOG3("%s: skipping: up to date", f->path);
+		return 0;
+	}
+
+	/* check alternative locations for better match */
+	for (i = 0; sess->opts->basedir[i] != NULL; i++) {
+		const char *root = sess->opts->basedir[i];
+		int dfd, x;
+
+		dfd = openat(p->rootfd, root, O_RDONLY | O_DIRECTORY);
+		if (dfd == -1)
+			err(ERR_FILE_IO, "%s: openat", root);
+		x = check_file(dfd, f, &st);
+		/* found a match */
+		if (x == 0) {
+			if (rc >= 0) {
+				/* found better match, delete file in rootfd */
+				if (unlinkat(p->rootfd, f->path, 0) == -1 &&
+				    errno != ENOENT) {
+					ERR("%s: unlinkat", f->path);
+					return -1;
+				}
+			}
+			LOG3("%s: skipping: up to date in %s", f->path, root);
+			/* TODO: depending on mode link or copy file */
+			close(dfd);
+			return 0;
+		} else if (x == 1 && match == -1) {
+			/* found a local file that is a close match */
+			match = i;
+		}
+		close(dfd);
+	}
+	if (match != -1) {
+		/* copy match from basedir into root as a start point */
+		copy_file(p->rootfd, sess->opts->basedir[match], f);
+		if (fstatat(p->rootfd, f->path, &st, AT_SYMLINK_NOFOLLOW) ==
+		    -1) {
+			ERR("%s: fstatat", f->path);
+			return -1;
+		}
+	}
+
+	*size = st.st_size;
+	*filefd = openat(p->rootfd, f->path, O_RDONLY | O_NOFOLLOW);
+	if (*filefd == -1 && errno != ENOENT) {
+		ERR("%s: openat", f->path);
+		return -1;
+	}
+
+	/* file needs attention */
+	return 1;
 }
 
 /*
@@ -738,16 +861,13 @@ rsync_uploader(struct upload *u, int *fileinfd,
 	struct sess *sess, int *fileoutfd)
 {
 	struct blkset	    blk;
-	struct stat	    st;
 	void		   *mbuf, *bufp;
 	ssize_t		    msz;
 	size_t		    i, pos, sz;
-	off_t		    offs;
+	off_t		    offs, filesize;
 	int		    c;
-	const struct flist *f;
 
-	/* This should never get called. */
-
+	/* Once finished this should never get called again. */
 	assert(u->state != UPLOAD_FINISHED);
 
 	/*
@@ -757,7 +877,7 @@ rsync_uploader(struct upload *u, int *fileinfd,
 	 * have a valid buffer to write.
 	 */
 
-	if (u->state == UPLOAD_WRITE_LOCAL) {
+	if (u->state == UPLOAD_WRITE) {
 		assert(u->buf != NULL);
 		assert(*fileoutfd != -1);
 		assert(*fileinfd == -1);
@@ -811,9 +931,9 @@ rsync_uploader(struct upload *u, int *fileinfd,
 			if (S_ISDIR(u->fl[u->idx].st.mode))
 				c = pre_dir(u, sess);
 			else if (S_ISLNK(u->fl[u->idx].st.mode))
-				c = pre_link(u, sess);
+				c = pre_symlink(u, sess);
 			else if (S_ISREG(u->fl[u->idx].st.mode))
-				c = pre_file(u, fileinfd, sess);
+				c = pre_file(u, fileinfd, &filesize, sess);
 			else if (S_ISBLK(u->fl[u->idx].st.mode) ||
 			    S_ISCHR(u->fl[u->idx].st.mode))
 				c = pre_dev(u, sess);
@@ -849,66 +969,17 @@ rsync_uploader(struct upload *u, int *fileinfd,
 
 		/* Go back to the event loop, if necessary. */
 
-		u->state = (*fileinfd == -1) ?
-			UPLOAD_WRITE_LOCAL : UPLOAD_READ_LOCAL;
-		if (u->state == UPLOAD_READ_LOCAL)
-			return 1;
-	}
-
-	/*
-	 * If an input file is open, stat it and see if it's already up
-	 * to date, in which case close it and go to the next one.
-	 * Either way, we don't have a write channel open.
-	 */
-
-	if (u->state == UPLOAD_READ_LOCAL) {
-		assert(*fileinfd != -1);
-		assert(*fileoutfd == -1);
-		f = &u->fl[u->idx];
-
-		if (fstat(*fileinfd, &st) == -1) {
-			ERR("%s: fstat", f->path);
-			close(*fileinfd);
-			*fileinfd = -1;
-			return -1;
-		} else if (!S_ISREG(st.st_mode)) {
-			ERRX("%s: not regular", f->path);
-			close(*fileinfd);
-			*fileinfd = -1;
-			return -1;
-		}
-
-		if (st.st_size == f->st.size &&
-		    st.st_mtime == f->st.mtime) {
-			LOG3("%s: skipping: up to date", f->path);
-			if (!rsync_set_metadata
-			    (sess, 0, *fileinfd, f, f->path)) {
-				ERRX1("rsync_set_metadata");
-				close(*fileinfd);
-				*fileinfd = -1;
-				return -1;
-			}
-			close(*fileinfd);
-			*fileinfd = -1;
-			*fileoutfd = u->fdout;
-			u->state = UPLOAD_FIND_NEXT;
-			u->idx++;
-			return 1;
-		}
-
-		/* Fallthrough... */
-
-		u->state = UPLOAD_WRITE_LOCAL;
+		u->state = UPLOAD_WRITE;
 	}
 
 	/* Initialies our blocks. */
 
-	assert(u->state == UPLOAD_WRITE_LOCAL);
+	assert(u->state == UPLOAD_WRITE);
 	memset(&blk, 0, sizeof(struct blkset));
 	blk.csum = u->csumlen;
 
-	if (*fileinfd != -1 && st.st_size > 0) {
-		init_blkset(&blk, st.st_size);
+	if (*fileinfd != -1 && filesize > 0) {
+		init_blkset(&blk, filesize);
 		assert(blk.blksz);
 
 		blk.blks = calloc(blk.blksz, sizeof(struct blk));
@@ -919,10 +990,11 @@ rsync_uploader(struct upload *u, int *fileinfd,
 			return -1;
 		}
 
-		if ((mbuf = calloc(1, blk.len)) == NULL) {
-			ERR("calloc");
+		if ((mbuf = malloc(blk.len)) == NULL) {
+			ERR("malloc");
 			close(*fileinfd);
 			*fileinfd = -1;
+			free(blk.blks);
 			return -1;
 		}
 
@@ -930,15 +1002,13 @@ rsync_uploader(struct upload *u, int *fileinfd,
 		i = 0;
 		do {
 			msz = pread(*fileinfd, mbuf, blk.len, offs);
-			if (msz < 0) {
+			if ((size_t)msz != blk.len && (size_t)msz != blk.rem) {
 				ERR("pread");
 				close(*fileinfd);
 				*fileinfd = -1;
+				free(mbuf);
+				free(blk.blks);
 				return -1;
-			}
-			if ((size_t)msz != blk.len && (size_t)msz != blk.rem) {
-				/* short read, try again */
-				continue;
 			}
 			init_blk(&blk.blks[i], &blk, offs, i, mbuf, sess);
 			offs += blk.len;
@@ -948,6 +1018,7 @@ rsync_uploader(struct upload *u, int *fileinfd,
 			i++;
 		} while (i < blk.blksz);
 
+		free(mbuf);
 		close(*fileinfd);
 		*fileinfd = -1;
 		LOG3("%s: mapped %jd B with %zu blocks",
@@ -967,18 +1038,19 @@ rsync_uploader(struct upload *u, int *fileinfd,
 	/* Make sure the block metadata buffer is big enough. */
 
 	u->bufsz =
-	     sizeof(int32_t) + /* identifier */
-	     sizeof(int32_t) + /* block count */
-	     sizeof(int32_t) + /* block length */
-	     sizeof(int32_t) + /* checksum length */
-	     sizeof(int32_t) + /* block remainder */
-	     blk.blksz *
-	     (sizeof(int32_t) + /* short checksum */
-	      blk.csum); /* long checksum */
+	    sizeof(int32_t) + /* identifier */
+	    sizeof(int32_t) + /* block count */
+	    sizeof(int32_t) + /* block length */
+	    sizeof(int32_t) + /* checksum length */
+	    sizeof(int32_t) + /* block remainder */
+	    blk.blksz *
+	    (sizeof(int32_t) + /* short checksum */
+	    blk.csum); /* long checksum */
 
 	if (u->bufsz > u->bufmax) {
 		if ((bufp = realloc(u->buf, u->bufsz)) == NULL) {
 			ERR("realloc");
+			free(blk.blks);
 			return -1;
 		}
 		u->buf = bufp;

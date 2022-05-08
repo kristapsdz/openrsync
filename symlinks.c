@@ -16,11 +16,10 @@
  */
 #include "config.h"
 
-#include <sys/param.h>
-
 #include <assert.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <limits.h>
 #include <unistd.h>
 
 #include "extern.h"
@@ -38,7 +37,7 @@ symlink_read(const char *path)
 	ssize_t	 nsz = 0;
 	void	*pp;
 
-	for (sz = MAXPATHLEN; ; sz *= 2) {
+	for (sz = PATH_MAX; ; sz *= 2) {
 		if ((pp = realloc(buf, sz + 1)) == NULL) {
 			ERR("realloc");
 			free(buf);
@@ -77,7 +76,7 @@ symlinkat_read(int fd, const char *path)
 	ssize_t	 nsz = 0;
 	void	*pp;
 
-	for (sz = MAXPATHLEN; ; sz *= 2) {
+	for (sz = PATH_MAX; ; sz *= 2) {
 		if ((pp = realloc(buf, sz + 1)) == NULL) {
 			ERR("realloc");
 			free(buf);

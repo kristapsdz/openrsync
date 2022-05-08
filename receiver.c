@@ -20,9 +20,11 @@
 
 #include <sys/mman.h>
 #include <sys/stat.h>
-#include <sys/time.h>
 
 #include <assert.h>
+#if HAVE_ERR
+# include <err.h>
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -76,7 +78,6 @@ rsync_set_metadata(struct sess *sess, int newfile,
 	 * means that we're mapping into an unknown (or disallowed)
 	 * group identifier.
 	 */
-
 	if (getuid() == 0 && sess->opts->preserve_uids)
 		uid = f->st.uid;
 	if (sess->opts->preserve_gids)
@@ -138,7 +139,6 @@ rsync_set_metadata_at(struct sess *sess, int newfile, int rootfd,
 	 * means that we're mapping into an unknown (or disallowed)
 	 * group identifier.
 	 */
-
 	if (getuid() == 0 && sess->opts->preserve_uids)
 		uid = f->st.uid;
 	if (sess->opts->preserve_gids)
@@ -180,7 +180,7 @@ int
 rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 {
 	struct flist	*fl = NULL, *dfl = NULL;
-	size_t		 i, flsz = 0, dflsz = 0, excl;
+	size_t		 i, flsz = 0, dflsz = 0;
 	char		*tofree;
 	int		 rc = 0, dfd = -1, phase = 0, c;
 	int32_t		 ioerror;
@@ -192,28 +192,54 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 	struct upload	*ul = NULL;
 	mode_t		 oumask;
 
-	if (pledge("stdio unix rpath wpath cpath dpath fattr chown getpw unveil", NULL) == -1) {
-		ERR("pledge");
-		goto out;
+	if (pledge("stdio unix rpath wpath cpath dpath fattr chown getpw unveil", NULL) == -1)
+		err(ERR_IPC, "pledge");
+
+	/*
+	 * Create the path for our destination directory, if we're not
+	 * in dry-run mode (which would otherwise crash w/the pledge).
+	 * This uses our current umask: we might set the permissions on
+	 * this directory in post_dir().
+	 */
+
+	if (!sess->opts->dry_run) {
+		if ((tofree = strdup(root)) == NULL)
+			err(ERR_NOMEM, NULL);
+		if (mkpath(tofree) < 0)
+			err(ERR_FILE_IO, "%s: mkpath", tofree);
+		free(tofree);
 	}
 
-	/* Client sends zero-length exclusions. */
-
-	if (!sess->opts->server &&
-	     !io_write_int(sess, fdout, 0)) {
-		ERRX1("io_write_int");
-		goto out;
+	/*
+	 * Make our entire view of the file-system be limited to what's
+	 * in the root directory.
+	 * This prevents us from accidentally (or "under the influence")
+	 * writing into other parts of the file-system.
+	 */
+	if (sess->opts->basedir[0]) {
+		/*
+		 * XXX just unveil everything for read
+		 * Could unveil each basedir or maybe a common path
+		 * also the fact that relative path are relative to the
+		 * root does not help.
+		 */
+		if (unveil("/", "r") == -1)
+			err(ERR_IPC, "%s: unveil", root);
 	}
 
-	if (sess->opts->server && sess->opts->del) {
-		if (!io_read_size(sess, fdin, &excl)) {
-			ERRX1("io_read_size");
-			goto out;
-		} else if (excl != 0) {
-			ERRX("exclusion list is non-empty");
-			goto out;
-		}
-	}
+	if (unveil(root, "rwc") == -1)
+		err(ERR_IPC, "%s: unveil", root);
+
+	if (unveil(NULL, NULL) == -1)
+		err(ERR_IPC, "unveil");
+
+	/* Client sends exclusions. */
+	if (!sess->opts->server)
+		send_rules(sess, fdout);
+
+	/* Server receives exclusions if delete is on. */
+	if (sess->opts->server && sess->opts->del)
+		recv_rules(sess, fdin);
 
 	/*
 	 * Start by receiving the file list and our mystery number.
@@ -245,51 +271,54 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 	LOG2("%s: receiver destination", root);
 
 	/*
-	 * Create the path for our destination directory, if we're not
-	 * in dry-run mode (which would otherwise crash w/the pledge).
-	 * This uses our current umask: we might set the permissions on
-	 * this directory in post_dir().
-	 */
-
-	if (!sess->opts->dry_run) {
-		if ((tofree = strdup(root)) == NULL) {
-			ERR("strdup");
-			goto out;
-		} else if (mkpath(tofree) < 0) {
-			ERRX1("%s: mkpath", root);
-			free(tofree);
-			goto out;
-		}
-		free(tofree);
-	}
-
-	/*
 	 * Disable umask() so we can set permissions fully.
 	 * Then open the directory iff we're not in dry_run.
 	 */
 
 	oumask = umask(0);
 
-	if (!sess->opts->dry_run) {
+	/*
+	 * Try opening the root directory.  If we're in dry_run and
+	 * fail, just report the error and continue on---don't try to
+	 * create the directory.
+	 */
+
 #ifdef O_DIRECTORY
-		dfd = open(root, O_RDONLY | O_DIRECTORY, 0);
-		if (dfd == -1) {
+	dfd = open(root, O_RDONLY | O_DIRECTORY, 0);
+	if (dfd == -1) {
+		if (!sess->opts->dry_run) {
 			ERR("%s: open", root);
 			goto out;
-		}
+		} else
+			WARN("%s: open", root);
+	}
 #else
-		if ((dfd = open(root, O_RDONLY, 0)) == -1) {
+	if ((dfd = open(root, O_RDONLY, 0)) == -1) {
+		if (!sess->opts->dry_run) {
 			ERR("%s: open", root);
 			goto out;
-		} else if (fstat(dfd, &st) == -1) {
+		} else
+			WARN("%s: open", root);
+	} else if (fstat(dfd, &st) == -1) {
+		if (!sess->opts->dry_run) {
 			ERR("%s: fstat", root);
 			goto out;
-		} else if (!S_ISDIR(st.st_mode)) {
+		} else {
+			WARN("%s: fstat", root);
+			close(dfd);
+			dfd = -1;
+		}
+	} else if (!S_ISDIR(st.st_mode)) {
+		if (!sess->opts->dry_run) {
 			ERRX("%s: not a directory", root);
 			goto out;
+		} else {
+			WARN("%s: fstat", root);
+			close(dfd);
+			dfd = -1;
 		}
-#endif
 	}
+#endif
 
 	/*
 	 * Begin by conditionally getting all files we have currently
@@ -300,21 +329,6 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 	    sess->opts->recursive &&
 	    !flist_gen_dels(sess, root, &dfl, &dflsz, fl, flsz)) {
 		ERRX1("flist_gen_local");
-		goto out;
-	}
-
-	/*
-	 * Make our entire view of the file-system be limited to what's
-	 * in the root directory.
-	 * This prevents us from accidentally (or "under the influence")
-	 * writing into other parts of the file-system.
-	 */
-
-	if (unveil(root, "rwc") == -1) {
-		ERR("%s: unveil", root);
-		goto out;
-	} else if (unveil(NULL, NULL) == -1) {
-		ERR("%s: unveil", root);
 		goto out;
 	}
 
@@ -381,7 +395,7 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 		 */
 
 		if (sess->mplex_reads &&
-		    (POLLIN & pfd[PFD_SENDER_IN].revents)) {
+		    (pfd[PFD_SENDER_IN].revents & POLLIN)) {
 			if (!io_read_flush(sess, fdin)) {
 				ERRX1("io_read_flush");
 				goto out;
@@ -396,8 +410,8 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 		 * is read to mmap.
 		 */
 
-		if ((POLLIN & pfd[PFD_UPLOADER_IN].revents) ||
-		    (POLLOUT & pfd[PFD_SENDER_OUT].revents)) {
+		if ((pfd[PFD_UPLOADER_IN].revents & POLLIN) ||
+		    (pfd[PFD_SENDER_OUT].revents & POLLOUT)) {
 			c = rsync_uploader(ul,
 				&pfd[PFD_UPLOADER_IN].fd,
 				sess, &pfd[PFD_SENDER_OUT].fd);
@@ -416,8 +430,8 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 		 * messages, which will otherwise clog up the pipes.
 		 */
 
-		if ((POLLIN & pfd[PFD_SENDER_IN].revents) ||
-		    (POLLIN & pfd[PFD_DOWNLOADER_IN].revents)) {
+		if ((pfd[PFD_SENDER_IN].revents & POLLIN) ||
+		    (pfd[PFD_DOWNLOADER_IN].revents & POLLIN)) {
 			c = rsync_downloader(dl, sess,
 				&pfd[PFD_DOWNLOADER_IN].fd);
 			if (c < 0) {
@@ -446,10 +460,12 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 		if (!io_write_int(sess, fdout, -1)) {
 			ERRX1("io_write_int");
 			goto out;
-		} else if (!io_read_int(sess, fdin, &ioerror)) {
+		}
+		if (!io_read_int(sess, fdin, &ioerror)) {
 			ERRX1("io_read_int");
 			goto out;
-		} else if (ioerror != -1) {
+		}
+		if (ioerror != -1) {
 			ERRX("expected phase ack");
 			goto out;
 		}
@@ -470,7 +486,8 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 	if (!sess_stats_recv(sess, fdin)) {
 		ERRX1("sess_stats_recv");
 		goto out;
-	} else if (!io_write_int(sess, fdout, -1)) {
+	}
+	if (!io_write_int(sess, fdout, -1)) {
 		ERRX1("io_write_int");
 		goto out;
 	}

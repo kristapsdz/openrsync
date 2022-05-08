@@ -31,8 +31,9 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "extern.h"
 #include "md4.h"
+
+#include "extern.h"
 
 /*
  * A small optimisation: have a 1 MB pre-write buffer.
@@ -352,7 +353,7 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 
 		p->state = DOWNLOAD_READ_LOCAL;
 		f = &p->fl[idx];
-		p->ofd = openat(p->rootfd, f->path, O_RDONLY | O_NONBLOCK, 0);
+		p->ofd = openat(p->rootfd, f->path, O_RDONLY | O_NONBLOCK);
 
 		if (p->ofd == -1 && errno != ENOENT) {
 			ERR("%s: openat", f->path);

@@ -238,7 +238,8 @@ protocol_line(struct sess *sess, __attribute__((unused)) const char *host,
 	int	major, minor;
 
 	if (strncmp(cp, "@RSYNCD: ", 9)) {
-		LOG1("%s", cp);
+		if (sess->opts->no_motd == 0)
+			LOG1("%s", cp);
 		return 0;
 	}
 
@@ -282,7 +283,7 @@ rsync_connect(const struct opts *opts, int *sd, const struct fargs *f)
 
 	if (pledge("stdio unix rpath wpath cpath dpath inet fattr chown dns getpw unveil",
 	    NULL) == -1)
-		err(1, "pledge");
+		err(ERR_IPC, "pledge");
 
 	memset(&sess, 0, sizeof(struct sess));
 	sess.opts = opts;
@@ -366,7 +367,7 @@ rsync_socket(const struct opts *opts, int sd, const struct fargs *f)
 
 	if (pledge("stdio unix rpath wpath cpath dpath fattr chown getpw unveil",
 	    NULL) == -1)
-		err(1, "pledge");
+		err(ERR_IPC, "pledge");
 
 	memset(&sess, 0, sizeof(struct sess));
 	sess.lver = RSYNC_PROTOCOL;
@@ -375,10 +376,7 @@ rsync_socket(const struct opts *opts, int sd, const struct fargs *f)
 	assert(f->host != NULL);
 	assert(f->module != NULL);
 
-	if ((args = fargs_cmdline(&sess, f, &skip)) == NULL) {
-		ERRX1("fargs_cmdline");
-		exit(1);
-	}
+	args = fargs_cmdline(&sess, f, &skip);
 
 	/* Initiate with the rsyncd version and module request. */
 

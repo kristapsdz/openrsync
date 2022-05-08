@@ -41,12 +41,34 @@
 #define	BLOCK_SIZE_MIN  (700)
 
 /*
+ * Maximum number of base directories that can be used.
+ */
+#define MAX_BASEDIR	20
+
+#define BASE_MODE_COMPARE	1
+#define BASE_MODE_COPY		2
+#define BASE_MODE_LINK		3
+
+/*
  * The sender and receiver use a two-phase synchronisation process.
  * The first uses two-byte hashes; the second, 16-byte.
  * (The second must hold a full MD4 digest.)
  */
 #define	CSUM_LENGTH_PHASE1 (2)
 #define	CSUM_LENGTH_PHASE2 (16)
+
+/*
+ * Rsync error codes.
+ */
+#define ERR_SYNTAX	1
+#define ERR_PROTOCOL	2
+#define ERR_SOCK_IO	10
+#define ERR_FILE_IO	11
+#define ERR_WIREPROTO	12
+#define ERR_IPC		14	/* catchall for any kind of syscall error */
+#define ERR_TERMIMATED	16
+#define ERR_WAITPID	21
+#define ERR_NOMEM	22
 
 /*
  * Use this for --timeout.
@@ -122,14 +144,34 @@ struct	opts {
 	int		 del;			/* --delete */
 	int		 devices;		/* --devices */
 	int		 specials;		/* --specials */
+	int		 no_motd;		/* --no-motd */
 	int		 numeric_ids;		/* --numeric-ids */
 	int		 one_file_system;	/* -x */
+	int		 alt_base_mode;
+	off_t		 max_size;		/* --max-size */
+	off_t		 min_size;		/* --min-size */
 	char		*rsync_path;		/* --rsync-path */
 	char		*ssh_prog;		/* --rsh or -e */
 	char		*port;			/* --port */
 	char		*address;		/* --address */
+	char		*basedir[MAX_BASEDIR];
 #if 0
 	char		*syncfile;		/* --sync-file */
+#endif
+};
+
+enum rule_type {
+	RULE_NONE,
+	RULE_EXCLUDE,
+	RULE_INCLUDE,
+	RULE_CLEAR,
+#ifdef NOTYET
+	RULE_MERGE,
+	RULE_DIR_MERGE,
+	RULE_SHOW,
+	RULE_HIDE,
+	RULE_PROTECT,
+	RULE_RISK,
 #endif
 };
 
@@ -259,134 +301,134 @@ extern int verbose;
 #define ERRX(_fmt, ...) \
 	rsync_errx(__FILE__, __LINE__, (_fmt), ##__VA_ARGS__)
 
-void		  rsync_log(const char *, size_t, int, const char *, ...)
+void	rsync_log(const char *, size_t, int, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
-void		  rsync_warnx1(const char *, size_t, const char *, ...)
+void	rsync_warnx1(const char *, size_t, const char *, ...)
 			__attribute__((format(printf, 3, 4)));
-void		  rsync_warn(int, const char *, size_t, const char *, ...)
+void	rsync_warn(int, const char *, size_t, const char *, ...)
 			__attribute__((format(printf, 4, 5)));
-void		  rsync_warnx(const char *, size_t, const char *, ...)
+void	rsync_warnx(const char *, size_t, const char *, ...)
 			__attribute__((format(printf, 3, 4)));
-void		  rsync_err(const char *, size_t, const char *, ...)
+void	rsync_err(const char *, size_t, const char *, ...)
 			__attribute__((format(printf, 3, 4)));
-void		  rsync_errx(const char *, size_t, const char *, ...)
+void	rsync_errx(const char *, size_t, const char *, ...)
 			__attribute__((format(printf, 3, 4)));
-void		  rsync_errx1(const char *, size_t, const char *, ...)
+void	rsync_errx1(const char *, size_t, const char *, ...)
 			__attribute__((format(printf, 3, 4)));
 
-int		  flist_del(struct sess *, int,
-			const struct flist *, size_t);
-int		  flist_gen(struct sess *, size_t, char **,
-			struct flist **, size_t *);
-int		  flist_gen_local(struct sess *, const char *,
-			struct flist **, size_t *);
-void		  flist_free(struct flist *, size_t);
-int		  flist_recv(struct sess *, int,
-			struct flist **, size_t *);
-int		  flist_send(struct sess *, int, int,
-			const struct flist *, size_t);
-int		  flist_gen_dels(struct sess *, const char *,
-			struct flist **, size_t *,
-			const struct flist *, size_t);
+int	flist_del(struct sess *, int, const struct flist *, size_t);
+int	flist_gen(struct sess *, size_t, char **, struct flist **, size_t *);
+int	flist_gen_local(struct sess *, const char *, struct flist **, size_t *);
+void	flist_free(struct flist *, size_t);
+int	flist_recv(struct sess *, int, struct flist **, size_t *);
+int	flist_send(struct sess *, int, int, const struct flist *, size_t);
+int	flist_gen_dels(struct sess *, const char *, struct flist **, size_t *,
+	    const struct flist *, size_t);
 
+const char	 *alt_base_mode(int);
 char		**fargs_cmdline(struct sess *, const struct fargs *, size_t *);
 
-int		  io_read_buf(struct sess *, int, void *, size_t);
-int		  io_read_byte(struct sess *, int, uint8_t *);
-int		  io_read_check(int);
-int		  io_read_flush(struct sess *, int);
-int		  io_read_int(struct sess *, int, int32_t *);
-int		  io_read_uint(struct sess *, int, uint32_t *);
-int		  io_read_long(struct sess *, int, int64_t *);
-int		  io_read_size(struct sess *, int, size_t *);
-int		  io_read_ulong(struct sess *, int, uint64_t *);
-int		  io_write_buf(struct sess *, int, const void *, size_t);
-int		  io_write_byte(struct sess *, int, uint8_t);
-int		  io_write_int(struct sess *, int, int32_t);
-int		  io_write_uint(struct sess *, int, uint32_t);
-int		  io_write_line(struct sess *, int, const char *);
-int		  io_write_long(struct sess *, int, int64_t);
-int		  io_write_ulong(struct sess *, int, uint64_t);
+int	io_read_buf(struct sess *, int, void *, size_t);
+int	io_read_byte(struct sess *, int, uint8_t *);
+int	io_read_check(int);
+int	io_read_flush(struct sess *, int);
+int	io_read_int(struct sess *, int, int32_t *);
+int	io_read_uint(struct sess *, int, uint32_t *);
+int	io_read_long(struct sess *, int, int64_t *);
+int	io_read_size(struct sess *, int, size_t *);
+int	io_read_ulong(struct sess *, int, uint64_t *);
+int	io_write_buf(struct sess *, int, const void *, size_t);
+int	io_write_byte(struct sess *, int, uint8_t);
+int	io_write_int(struct sess *, int, int32_t);
+int	io_write_uint(struct sess *, int, uint32_t);
+int	io_write_line(struct sess *, int, const char *);
+int	io_write_long(struct sess *, int, int64_t);
+int	io_write_ulong(struct sess *, int, uint64_t);
 
-int		  io_lowbuffer_alloc(struct sess *, void **,
-			size_t *, size_t *, size_t);
-void		  io_lowbuffer_int(struct sess *, void *,
-			size_t *, size_t, int32_t);
-void		  io_lowbuffer_buf(struct sess *, void *,
-			size_t *, size_t, const void *, size_t);
+int	io_lowbuffer_alloc(struct sess *, void **, size_t *, size_t *, size_t);
+void	io_lowbuffer_int(struct sess *, void *, size_t *, size_t, int32_t);
+void	io_lowbuffer_buf(struct sess *, void *, size_t *, size_t, const void *,
+	    size_t);
 
-void		  io_buffer_int(void *, size_t *, size_t, int32_t);
-void		  io_buffer_buf(void *, size_t *, size_t, const void *, size_t);
+void	io_buffer_int(void *, size_t *, size_t, int32_t);
+void	io_buffer_buf(void *, size_t *, size_t, const void *, size_t);
 
-void		  io_unbuffer_int(const void *,
-			size_t *, size_t, int32_t *);
-int		  io_unbuffer_size(const void *, size_t *, size_t, size_t *);
-void		  io_unbuffer_buf(const void *, size_t *, size_t, void *, size_t);
+void	io_unbuffer_int(const void *, size_t *, size_t, int32_t *);
+int	io_unbuffer_size(const void *, size_t *, size_t, size_t *);
+void	io_unbuffer_buf(const void *, size_t *, size_t, void *, size_t);
 
-int		  rsync_receiver(struct sess *, int, int, const char *);
-int		  rsync_sender(struct sess *, int, int, size_t, char **);
-int		  rsync_client(const struct opts *, int, const struct fargs *);
-int		  rsync_connect(const struct opts *, int *,
-			const struct fargs *);
-int		  rsync_socket(const struct opts *, int, const struct fargs *);
-int		  rsync_server(const struct opts *, size_t, char *[]);
-int		  rsync_downloader(struct download *, struct sess *, int *);
-int		  rsync_set_metadata(struct sess *, int, int,
-			const struct flist *, const char *);
-int		  rsync_set_metadata_at(struct sess *, int, int,
-			const struct flist *, const char *);
-int		  rsync_uploader(struct upload *,
-			int *, struct sess *, int *);
-int		  rsync_uploader_tail(struct upload *, struct sess *);
+int	rsync_receiver(struct sess *, int, int, const char *);
+int	rsync_sender(struct sess *, int, int, size_t, char **);
+int	rsync_client(const struct opts *, int, const struct fargs *);
+int	rsync_connect(const struct opts *, int *, const struct fargs *);
+int	rsync_socket(const struct opts *, int, const struct fargs *);
+int	rsync_server(const struct opts *, size_t, char *[]);
+int	rsync_downloader(struct download *, struct sess *, int *);
+int	rsync_set_metadata(struct sess *, int, int, const struct flist *,
+	    const char *);
+int	rsync_set_metadata_at(struct sess *, int, int, const struct flist *,
+	    const char *);
+int	rsync_uploader(struct upload *, int *, struct sess *, int *);
+int	rsync_uploader_tail(struct upload *, struct sess *);
 
-struct download	 *download_alloc(struct sess *, int,
-			const struct flist *, size_t, int);
-void		  download_free(struct download *);
-struct upload	 *upload_alloc(const char *, int, int, size_t,
-			const struct flist *, size_t, mode_t);
-void		  upload_free(struct upload *);
+struct download	*download_alloc(struct sess *, int, const struct flist *,
+		    size_t, int);
+void		 download_free(struct download *);
+struct upload	*upload_alloc(const char *, int, int, size_t,
+		    const struct flist *, size_t, mode_t);
+void		upload_free(struct upload *);
 
 struct blktab	*blkhash_alloc(void);
 int		 blkhash_set(struct blktab *, const struct blkset *);
 void		 blkhash_free(struct blktab *);
 
-struct blkset	 *blk_recv(struct sess *, int, const char *);
-void		  blk_recv_ack(char [20], const struct blkset *, int32_t);
-void		  blk_match(struct sess *, const struct blkset *,
-			const char *, struct blkstat *);
-int		  blk_send(struct sess *, int, size_t,
-			const struct blkset *, const char *);
-int		  blk_send_ack(struct sess *, int, struct blkset *);
+struct blkset	*blk_recv(struct sess *, int, const char *);
+void		 blk_recv_ack(char [20], const struct blkset *, int32_t);
+void		 blk_match(struct sess *, const struct blkset *,
+		    const char *, struct blkstat *);
+int		 blk_send(struct sess *, int, size_t, const struct blkset *,
+		    const char *);
+int		 blk_send_ack(struct sess *, int, struct blkset *);
 
-uint32_t	  hash_fast(const void *, size_t);
-void		  hash_slow(const void *, size_t,
-			unsigned char *, const struct sess *);
-void		  hash_file(const void *, size_t,
-			unsigned char *, const struct sess *);
+uint32_t	 hash_fast(const void *, size_t);
+void		 hash_slow(const void *, size_t, unsigned char *,
+		    const struct sess *);
+void		 hash_file(const void *, size_t, unsigned char *,
+		    const struct sess *);
 
-int		  mkpath(char *);
+void		 copy_file(int, const char *, const struct flist *);
 
-int		  mkstempat(int, char *);
-char		 *mkstemplinkat(char*, int, char *);
-char		 *mkstempfifoat(int, char *);
-char		 *mkstempnodat(int, char *, mode_t, dev_t);
-char		 *mkstempsock(const char *, char *);
-int		  mktemplate(char **, const char *, int);
+int		 mkpath(char *);
 
-char		 *symlink_read(const char *);
-char		 *symlinkat_read(int, const char *);
+int		 mkstempat(int, char *);
+char		*mkstemplinkat(char*, int, char *);
+char		*mkstempfifoat(int, char *);
+char		*mkstempnodat(int, char *, mode_t, dev_t);
+char		*mkstempsock(const char *, char *);
+int		 mktemplate(char **, const char *, int);
 
-int		  sess_stats_send(struct sess *, int);
-int		  sess_stats_recv(struct sess *, int);
+int		 parse_rule(char *line, enum rule_type);
+void		 parse_file(const char *, enum rule_type);
+void		 send_rules(struct sess *, int);
+void		 recv_rules(struct sess *, int);
+int		 rules_match(const char *, int);
 
-int		  idents_add(int, struct ident **, size_t *, int32_t);
-void		  idents_assign_gid(struct sess *,
-			struct flist *, size_t, const struct ident *, size_t);
-void		  idents_assign_uid(struct sess *,
-			struct flist *, size_t, const struct ident *, size_t);
-void		  idents_free(struct ident *, size_t);
-int		  idents_recv(struct sess *, int, struct ident **, size_t *);
-void		  idents_remap(struct sess *, int, struct ident *, size_t);
-int		  idents_send(struct sess *, int, const struct ident *, size_t);
+int		 rmatch(const char *, const char *, int);
+
+char		*symlink_read(const char *);
+char		*symlinkat_read(int, const char *);
+
+int		 sess_stats_send(struct sess *, int);
+int		 sess_stats_recv(struct sess *, int);
+
+int		 idents_add(int, struct ident **, size_t *, int32_t);
+void		 idents_assign_gid(struct sess *, struct flist *, size_t,
+		    const struct ident *, size_t);
+void		 idents_assign_uid(struct sess *, struct flist *, size_t,
+		    const struct ident *, size_t);
+void		 idents_free(struct ident *, size_t);
+int		 idents_recv(struct sess *, int, struct ident **, size_t *);
+void		 idents_remap(struct sess *, int, struct ident *, size_t);
+int		 idents_send(struct sess *, int, const struct ident *, size_t);
 
 #endif /*!EXTERN_H*/
