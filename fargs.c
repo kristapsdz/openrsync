@@ -136,9 +136,9 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		/* --devices is sent as -D --no-specials */
 		addargs(&args, "--no-specials");
 	if (sess->opts->max_size >= 0)
-		addargs(&args, "--max-size=%lld", sess->opts->max_size);
+		addargs(&args, "--max-size=%lld", (long long)sess->opts->max_size);
 	if (sess->opts->min_size >= 0)
-		addargs(&args, "--min-size=%lld", sess->opts->min_size);
+		addargs(&args, "--min-size=%lld", (long long)sess->opts->min_size);
 
 	/* only add --compare-dest, etc if this is the sender */
 	if (sess->opts->alt_base_mode != 0 &&

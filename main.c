@@ -21,7 +21,9 @@
 #include <sys/wait.h>
 
 #include <assert.h>
-#include <err.h>
+#if HAVE_ERR
+# include <err.h>
+#endif
 #if !HAVE_SOCK_NONBLOCK
 # include <fcntl.h>
 #endif
@@ -363,6 +365,7 @@ main(int argc, char *argv[])
 	struct fargs	*fargs;
 	char		**args;
 	const char	*errstr;
+	long long 	 tmpint;
 
 	/* Global pledge. */
 
@@ -497,12 +500,14 @@ basedir:
 			opts.basedir[basedir_cnt++] = optarg;
 			break;
 		case OP_MAX_SIZE:
-			if (scan_scaled(optarg, &opts.max_size) == -1)
+			if (scan_scaled(optarg, &tmpint) == -1)
 				err(1, "bad max-size");
+			opts.max_size = tmpint;
 			break;
 		case OP_MIN_SIZE:
-			if (scan_scaled(optarg, &opts.min_size) == -1)
+			if (scan_scaled(optarg, &tmpint) == -1)
 				err(1, "bad min-size");
+			opts.min_size = tmpint;
 			break;
 		case OP_VERSION:
 			fprintf(stderr, "openrsync: protocol version %u\n",

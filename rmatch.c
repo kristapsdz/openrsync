@@ -1,5 +1,3 @@
-/*	$OpenBSD: rmatch.c,v 1.2 2021/08/29 15:37:58 claudio Exp $	*/
-
 /*
  * Copyright (c) 2021 Claudio Jeker <claudio@openbsd.org>
  *
@@ -47,8 +45,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include "config.h"
 
 #include <ctype.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <limits.h>

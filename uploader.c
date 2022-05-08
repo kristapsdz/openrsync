@@ -1014,7 +1014,7 @@ rsync_uploader(struct upload *u, int *fileinfd,
 			offs += blk.len;
 			LOG3(
 			    "i=%ld, offs=%lld, msz=%ld, blk.len=%lu, blk.rem=%lu",
-			    i, offs, msz, blk.len, blk.rem);
+			    i, (long long)offs, msz, blk.len, blk.rem);
 			i++;
 		} while (i < blk.blksz);
 

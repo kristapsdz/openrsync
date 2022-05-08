@@ -1,5 +1,3 @@
-
-/*	$OpenBSD: copy.c,v 1.3 2021/11/28 19:28:42 deraadt Exp $ */
 /*
  * Copyright (c) 2021 Claudio Jeker <claudio@openbsd.org>
  *
@@ -15,11 +13,13 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#include "config.h"
 
-#include <sys/types.h>
-
-#include <err.h>
+#if HAVE_ERR
+# include <err.h>
+#endif
 #include <fcntl.h>
+#include <stdint.h>
 #include <unistd.h>
 
 #include "extern.h"

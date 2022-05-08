@@ -14,7 +14,11 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#include <err.h>
+#include "config.h"
+
+#if HAVE_ERR
+# include <err.h>
+#endif
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
