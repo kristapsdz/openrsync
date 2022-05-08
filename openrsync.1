@@ -134,8 +134,10 @@ Don't transfer any file that is larger than
 bytes.
 Alternatively
 .Ar size
-may instead use a multiplier, as documented in
-.Xr scan_scaled 3 ,
+may instead use a multiplier (such as
+0B, 100B, 1023B, 1K, 1.5K, 5.5M; or any sequence with a case-insensitive
+terminal scale multiplier of B, K, M, G, T, P, or E; corresponding to bytes,
+kilobytes, and so on)
 to specify the size.
 .It Fl -min-size Ar size
 Don't transfer any file that is smaller than
