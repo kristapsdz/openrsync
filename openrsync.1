@@ -1,4 +1,3 @@
-.\"	$OpenBSD$
 .\"
 .\" Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
 .\"
@@ -25,7 +24,15 @@
 .Op Fl aDglnoprtvx
 .Op Fl e Ar program
 .Op Fl -address Ns = Ns Ar sourceaddr
+.Op Fl -compare-dest Ns = Ns Ar directory
 .Op Fl -del
+.Op Fl -exclude Ar pattern
+.Op Fl -exclude-from Ns = Ns Ar file
+.Op Fl -include Ar pattern
+.Op Fl -include-from Ns = Ns Ar file
+.Op Fl -max-size Ns = Ns size
+.Op Fl -min-size Ns = Ns size
+.Op Fl -no-motd
 .Op Fl -numeric-ids
 .Op Fl -port Ns = Ns Ar service
 .Op Fl -rsync-path Ns = Ns Ar program
@@ -57,6 +64,18 @@ When connecting to an rsync daemon, use
 .Ar sourceaddr
 as the source address for connections, which is useful on machines with
 multiple interfaces.
+.It Fl -compare-dest Ns = Ns Ar directory
+Use directory as an alternate base directory to compare files against on the
+destination machine.
+If file in
+.Ar directory
+is found and identical to the sender's file, the file will not be transferred.
+Multiple
+.Fl -compare-dest
+directories may be provided.
+If
+.Ar directory
+is a relative path, it is relative to the destination directory.
 .It Fl D
 Also transfer device and special files.
 Shorthand for
@@ -69,6 +88,26 @@ not found in
 directories.
 Only applicable with
 .Fl r .
+.It Fl -exclude Ar pattern
+Exclude files matching
+.Em pattern .
+.It Fl -exclude-from Ns = Ns Ar file
+Load
+.Em patterns
+and
+.Em rules
+from
+.Em file .
+.It Fl -include Ar pattern
+Include files matching
+.Em pattern .
+.It Fl -include-from Ns = Ns Ar file
+Load
+.Em patterns
+and
+.Em rules
+from
+.Em file .
 .It Fl -devices
 Also transfer device files.
 .It Fl e Ar program , Fl -rsh Ns = Ns Ar program
@@ -89,10 +128,28 @@ set the numeric group ID to match the source instead.
 Also transfer symbolic links.
 The link is transferred as a standalone file: if the destination does
 not exist, it will be broken.
+.It Fl -max-size Ar size
+Don't transfer any file that is larger than
+.Ar size
+bytes.
+Alternatively
+.Ar size
+may instead use a multiplier, as documented in
+.Xr scan_scaled 3 ,
+to specify the size.
+.It Fl -min-size Ar size
+Don't transfer any file that is smaller than
+.Ar size
+bytes.
+See
+.Fl -max-size
+on the definition of size.
 .It Fl n , -dry-run
 Do not actually modify the destination.
 Mainly useful in combination with
 .Fl v .
+.It Fl -no-motd
+Do not display the Message of the Day.
 .It Fl -numeric-ids
 Ignore user and group names, use numeric user and group IDs only.
 Has no effect unless
@@ -207,6 +264,7 @@ or symbolic links
 The destination
 .Ar directory
 must be a directory and is created if not found.
+.\" .Sh PATTERNS AND RULES
 .\" .Sh ENVIRONMENT
 .\" .Sh FILES
 .Sh EXIT STATUS

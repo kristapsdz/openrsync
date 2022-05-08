@@ -1,4 +1,3 @@
-.\"	$OpenBSD$
 .\"
 .\" Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
 .\"
@@ -220,7 +219,7 @@ file (byte array)
 .It
 file length (long)
 .It
-file modification time (optional, integer)
+file modification time (optional, time_t, integer)
 .It
 file mode (optional, mode_t, integer)
 .It
@@ -391,7 +390,7 @@ data chunk (bytes)
 block index subsequent to chunk or zero for finished (integer)
 .El
 .Pp
-Following this sequence, the sender sends the followng:
+Following this sequence, the sender sends the following:
 .Pp
 .Bl -enum -compact
 .It
