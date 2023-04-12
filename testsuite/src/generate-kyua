@@ -1,0 +1,68 @@
+#! /bin/sh
+
+test_counter=10000
+
+doit ()
+{
+    local name
+    local names=""
+
+    echo '#! /usr/bin/env atf-sh'
+    echo
+
+    # This loop iterates over all the *.test files and
+    # generates a single Kuya file with multiple tests.
+    # Note that it includes the literal block in the
+    # loop.
+
+    for file in test[0-9]*.test ; do
+        test_counter=$(($test_counter + 1))
+        # name needs to conform to sh function identifier rules
+        name=`echo $file | sed 's/[- ]/_/g'`
+        name=${name%%.*}
+        names="$names $name"
+
+        echo atf_test_case $name
+
+cat << EOF
+
+${name}_head()
+{
+    atf_set "descr" "${file%.test}"
+}
+
+${name}_body()
+{
+    export tstdir=`pwd`
+    if "`pwd`/$file" ; then
+        atf_pass
+    else
+        atf_fail "$file failed"
+    fi
+}
+
+
+EOF
+    done
+
+    echo 'atf_init_test_cases()'
+    echo '{'
+    for name in $names ; do 
+        echo "    atf_add_test_case $name"
+    done
+    echo '}'
+
+}
+
+doit "$@" > tests_kyua.tmp && mv tests_kyua.tmp tests_kyua.sh
+chmod a+x tests_kyua.sh
+
+cat << EOF > Kyuafile
+syntax(2)
+
+-- The name of the test suite must be defined.
+test_suite('openrsynctests')
+
+-- This specifies the test programs
+atf_test_program{name='tests_kyua.sh'}
+EOF
