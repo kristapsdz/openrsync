@@ -139,6 +139,8 @@ jobs:
       uses: vmactions/omnios-vm@v1
       with:
         usesh: true
+        prepare: |
+            pkg install developer/clang system/header developer/build/make
         run: |
           ./configure
           make regress
