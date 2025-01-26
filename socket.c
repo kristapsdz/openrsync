@@ -89,11 +89,23 @@ inet_connect(int *sd, const struct source *src, const char *host,
 
 	LOG2("trying: %s, %s", src->ip, host);
 
+#if HAVE_SOCK_NONBLOCK
 	if ((*sd = socket(src->family, SOCK_STREAM | SOCK_NONBLOCK, 0))
 	    == -1) {
 		ERR("socket");
 		return -1;
 	}
+#else
+	if ((*sd = socket(src->family, SOCK_STREAM, 0)) == -1) {
+		ERR("socket");
+		return -1;
+	}
+	if (fcntl(*sd, F_SETFL, fcntl(*sd, F_GETFL, 0) | O_NONBLOCK)
+	    == -1) {
+		ERR("socket");
+		return -1;
+	}
+#endif
 
 	if (inet_bind(*sd, src->family, bsrc, bsrcsz) == -1) {
 		ERR("bind");
