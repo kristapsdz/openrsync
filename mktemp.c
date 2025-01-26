@@ -59,10 +59,6 @@ enum	tmpmode {
  */
 #define MIN_X		6
 
-/*
- * The only flags we'll accept for creation of the temporary file.
- */
-#define MKOTEMP_FLAGS	(O_APPEND | O_CLOEXEC | O_DSYNC | O_RSYNC | O_SYNC)
 #ifndef O_DSYNC
 # define O_DSYNC 0
 #endif
@@ -72,6 +68,11 @@ enum	tmpmode {
 #ifndef O_FSYNC
 # define O_FSYNC 0
 #endif
+
+/*
+ * The only flags we'll accept for creation of the temporary file.
+ */
+#define MKOTEMP_FLAGS	(O_APPEND | O_CLOEXEC | O_DSYNC | O_RSYNC | O_SYNC)
 
 #ifndef nitems
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0]))
@@ -124,13 +125,7 @@ mktemp_internalat(int pfd, char *path, int slen, enum tmpmode mode,
 			 * Avoid lots of arc4random() calls by using
 			 * a buffer sized for up to 16 Xs at a time.
 			 */
-#if HAVE_ARC4RANDOM
 			arc4random_buf(rbuf, sizeof(rbuf));
-#else
-			for (i = 0; i < sizeof(rbuf); i++)
-				rbuf[i] = random();
-#endif
-
 			for (i = 0; i < nitems(rbuf) && cp != ep; i++)
 				*cp++ = tempchars[rbuf[i] % NUM_CHARS];
 		} while (cp != ep);

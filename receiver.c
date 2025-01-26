@@ -120,7 +120,8 @@ rsync_set_metadata_at(struct sess *sess, int newfile, int rootfd,
 
 	/* Conditionally adjust file modification time. */
 
-	if (sess->opts->preserve_times) {
+	if (sess->opts->preserve_times &&
+	    !(S_ISLNK(f->st.mode) && sess->opts->ignore_link_times)) {
 		ts[0].tv_nsec = UTIME_NOW;
 		ts[1].tv_sec = f->st.mtime;
 		ts[1].tv_nsec = 0;
@@ -275,48 +276,20 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 
 	oumask = umask(0);
 
-	/*
-	 * Try opening the root directory.  If we're in dry_run and
-	 * fail, just report the error and continue on---don't try to
-	 * create the directory.
-	 */
-
+	if (!sess->opts->dry_run) {
 #ifdef O_DIRECTORY
-	dfd = open(root, O_RDONLY | O_DIRECTORY, 0);
-	if (dfd == -1) {
-		if (!sess->opts->dry_run) {
-			ERR("%s: open", root);
-			goto out;
-		} else
-			WARN("%s: open", root);
-	}
+		dfd = open(root, O_RDONLY | O_DIRECTORY);
+		if (dfd == -1)
+			err(ERR_FILE_IO, "%s: open", root);
 #else
-	if ((dfd = open(root, O_RDONLY, 0)) == -1) {
-		if (!sess->opts->dry_run) {
-			ERR("%s: open", root);
-			goto out;
-		} else
-			WARN("%s: open", root);
-	} else if (fstat(dfd, &st) == -1) {
-		if (!sess->opts->dry_run) {
-			ERR("%s: fstat", root);
-			goto out;
-		} else {
-			WARN("%s: fstat", root);
-			close(dfd);
-			dfd = -1;
-		}
-	} else if (!S_ISDIR(st.st_mode)) {
-		if (!sess->opts->dry_run) {
-			ERRX("%s: not a directory", root);
-			goto out;
-		} else {
-			WARN("%s: fstat", root);
-			close(dfd);
-			dfd = -1;
-		}
-	}
+		if ((dfd = open(root, O_RDONLY, 0)) == -1)
+			err(ERR_FILE_IO, "%s: open", root);
+		else if (fstat(dfd, &st) == -1)
+			err(ERR_FILE_IO, "%s: fstat", root);
+		else if (!S_ISDIR(st.st_mode))
+			errx(ERR_FILE_IO, "%s: not a directory", root);
 #endif
+	}
 
 	/*
 	 * Begin by conditionally getting all files we have currently
@@ -326,7 +299,7 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 	if (sess->opts->del &&
 	    sess->opts->recursive &&
 	    !flist_gen_dels(sess, root, &dfl, &dflsz, fl, flsz)) {
-		ERRX1("flist_gen_local");
+		ERRX1("rsync_receiver");
 		goto out;
 	}
 

@@ -28,7 +28,7 @@
 
 /*
  * Return true if all bytes in buffer are zero.
- * A buffer of zero lenght is also considered a zero buffer.
+ * A buffer of zero length is also considered a zero buffer.
  */
 static int
 iszero(const void *b, size_t len)

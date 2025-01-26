@@ -43,7 +43,7 @@
 /*
  * We allocate our file list in chunk sizes so as not to do it one by
  * one.
- * Preferrably we get one or two allocation.
+ * Preferably we get one or two allocation.
  */
 #define	FLIST_CHUNK_SIZE (1024)
 
@@ -451,7 +451,7 @@ flist_recv_name(struct sess *sess, int fd, struct flist *f, uint8_t flags,
 	 * than byte-size.
 	 */
 
-	if (FLIST_NAME_SAME & flags) {
+	if (flags & FLIST_NAME_SAME) {
 		if (!io_read_byte(sess, fd, &bval)) {
 			ERRX1("io_read_byte");
 			return 0;
@@ -461,7 +461,7 @@ flist_recv_name(struct sess *sess, int fd, struct flist *f, uint8_t flags,
 
 	/* Get the (possibly-remaining) filename length. */
 
-	if (FLIST_NAME_LONG & flags) {
+	if (flags & FLIST_NAME_LONG) {
 		if (!io_read_size(sess, fd, &pathlen)) {
 			ERRX1("io_read_size");
 			return 0;
@@ -488,7 +488,7 @@ flist_recv_name(struct sess *sess, int fd, struct flist *f, uint8_t flags,
 	}
 	f->path[len] = '\0';
 
-	if (FLIST_NAME_SAME & flags)
+	if (flags & FLIST_NAME_SAME)
 		memcpy(f->path, last, partial);
 
 	if (!io_read_buf(sess, fd, f->path + partial, pathlen)) {
@@ -642,44 +642,41 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 
 		/* Read the modification time. */
 
-		if (!(FLIST_TIME_SAME & flag)) {
+		if (!(flag & FLIST_TIME_SAME)) {
 			if (!io_read_uint(sess, fd, &uival)) {
 				ERRX1("io_read_uint");
 				goto out;
 			}
 			ff->st.mtime = uival;	/* beyond 2038 */
 		} else if (fflast == NULL) {
-			ERRX("same time without last entry");
-			goto out;
+			ff->st.mtime = 0;
 		}  else
 			ff->st.mtime = fflast->st.mtime;
 
 		/* Read the file mode. */
 
-		if (!(FLIST_MODE_SAME & flag)) {
+		if (!(flag & FLIST_MODE_SAME)) {
 			if (!io_read_uint(sess, fd, &uival)) {
 				ERRX1("io_read_uint");
 				goto out;
 			}
 			ff->st.mode = uival;
 		} else if (fflast == NULL) {
-			ERRX("same mode without last entry");
-			goto out;
+			ff->st.mode = 0;
 		} else
 			ff->st.mode = fflast->st.mode;
 
 		/* Conditional part: uid. */
 
 		if (sess->opts->preserve_uids) {
-			if (!(FLIST_UID_SAME & flag)) {
+			if (!(flag & FLIST_UID_SAME)) {
 				if (!io_read_uint(sess, fd, &uival)) {
 					ERRX1("io_read_int");
 					goto out;
 				}
 				ff->st.uid = uival;
 			} else if (fflast == NULL) {
-				ERRX("same uid without last entry");
-				goto out;
+				ff->st.uid = 0;
 			} else
 				ff->st.uid = fflast->st.uid;
 		}
@@ -687,15 +684,14 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 		/* Conditional part: gid. */
 
 		if (sess->opts->preserve_gids) {
-			if (!(FLIST_GID_SAME & flag)) {
+			if (!(flag & FLIST_GID_SAME)) {
 				if (!io_read_uint(sess, fd, &uival)) {
 					ERRX1("io_read_uint");
 					goto out;
 				}
 				ff->st.gid = uival;
 			} else if (fflast == NULL) {
-				ERRX("same gid without last entry");
-				goto out;
+				ff->st.gid = 0;
 			} else
 				ff->st.gid = fflast->st.gid;
 		}
@@ -706,15 +702,14 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 		    S_ISCHR(ff->st.mode))) ||
 		    (sess->opts->specials && (S_ISFIFO(ff->st.mode) ||
 		    S_ISSOCK(ff->st.mode)))) {
-			if (!(FLIST_RDEV_SAME & flag)) {
+			if (!(flag & FLIST_RDEV_SAME)) {
 				if (!io_read_int(sess, fd, &ival)) {
 					ERRX1("io_read_int");
 					goto out;
 				}
 				ff->st.rdev = ival;
 			} else if (fflast == NULL) {
-				ERRX("same device without last entry");
-				goto out;
+				ff->st.rdev = 0;
 			} else
 				ff->st.rdev = fflast->st.rdev;
 		}

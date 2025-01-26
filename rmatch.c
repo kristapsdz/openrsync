@@ -126,7 +126,7 @@ rangematch(const char **pp, char test)
 			case RANGE_NOMATCH:
 				continue;
 			default:
-				/* invalid character class, treat litterally. */
+				/* invalid character class, treat literally. */
 				break;
 			}
 		}
@@ -156,7 +156,7 @@ rangematch(const char **pp, char test)
 
 /*
  * Single character match, advances pattern as much as needed.
- * Return 0 on match and !0 (aka 1) on missmatch.
+ * Return 0 on match and !0 (aka 1) on mismatch.
  * When matched pp is advanced to the end of the pattern matched.
  */
 static int
@@ -260,8 +260,12 @@ matchsub(const char **pp, const char **ss, const char *end, int wild)
 		/* eat possible escape char before '/' */
 		if (pattern[0] == '\\' && pattern[1] == '/')
 			pattern++;
-		if (pattern[0] == '/')
+		if (pattern[0] == '/') {
+			/* hit the barrier but we still have characters left */
+			if (string < end)
+				return 1;
 			break;
+		}
 
 		/* check if there are still characters available to compare */
 		if (string >= end)

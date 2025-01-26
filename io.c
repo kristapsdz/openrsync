@@ -165,7 +165,7 @@ io_write_buf(struct sess *sess, int fd, const void *buf, size_t sz)
 
 /*
  * Write "line" (NUL-terminated) followed by a newline.
- * Returns zero on failure, non-zero on succcess.
+ * Returns zero on failure, non-zero on success.
  */
 int
 io_write_line(struct sess *sess, int fd, const char *line)
@@ -469,7 +469,7 @@ io_buffer_buf(void *buf, size_t *bufpos, size_t buflen, const void *val,
 }
 
 /*
- * Like io_buffer_buf(), but also accomodating for multiplexing codes.
+ * Like io_buffer_buf(), but also accommodating for multiplexing codes.
  * This should NEVER be passed to io_write_buf(), but instead passed
  * directly to a write operation.
  */
@@ -503,7 +503,7 @@ io_lowbuffer_buf(struct sess *sess, void *buf,
  *   io_lowbuffer_alloc(... sizeof(int32_t));
  *   io_lowbuffer_int(...);
  * And not sizeof(int32_t) * 2 or whatnot.
- * Returns zero on failure, non-zero on succes.
+ * Returns zero on failure, non-zero on success.
  */
 int
 io_lowbuffer_alloc(struct sess *sess, void **buf,
@@ -586,8 +586,9 @@ io_read_ulong(struct sess *sess, int fd, uint64_t *val)
 	if (!io_read_int(sess, fd, &sval)) {
 		ERRX1("io_read_int");
 		return 0;
-	} else if (sval != -1) {
-		*val = (uint64_t)le32toh(sval);
+	}
+	if (sval != -1) {
+		*val = sval;
 		return 1;
 	}
 

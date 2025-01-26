@@ -117,6 +117,8 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "-r");
 	if (sess->opts->preserve_times)
 		addargs(&args, "-t");
+	if (sess->opts->ignore_times)
+		addargs(&args, "-I");
 	if (verbose > 3)
 		addargs(&args, "-v");
 	if (verbose > 2)
@@ -139,15 +141,24 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 	if (sess->opts->min_size >= 0)
 		addargs(&args, "--min-size=%lld", (long long)sess->opts->min_size);
 
-	/* only add --compare-dest, etc if this is the sender */
-	if (sess->opts->alt_base_mode != 0 &&
-	    f->mode == FARGS_SENDER) {
-		for (j = 0; j < MAX_BASEDIR; j++) {
-			if (sess->opts->basedir[j] == NULL)
-				break;
-			addargs(&args, "%s=%s",
-			    alt_base_mode(sess->opts->alt_base_mode),
-			    sess->opts->basedir[j]);
+	/* extra options for the receiver (local is sender) */
+	if (f->mode == FARGS_SENDER) {
+		if (sess->opts->ignore_dir_times)
+			addargs(&args, "-O");
+		if (sess->opts->ignore_link_times)
+			addargs(&args, "-J");
+		if (sess->opts->size_only)
+			addargs(&args, "--size-only");
+
+		/* only add --compare-dest, etc if this is the sender */
+		if (sess->opts->alt_base_mode != 0) {
+			for (j = 0; j < MAX_BASEDIR; j++) {
+				if (sess->opts->basedir[j] == NULL)
+					break;
+				addargs(&args, "%s=%s",
+				    alt_base_mode(sess->opts->alt_base_mode),
+				    sess->opts->basedir[j]);
+			}
 		}
 	}
 

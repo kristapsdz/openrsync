@@ -72,6 +72,4 @@ distcheck:
 regress:
 	# Do nothing.
 
-$(ALLOBJS) $(AFLS): extern.h config.h
-
-blocks.o downloader.o hash.o md4.o: md4.h
+$(ALLOBJS) $(AFLS): extern.h config.h md4.h

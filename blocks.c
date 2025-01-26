@@ -29,7 +29,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "md4.h"
 #include "extern.h"
 
 struct	blkhash {
@@ -123,7 +122,7 @@ blkhash_set(struct blktab *p, const struct blkset *bset)
 void
 blkhash_free(struct blktab *p)
 {
-
+	free(p->q);
 	free(p->blks);
 	free(p);
 }
@@ -245,7 +244,7 @@ void
 blk_match(struct sess *sess, const struct blkset *blks,
 	const char *path, struct blkstat *st)
 {
-	off_t		  last, end, sz;
+	off_t		  last, end = 0, sz;
 	int32_t		  tok;
 	size_t		  i;
 	const struct blk *blk;
@@ -267,59 +266,55 @@ blk_match(struct sess *sess, const struct blkset *blks,
 		 */
 
 		end = st->mapsz + 1 - blks->blks[blks->blksz - 1].len;
-		last = st->offs;
+	}
 
-		for (i = 0; st->offs < end; st->offs++, i++) {
-			blk = blk_find(sess, st, blks, path, i == 0);
-			if (blk == NULL)
-				continue;
+	last = st->offs;
+	for (i = 0; st->offs < end; st->offs++, i++) {
+		blk = blk_find(sess, st, blks, path, i == 0);
+		if (blk == NULL)
+			continue;
 
-			sz = st->offs - last;
-			st->dirty += sz;
-			st->total += sz;
-			LOG4("%s: flushing %jd B before %zu B block %zu",
-			    path, (intmax_t)sz,
-			    blk->len, blk->idx);
-			tok = -(blk->idx + 1);
-
-			/*
-			 * Write the data we have, then follow it with
-			 * the tag of the block that matches.
-			 */
-
-			st->curpos = last;
-			st->curlen = st->curpos + sz;
-			st->curtok = tok;
-			assert(st->curtok != 0);
-			st->curst = sz ? BLKSTAT_DATA : BLKSTAT_TOK;
-			st->total += blk->len;
-			st->offs += blk->len;
-			st->hint = blk->idx + 1;
-			return;
-		}
-
-		/* Emit remaining data and send terminator token. */
-
-		sz = st->mapsz - last;
-		LOG4("%s: flushing remaining %jd B",
-		    path, (intmax_t)sz);
-
-		st->total += sz;
+		sz = st->offs - last;
 		st->dirty += sz;
+		st->total += sz;
+		LOG4("%s: flushing %jd B before %zu B block %zu",
+		    path, (intmax_t)sz,
+		    blk->len, blk->idx);
+		tok = -(blk->idx + 1);
+
+		hash_file_buf(&st->ctx, st->map + last, sz + blk->len);
+
+		/*
+		 * Write the data we have, then follow it with
+		 * the tag of the block that matches.
+		 */
+
 		st->curpos = last;
 		st->curlen = st->curpos + sz;
-		st->curtok = 0;
+		st->curtok = tok;
+		assert(st->curtok != 0);
 		st->curst = sz ? BLKSTAT_DATA : BLKSTAT_TOK;
-	} else {
-		st->curpos = 0;
-		st->curlen = st->mapsz;
-		st->curtok = 0;
-		st->curst = st->mapsz ? BLKSTAT_DATA : BLKSTAT_TOK;
-		st->dirty = st->total = st->mapsz;
+		st->total += blk->len;
+		st->offs += blk->len;
+		st->hint = blk->idx + 1;
 
-		LOG4("%s: flushing whole file %zu B",
-		    path, st->mapsz);
+		return;
 	}
+
+	/* Emit remaining data and send terminator token. */
+
+	sz = st->mapsz - last;
+	LOG4("%s: flushing %s %jd B", path,
+	    last == 0 ? "whole" : "remaining", (intmax_t)sz);
+
+	hash_file_buf(&st->ctx, st->map + last, sz);
+
+	st->total += sz;
+	st->dirty += sz;
+	st->curpos = last;
+	st->curlen = st->curpos + sz;
+	st->curtok = 0;
+	st->curst = sz ? BLKSTAT_DATA : BLKSTAT_TOK;
 }
 
 /*

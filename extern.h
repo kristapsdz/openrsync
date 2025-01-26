@@ -17,6 +17,8 @@
 #ifndef EXTERN_H
 #define EXTERN_H
 
+#include "md4.h"
+
 #if !HAVE_PLEDGE
 # define pledge(x, y) (1)
 #endif
@@ -75,6 +77,11 @@
  * All poll events will use it and catch time-outs.
  */
 extern int poll_timeout;
+
+/*
+ * Use this for --contimeout.
+ */
+extern int poll_contimeout;
 
 /*
  * Operating mode for a client or a server.
@@ -147,6 +154,10 @@ struct	opts {
 	int		 no_motd;		/* --no-motd */
 	int		 numeric_ids;		/* --numeric-ids */
 	int		 one_file_system;	/* -x */
+	int		 ignore_times;		/* -I */
+	int		 ignore_dir_times;	/* -O */
+	int		 ignore_link_times;	/* -J */
+	int		 size_only;		/* --size-only */
 	int		 alt_base_mode;
 	off_t		 max_size;		/* --max-size */
 	off_t		 min_size;		/* --min-size */
@@ -215,6 +226,7 @@ struct	blkstat {
 	struct blktab	*blktab; /* hashtable of blocks */
 	uint32_t	 s1; /* partial sum for computing fast hash */
 	uint32_t	 s2; /* partial sum for computing fast hash */
+	MD4_CTX		 ctx; /* context for hash_file */
 };
 
 /*
@@ -303,8 +315,6 @@ extern int verbose;
 
 void	rsync_log(int, const char *, ...)
 			__attribute__((format(printf, 2, 3)));
-void	rsync_warnx1(const char *, ...)
-			__attribute__((format(printf, 1, 2)));
 void	rsync_warn(int, const char *, ...)
 			__attribute__((format(printf, 2, 3)));
 void	rsync_warnx(const char *, ...)
@@ -318,7 +328,6 @@ void	rsync_errx1(const char *, ...)
 
 int	flist_del(struct sess *, int, const struct flist *, size_t);
 int	flist_gen(struct sess *, size_t, char **, struct flist **, size_t *);
-int	flist_gen_local(struct sess *, const char *, struct flist **, size_t *);
 void	flist_free(struct flist *, size_t);
 int	flist_recv(struct sess *, int, struct flist **, size_t *);
 int	flist_send(struct sess *, int, int, const struct flist *, size_t);
@@ -393,8 +402,10 @@ int		 blk_send_ack(struct sess *, int, struct blkset *);
 uint32_t	 hash_fast(const void *, size_t);
 void		 hash_slow(const void *, size_t, unsigned char *,
 		    const struct sess *);
-void		 hash_file(const void *, size_t, unsigned char *,
-		    const struct sess *);
+
+void		 hash_file_start(MD4_CTX *, const struct sess *);
+void		 hash_file_buf(MD4_CTX *, const void *, size_t);
+void		 hash_file_final(MD4_CTX *, unsigned char *);
 
 void		 copy_file(int, const char *, const struct flist *);
 

@@ -22,8 +22,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "md4.h"
-
 #include "extern.h"
 
 /*
@@ -83,14 +81,21 @@ hash_slow(const void *buf, size_t len,
  * of the sequence, not the beginning.
  */
 void
-hash_file(const void *buf, size_t len,
-	unsigned char *md, const struct sess *sess)
+hash_file_start(MD4_CTX *ctx, const struct sess *sess)
 {
-	MD4_CTX		 ctx;
 	int32_t		 seed = htole32(sess->seed);
 
-	MD4_Init(&ctx);
-	MD4_Update(&ctx, (unsigned char *)&seed, sizeof(int32_t));
-	MD4_Update(&ctx, buf, len);
-	MD4_Final(md, &ctx);
+	MD4_Init(ctx);
+	MD4_Update(ctx, (unsigned char *)&seed, sizeof(int32_t));
+}
+
+void
+hash_file_buf(MD4_CTX *ctx, const void *buf, size_t len)
+{
+	MD4_Update(ctx, buf, len);
+}
+void
+hash_file_final(MD4_CTX *ctx, unsigned char *md)
+{
+	MD4_Final(md, ctx);
 }
