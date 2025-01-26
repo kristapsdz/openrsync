@@ -30,7 +30,7 @@ ALLOBJS	   = $(OBJS) \
 all: openrsync
 
 openrsync: $(ALLOBJS)
-	$(CC) $(LDFLAGS) -o $@ $(ALLOBJS) -lm $(LDADD_LIB_SOCKET) $(LDADD_SCAN_SCALED)
+	$(CC) -o $@ $(ALLOBJS) -lm $(LDADD_LIB_SOCKET) $(LDADD_SCAN_SCALED) $(LDFLAGS)
 
 install: all
 	mkdir -p $(DESTDIR)$(BINDIR)
