@@ -16,6 +16,51 @@ main(void)
 	return (arc4random() + 1) ? 0 : 1;
 }
 #endif /* TEST_ARC4RANDOM */
+#if TEST_BLOWFISH
+#include <sys/types.h>
+#include <blf.h>
+#include <string.h>
+
+int
+main(void)
+{
+	blf_ctx c;
+	char    key[] = "AAAAA";
+	char    key2[] = "abcdefghijklmnopqrstuvwxyz";
+
+	u_int32_t data[10];
+	u_int32_t data2[] =
+	{0x424c4f57l, 0x46495348l};
+
+	u_int16_t i;
+
+	/* First test */
+	for (i = 0; i < 10; i++)
+		data[i] = i;
+
+	blf_key(&c, (u_int8_t *) key, 5);
+	blf_enc(&c, data, 5);
+	{
+		u_int32_t *d;
+		u_int16_t i;
+
+		d = data;
+		for (i = 0; i < 5; i++) {
+			Blowfish_encipher(&c, d, d + 1);
+			d += 2;
+		}
+	}
+
+
+	blf_dec(&c, data, 1);
+	blf_dec(&c, data + 2, 4);
+
+
+	blf_enc(&c, data2, 1);
+	blf_dec(&c, data2, 1);
+	return 0;
+}
+#endif /* TEST_BLOWFISH */
 #if TEST_B64_NTOP
 #include <netinet/in.h>
 #include <resolv.h>
@@ -40,9 +85,9 @@ main(void)
 }
 #endif /* TEST_CAPSICUM */
 #if TEST_CRYPT
-#if defined(__linux__)
-# define _GNU_SOURCE /* old glibc */
+#if defined(__linux__) || defined(__wasi__)
 # define _DEFAULT_SOURCE /* new glibc */
+# define _XOPEN_SOURCE /* old glibc */
 #endif
 #if defined(__sun)
 # ifndef _XOPEN_SOURCE /* SunOS already defines */
@@ -64,14 +109,13 @@ int main(void)
 }
 #endif /* TEST_CRYPT */
 #if TEST_CRYPT_NEWHASH
-#include <pwd.h> /* _PASSWORD_LEN */
 #include <unistd.h>
 
 int
 main(void)
 {
 	const char	*v = "password";
-	char		 hash[_PASSWORD_LEN];
+	char		 hash[128];
 
 	if (crypt_newhash(v, "bcrypt,a", hash, sizeof(hash)) == -1)
 		return 1;
@@ -82,7 +126,7 @@ main(void)
 }
 #endif /* TEST_CRYPT_NEWHASH */
 #if TEST_ENDIAN_H
-#ifdef __linux__
+#if defined(__linux__) || defined(__wasi__)
 # define _DEFAULT_SOURCE
 #endif
 #include <endian.h>
@@ -292,7 +336,7 @@ main(void)
 }
 #endif /* TEST_MEMMEM */
 #if TEST_MEMRCHR
-#if defined(__linux__) || defined(__MINT__)
+#if defined(__linux__) || defined(__MINT__) || defined(__wasi__)
 #define _GNU_SOURCE	/* See test-*.c what needs this. */
 #endif
 #include <string.h>
@@ -344,6 +388,21 @@ main(void)
 	return !OSSwapHostToLittleInt32(23);
 }
 #endif /* TEST_OSBYTEORDER_H */
+#if TEST_PASSWORD_LEN
+/*
+ * Linux doesn't  have this.
+ */
+
+#include <pwd.h>
+#include <stdio.h>
+
+int
+main(void)
+{
+	printf("_PASSWORD_LEN is defined to be %ld\n", (long)_PASSWORD_LEN);
+	return 0;
+}
+#endif /* TEST_PASSWORD_LEN */
 #if TEST_PATH_MAX
 /*
  * POSIX allows PATH_MAX to not be defined, see
@@ -731,6 +790,36 @@ main(void)
 }
 
 #endif /* TEST_SYS_TREE */
+#if TEST_TERMIOS
+#include <sys/ioctl.h>
+#include <string.h> /* memset */
+#include <termios.h>
+
+int
+main(void)
+{
+	struct winsize	 size;
+
+	memset(&size, 0, sizeof(struct winsize));
+	if (ioctl(1, TIOCGWINSZ, &size) == -1)
+		return 72;
+	return size.ws_col;
+}
+#endif /* TEST_TERMIOS */
+#if TEST_TIMINGSAFE_BCMP
+#include <string.h>
+
+int main(void)
+{
+	const char *a = "foo", *b = "bar";
+
+	if (timingsafe_bcmp(a, b, 2) &&
+	    timingsafe_memcmp(a, b, 2))
+		return 1;
+
+	return 0;
+}
+#endif /* TEST_TIMINGSAFE_BCMP */
 #if TEST_UNVEIL
 #include <unistd.h>
 
