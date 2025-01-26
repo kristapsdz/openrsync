@@ -52,7 +52,6 @@ clean:
 distclean: clean
 	rm -f Makefile.configure config.h config.log
 
-regress:
-	# Do nothing.
+regress: all
 
 $(ALLOBJS): extern.h config.h md4.h
