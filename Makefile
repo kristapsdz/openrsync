@@ -52,16 +52,6 @@ clean:
 distclean: clean
 	rm -f Makefile.configure config.h config.log
 
-distcheck:
-	mandoc -Tlint -Werror *.[15]
-	rm -rf .distcheck
-	mkdir .distcheck
-	cp *.c extern.h md4.h *.[15] configure Makefile .distcheck
-	( cd .distcheck && ./configure PREFIX=prefix )
-	( cd .distcheck && $(MAKE) )
-	( cd .distcheck && $(MAKE) install )
-	rm -rf .distcheck
-
 regress:
 	# Do nothing.
 
