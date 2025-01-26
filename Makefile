@@ -26,18 +26,11 @@ OBJS	   = blocks.o \
 	     uploader.o
 ALLOBJS	   = $(OBJS) \
 	     main.o
-AFLS	   = afl/test-blk_recv \
-	     afl/test-flist_recv
 
 all: openrsync
 
-afl: $(AFLS)
-
 openrsync: $(ALLOBJS)
 	$(CC) $(LDFLAGS) -o $@ $(ALLOBJS) -lm $(LDADD_LIB_SOCKET) $(LDADD_SCAN_SCALED)
-
-$(AFLS): $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $*.c $(OBJS)
 
 install: all
 	mkdir -p $(DESTDIR)$(BINDIR)
@@ -54,7 +47,7 @@ uninstall:
 	rm -f $(DESTDIR)$(MANDIR)/man5/rsyncd.5
 
 clean:
-	rm -f $(ALLOBJS) openrsync $(AFLS)
+	rm -f $(ALLOBJS) openrsync
 
 distclean: clean
 	rm -f Makefile.configure config.h config.log
@@ -72,4 +65,4 @@ distcheck:
 regress:
 	# Do nothing.
 
-$(ALLOBJS) $(AFLS): extern.h config.h md4.h
+$(ALLOBJS): extern.h config.h md4.h
