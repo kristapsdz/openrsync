@@ -54,7 +54,6 @@ jobs:
         shell-name: alpine-x86_64.sh
     - name: Configure, build, and test on x86_64
       run: |
-        cat /etc/alpine-release
         ./configure
         make regress
       shell: alpine-x86_64.sh {0}
@@ -127,6 +126,17 @@ jobs:
     - uses: actions/checkout@master
     - name: Test in FreeBSD
       uses: vmactions/freebsd-vm@v1
+      with:
+        usesh: true
+        run: |
+          ./configure
+          make regress
+  omnios:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Test in OmniOS
+      uses: vmactions/omnios-vm@v1
       with:
         usesh: true
         run: |
