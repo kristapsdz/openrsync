@@ -1,0 +1,138 @@
+name: Regression Tests
+on: [push]
+jobs:
+  ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - name: Configure
+      run: ./configure
+    - name: Build and test
+      run: make regress
+  ubuntu_fsanitize:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - name: Configure
+      run: |
+        echo "HAVE_SECCOMP_FILTER=0" > configure.local
+        ./configure
+        echo "CFLAGS += -fsanitize=undefined,address" > Makefile.local
+        echo "LDFLAGS += -fsanitize=undefined,address" >> Makefile.local
+    - name: Build and test
+      run: make regress
+  ubuntu_libbsd:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libbsd-dev
+    - name: Configure
+      run: |
+        CFLAGS=$(pkg-config --cflags libbsd-overlay) ./configure LDFLAGS=$(pkg-config --libs libbsd-overlay)
+    - name: Build and test
+      run: make regress
+  macos_standard:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@master
+    - name: Configure
+      run: ./configure
+    - name: Build and test
+      run: make regress
+  alpine_x86_64:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - name: Setup Alpine Linux environment for x86_64
+      uses: jirutka/setup-alpine@v1.1.4
+      with:
+        packages: >
+          build-base
+          curl-dev
+          bmake
+          zlib-dev
+          linux-headers
+        shell-name: alpine-x86_64.sh
+    - name: Configure, build, and test on x86_64
+      run: |
+        cat /etc/alpine-release
+        ./configure
+        bmake regress
+      shell: alpine-x86_64.sh {0}
+  alpine_aarch64:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - name: Setup latest Alpine Linux for aarch64
+      uses: jirutka/setup-alpine@v1
+      with:
+        arch: aarch64
+        branch: v3.15
+        packages: >
+          build-base
+    - name: Configure, build, and test on aarch64
+      run: |
+        ./configure
+        make regress
+      shell: alpine.sh {0}
+  alpine_armv7:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - name: Setup latest Alpine Linux for armv7
+      uses: jirutka/setup-alpine@v1
+      with:
+        arch: armv7
+        branch: v3.15
+        packages: >
+          build-base
+    - name: Configure, build, and test on armv7
+      run: |
+        ./configure
+        make regress
+      shell: alpine.sh {0}
+  alpine_ppc64le:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - name: Setup latest Alpine Linux for ppc64le
+      uses: jirutka/setup-alpine@v1
+      with:
+        arch: ppc64le
+        branch: v3.15
+        packages: >
+          build-base
+    - name: Configure, build, and test on ppc64le
+      run: |
+        ./configure
+        bmake regress
+      shell: alpine.sh {0}
+  alpine_s390x:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - name: Setup latest Alpine Linux for ppc64le
+      uses: jirutka/setup-alpine@v1
+      with:
+        arch: s390x
+        packages: >
+          build-base
+    - name: Configure, build, and test on s390x
+      run: |
+        ./configure
+        bmake regress
+      shell: alpine.sh {0}
+  freebsd:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - name: Test in FreeBSD
+      uses: vmactions/freebsd-vm@v1
+      with:
+        usesh: true
+        run: |
+          ./configure
+          make regress
