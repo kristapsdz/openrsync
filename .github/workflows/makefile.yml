@@ -140,7 +140,7 @@ jobs:
       with:
         usesh: true
         prepare: |
-            pkg install developer/clang system/header developer/build/make
+            pkg install build-essential
         run: |
           ./configure
           make regress
