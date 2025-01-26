@@ -51,16 +51,12 @@ jobs:
       with:
         packages: >
           build-base
-          curl-dev
-          bmake
-          zlib-dev
-          linux-headers
         shell-name: alpine-x86_64.sh
     - name: Configure, build, and test on x86_64
       run: |
         cat /etc/alpine-release
         ./configure
-        bmake regress
+        make regress
       shell: alpine-x86_64.sh {0}
   alpine_aarch64:
     runs-on: ubuntu-latest
@@ -108,7 +104,7 @@ jobs:
     - name: Configure, build, and test on ppc64le
       run: |
         ./configure
-        bmake regress
+        make regress
       shell: alpine.sh {0}
   alpine_s390x:
     runs-on: ubuntu-latest
@@ -123,7 +119,7 @@ jobs:
     - name: Configure, build, and test on s390x
       run: |
         ./configure
-        bmake regress
+        make regress
       shell: alpine.sh {0}
   freebsd:
     runs-on: ubuntu-latest
