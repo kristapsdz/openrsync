@@ -139,6 +139,7 @@ jobs:
       uses: vmactions/omnios-vm@v1
       with:
         usesh: true
+        copyback: false
         prepare: |
             pkg install build-essential
         run: |

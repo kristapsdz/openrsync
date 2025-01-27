@@ -28,21 +28,21 @@ main(void)
 	char    key[] = "AAAAA";
 	char    key2[] = "abcdefghijklmnopqrstuvwxyz";
 
-	u_int32_t data[10];
-	u_int32_t data2[] =
+	uint32_t data[10];
+	uint32_t data2[] =
 	{0x424c4f57l, 0x46495348l};
 
-	u_int16_t i;
+	uint16_t i;
 
 	/* First test */
 	for (i = 0; i < 10; i++)
 		data[i] = i;
 
-	blf_key(&c, (u_int8_t *) key, 5);
+	blf_key(&c, (uint8_t *) key, 5);
 	blf_enc(&c, data, 5);
 	{
-		u_int32_t *d;
-		u_int16_t i;
+		uint32_t *d;
+		uint16_t i;
 
 		d = data;
 		for (i = 0; i < 5; i++) {
