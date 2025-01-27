@@ -364,9 +364,8 @@ that directory may be accessed or modified.
 
 Lastly, the MD4 hashs are seeded with
 [arc4random(3)](https://man.openbsd.org/arc4random.3) instead of with
-[time(3)](https://man.openbsd.org/time.3).  (This function is provided
-on a number of operating systems.) This is only applicable when running
-openrsync in server mode, as the server generates the seed.
+[time(3)](https://man.openbsd.org/time.3).  This is only applicable when
+running openrsync in server mode, as the server generates the seed.
 
 # Portability
 
@@ -376,6 +375,11 @@ The only officially-supported operating system is OpenBSD, as this has
 considerable security features.  openrsync does, however, use
 [oconfigure](https://github.com/kristapsdz/oconfigure) for compilation
 on non-OpenBSD systems.  This is to encourage porting.
+
+It currently is portable across Linux (glibc and musl), FreeBSD, NetBSD,
+Mac OS X, and OmniOS.  This is enforced by the GitHub CI mechanism,
+which tests on this systems.  Architectures tested for include x86\_64,
+aarch64, and s390x.
 
 The actual work of porting is matching the security features provided by
 OpenBSD's [pledge(2)](https://man.openbsd.org/pledge.2) and
