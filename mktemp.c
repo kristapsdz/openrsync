@@ -89,7 +89,7 @@ mktemp_internalat(int pfd, char *path, int slen, enum tmpmode mode,
 	const char	 tempchars[] = TEMPCHARS;
 	unsigned int	 tries;
 	struct stat	 sb;
-	struct sockaddr_un sun;
+	struct sockaddr_un un_sock;
 	size_t		 len;
 	int		 fd, saved_errno;
 
@@ -170,23 +170,23 @@ mktemp_internalat(int pfd, char *path, int slen, enum tmpmode mode,
 				return(-1);
 			break;
 		case MKTEMP_SOCK:
-			memset(&sun, 0, sizeof(sun));
-			sun.sun_family = AF_UNIX;
-			if ((len = strlcpy(sun.sun_path, link,
-			    sizeof(sun.sun_path))) >= sizeof(sun.sun_path)) {
+			memset(&un_sock, 0, sizeof(un_sock));
+			un_sock.sun_family = AF_UNIX;
+			if ((len = strlcpy(un_sock.sun_path, link,
+			    sizeof(un_sock.sun_path))) >= sizeof(un_sock.sun_path)) {
 				errno = EINVAL;
 				return(-1);
 			}
-			if (sun.sun_path[len] != '/') {
-				if (strlcat(sun.sun_path, "/",
-				    sizeof(sun.sun_path)) >=
-				    sizeof(sun.sun_path)) {
+			if (un_sock.sun_path[len] != '/') {
+				if (strlcat(un_sock.sun_path, "/",
+				    sizeof(un_sock.sun_path)) >=
+				    sizeof(un_sock.sun_path)) {
 					errno = EINVAL;
 					return(-1);
 				}
 			}
-			if (strlcat(sun.sun_path, path, sizeof(sun.sun_path)) >=
-			    sizeof(sun.sun_path)) {
+			if (strlcat(un_sock.sun_path, path, sizeof(un_sock.sun_path)) >=
+			    sizeof(un_sock.sun_path)) {
 				errno = EINVAL;
 				return(-1);
 			}
@@ -204,7 +204,7 @@ mktemp_internalat(int pfd, char *path, int slen, enum tmpmode mode,
 			    FD_CLOEXEC) == -1)
 				return -1;
 #endif
-			if (bind(fd, (struct sockaddr *)&sun, sizeof(sun)) ==
+			if (bind(fd, (struct sockaddr *)&un_sock, sizeof(un_sock)) ==
 			    0) {
 				close(fd);
 				return(0);
