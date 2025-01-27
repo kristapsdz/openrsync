@@ -131,6 +131,18 @@ jobs:
         run: |
           ./configure
           make regress
+  netbsd:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - name: Test in NetBSD
+      uses: vmactions/netbsd-vm@v1
+      with:
+        usesh: true
+        run: |
+          uname -a
+          ./configure
+          make regress
   omnios:
     runs-on: ubuntu-latest
     steps:
