@@ -22,8 +22,10 @@
 .Sh SYNOPSIS
 .Nm openrsync
 .Op Fl 468aDgIJlnOoprtVvx
+.Op Fl B Ar size
 .Op Fl e Ar program
 .Op Fl -address Ns = Ns Ar sourceaddr
+.Op Fl -block-size Ns = Ns Ar size
 .Op Fl -compare-dest Ns = Ns Ar directory
 .Op Fl -contimeout Ns = Ns Ar seconds
 .Op Fl -del
@@ -84,6 +86,9 @@ When connecting to an rsync daemon, use
 .Ar sourceaddr
 as the source address for connections, which is useful on machines with
 multiple interfaces.
+.It Fl B , -block-size Ns = Ns Ar size
+Specify the block size to be used for file transfers.
+The upper bound is 512M.
 .It Fl -compare-dest Ns = Ns Ar directory
 Use directory as an alternate base directory to compare files against on the
 destination machine.

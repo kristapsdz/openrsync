@@ -172,6 +172,8 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "--min-size=%lld", (long long)sess->opts->min_size);
 	if (sess->opts->bit8)
 		addargs(&args, "-8");
+        if (sess->opts->block_size > 0)
+		addargs(&args, "-B%ld", sess->opts->block_size);
 
 	/* extra options for the receiver (local is sender) */
 	if (f->mode == FARGS_SENDER) {

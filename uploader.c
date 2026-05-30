@@ -106,16 +106,18 @@ log_file(struct sess *sess, const struct flist *f)
  * The block size is an important part of the algorithm.
  * I use the same heuristic as the reference rsync, but implemented in a
  * bit more of a straightforward way.
- * In general, the individual block length is the rounded square root of
- * the total file size.
+ * In general, if not overriden, the individual block length is the
+ * rounded square root of the total file size.
  * The minimum block length is 700.
  */
 static void
-init_blkset(struct blkset *p, off_t sz)
+init_blkset(struct blkset *p, off_t sz, long block_size)
 {
 	double	 v;
 
-	if (sz >= (BLOCK_SIZE_MIN * BLOCK_SIZE_MIN)) {
+	if (block_size > 0)
+		p->len = block_size;
+	else if (sz >= (BLOCK_SIZE_MIN * BLOCK_SIZE_MIN)) {
 		/* Simple rounded-up integer square root. */
 
 		v = sqrt(sz);
@@ -988,7 +990,7 @@ rsync_uploader(struct upload *u, int *fileinfd,
 	blk.csum = u->csumlen;
 
 	if (*fileinfd != -1 && filesize > 0) {
-		init_blkset(&blk, filesize);
+		init_blkset(&blk, filesize, sess->opts->block_size);
 		assert(blk.blksz);
 
 		blk.blks = calloc(blk.blksz, sizeof(struct blk));

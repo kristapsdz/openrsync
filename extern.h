@@ -171,6 +171,7 @@ struct	opts {
 #endif
 	char		 ipf;			/* 0 (unspec), 4 (IPV4), 6 (IPV6) */
 	bool		 bit8;			/* -8 */
+	long		 block_size;		/* -B */
 };
 
 enum rule_type {

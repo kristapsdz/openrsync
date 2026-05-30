@@ -35,7 +35,7 @@
 #include <string.h>
 #include <unistd.h>
 #if HAVE_SCAN_SCALED
-# include <util.h>
+# include <util.h> /* scan_scaled */
 #endif
 
 #include "extern.h"
@@ -306,10 +306,11 @@ enum {
 	OP_BIT8,
 };
 
-const char rsync_shopts[] = "468aDe:ghIJlnOoprtVvxz";
+const char rsync_shopts[] = "468B:aDe:ghIJlnOoprtVvxz";
 const struct option	 lopts[] = {
     { "address",	required_argument, NULL,		OP_ADDRESS },
     { "archive",	no_argument,	NULL,			'a' },
+    { "block-size",	required_argument, NULL,		'B' },
     { "compare-dest",	required_argument, NULL,		OP_COMP_DEST },
 #if 0
     { "copy-dest",	required_argument, NULL,		OP_COPY_DEST },
@@ -375,8 +376,8 @@ static void
 usage(void)
 {
 	fprintf(stderr, "usage: %s"
-	    " [-468aDgIJlnOoprtVvx] [-e program] [--8-bit-output] [--address=sourceaddr]\n"
-	    "\t[--contimeout=seconds] [--compare-dest=dir] [--del] [--exclude]\n"
+	    " [-468BaDgIJlnOoprtVvx] [-e program] [--8-bit-output] [--address=sourceaddr]\n"
+	    "\t[--block-size=size] [--contimeout=seconds] [--compare-dest=dir] [--del] [--exclude]\n"
 	    "\t[--exclude-from=file] [--include] [--include-from=file]\n"
 	    "\t[--no-motd] [--numeric-ids] [--port=portnumber]\n"
 	    "\t[--rsh=program] [--rsync-path=program] [--size-only] [--timeout=seconds]\n"
@@ -414,6 +415,16 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter __unused,
 		case '8':
 			opts.bit8 = true;
 			break;
+                case 'B':
+			/*
+			 * The largest possible block size is fixed at 512 MB
+			 * and must be >0.
+			 */
+			if (scan_scaled(optarg, &tmpint) == -1 ||
+			    tmpint < 0 || tmpint > (512 << 20))
+				errx(1, "--block-size=%s: invalid numeric value", optarg);
+			opts.block_size = tmpint; 
+			break;  
 		case 'D':
 			opts.devices = 1;
 			opts.specials = 1;
@@ -556,12 +567,12 @@ basedir:
 			break;
 		case OP_MAX_SIZE:
 			if (scan_scaled(optarg, &tmpint) == -1)
-				err(1, "bad max-size");
+				errx(1, "--max-size=%s: invalid numeric value", optarg);
 			opts.max_size = tmpint;
 			break;
 		case OP_MIN_SIZE:
 			if (scan_scaled(optarg, &tmpint) == -1)
-				err(1, "bad min-size");
+				errx(1, "--min-size=%s: invalid numeric value", optarg);
 			opts.min_size = tmpint;
 			break;
 		case OP_BIT8:
