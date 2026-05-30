@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
+ * Copyright (c) Kristaps Dzonsons <kristaps@bsd.lv>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,6 +15,7 @@
  */
 #include "config.h"
 
+#include <sys/param.h> /* MAX() */
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -27,6 +28,7 @@
 # include <fcntl.h>
 #endif
 #include <getopt.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,6 +39,9 @@
 #endif
 
 #include "extern.h"
+
+static struct opts opts;
+typedef int (rsync_option_filter)(struct sess *, int, const struct option *);
 
 int verbose;
 int poll_contimeout;
@@ -283,8 +288,6 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 	return f;
 }
 
-static struct opts	 opts;
-
 #define OP_ADDRESS	1000
 #define OP_PORT		1001
 #define OP_RSYNCPATH	1002
@@ -300,6 +303,7 @@ static struct opts	 opts;
 #define OP_MIN_SIZE	1013
 #define OP_CONTIMEOUT	1014
 
+const char rsync_shopts[] = "aDe:ghIJlnOoprtVvxz";
 const struct option	 lopts[] = {
     { "address",	required_argument, NULL,		OP_ADDRESS },
     { "archive",	no_argument,	NULL,			'a' },
@@ -361,28 +365,39 @@ const struct option	 lopts[] = {
     { NULL,		0,		NULL,			0 }
 };
 
-int
-main(int argc, char *argv[])
+static void
+usage(void)
 {
-	pid_t		 child;
-	long long	 tmpint;
-	int		 fds[2], sd = -1, rc, c, st, i, lidx;
-	size_t		 basedir_cnt = 0;
-	struct sess	 sess;
-	struct fargs	*fargs;
-	char		**args;
-	const char	*errstr;
+	fprintf(stderr, "usage: %s"
+	    " [-aDgIJlnOoprtVvx] [-e program] [--address=sourceaddr]\n"
+	    "\t[--contimeout=seconds] [--compare-dest=dir] [--del] [--exclude]\n"
+	    "\t[--exclude-from=file] [--include] [--include-from=file]\n"
+	    "\t[--no-motd] [--numeric-ids] [--port=portnumber]\n"
+	    "\t[--rsync-path=program] [--size-only] [--timeout=seconds]\n"
+	    "\tsource ... directory\n",
+	    getprogname());
+}
 
-	/* Global pledge. */
+/*
+ * Parse options out of argv.
+ *
+ * Returns NULL on error or the client options struct on success.  If
+ * returning NULL, the caller should call exit() after any cleanup,
+ * using the passed-in exitcode as its exit value.
+ */
+static struct opts *
+rsync_getopt(int argc, char *argv[], rsync_option_filter *filter __unused,
+    struct sess *sess, int *exitcode)
+{
+	long long	 tmpint; /* temporary */
+	int		 c, /* getopt return */
+			 lidx; /* getopt long index */
+	size_t		 basedir_cnt = 0; /* number of base directories */
+	const char	*errstr; /* temporary error string */
 
-	if (pledge("stdio unix rpath wpath cpath dpath inet fattr chown dns getpw proc exec unveil",
-	    NULL) == -1)
-		err(ERR_IPC, "pledge");
+	*exitcode = 0;
 
-	opts.max_size = opts.min_size = -1;
-
-	while ((c = getopt_long(argc, argv, "aDe:ghIJlnOoprtVvxz",
-	    lopts, &lidx)) != -1) {
+	while ((c = getopt_long(argc, argv, rsync_shopts, lopts, &lidx)) != -1) {
 		switch (c) {
 		case 'D':
 			opts.devices = 1;
@@ -535,18 +550,14 @@ basedir:
 			opts.min_size = tmpint;
 			break;
 		case 'h':
+			usage();
+			return NULL;
 		default:
-			goto usage;
+			*exitcode = ERR_SYNTAX;
+			usage();
+			return NULL;
 		}
 	}
-
-	argc -= optind;
-	argv += optind;
-
-	/* FIXME: reference implementation rsync accepts this. */
-
-	if (argc < 2)
-		goto usage;
 
 	if (opts.port == NULL)
 		opts.port = (char *)"rsync";
@@ -562,6 +573,43 @@ basedir:
 		poll_timeout = -1;
 	else
 		poll_timeout *= 1000;
+
+	return &opts;
+}
+
+int
+main(int argc, char *argv[])
+{
+	pid_t		  child; /* return value of fork() */
+	int		  fds[2], /* 0 is for parent, 1 for child */
+			  sd = -1, /* socket for daemon */
+			  c, /* temporary */
+			  i, /* temporary */
+			  rc, /* rsync_client/server() return */
+			  rc2, /* child process return */
+			  st; /* child process status */
+	struct sess	  sess;
+	struct fargs	 *fargs;
+	char		**args;
+
+	/* Global pledge. */
+
+	if (pledge("stdio unix rpath wpath cpath dpath inet fattr chown dns getpw proc exec unveil",
+	    NULL) == -1)
+		err(ERR_IPC, "pledge");
+
+	opts.max_size = opts.min_size = -1;
+
+	if (rsync_getopt(argc, argv, NULL, NULL, &c) == NULL)
+		exit(c);
+
+	argc -= optind;
+	argv += optind;
+
+	if (argc < 2) {
+		usage();
+		exit(ERR_SYNTAX);
+	}
 
 	/*
 	 * This is what happens when we're started with the "hidden"
@@ -594,11 +642,11 @@ basedir:
 
 	if (fargs->remote && opts.ssh_prog == NULL) {
 		assert(fargs->mode == FARGS_RECEIVER);
-		if ((rc = rsync_connect(&opts, &sd, fargs)) == 0) {
-			rc = rsync_socket(&opts, sd, fargs);
+		if ((c = rsync_connect(&opts, &sd, fargs)) == 0) {
+			c = rsync_socket(&opts, sd, fargs);
 			close(sd);
 		}
-		exit(rc);
+		exit(c);
 	}
 
 	/* Drop the dns/inet possibility. */
@@ -654,35 +702,30 @@ basedir:
 		break;
 	}
 
+	/* Reached only in parent process. */
+
+	assert(child > 0);
 	close(fds[0]);
 
 	if (waitpid(child, &st, 0) == -1)
 		err(ERR_WAITPID, "waitpid");
 
 	/*
-	 * If we don't already have an error (rc == 0), then inherit the
-	 * error code of rsync_server() if it has exited.
-	 * If it hasn't exited, it overrides our return value.
+	 * If the child exited abnormally then use its exit status as our exit
+	 * code.  Otherwise, use the return code from the fork parent operation.
 	 */
 
-	if (rc == 0) {
-		if (WIFEXITED(st))
-			rc = WEXITSTATUS(st);
-		else if (WIFSIGNALED(st))
-			rc = ERR_TERMIMATED;
-		else
-			rc = ERR_WAITPID;
-	}
+	if (WIFEXITED(st) && WEXITSTATUS(st) != 0)
+		WARNX1("child %d exited with status %d", child, WEXITSTATUS(st));
+	else if (WIFSIGNALED(st))
+		WARNX1("child %d terminated due to signal %d", child, WTERMSIG(st));
 
-	exit(rc);
-usage:
-	fprintf(stderr, "usage: %s"
-	    " [-aDgIJlnOoprtVvx] [-e program] [--address=sourceaddr]\n"
-	    "\t[--contimeout=seconds] [--compare-dest=dir] [--del] [--exclude]\n"
-	    "\t[--exclude-from=file] [--include] [--include-from=file]\n"
-	    "\t[--no-motd] [--numeric-ids] [--port=portnumber]\n"
-	    "\t[--rsync-path=program] [--size-only] [--timeout=seconds]\n"
-	    "\tsource ... directory\n",
-	    getprogname());
-	exit(ERR_SYNTAX);
+	if (WIFEXITED(st))
+		rc2 = WEXITSTATUS(st);
+	else if (WIFSIGNALED(st))
+		rc2 = WTERMSIG(st) != SIGUSR2 ? ERR_TERMIMATED : 0;
+	else
+		rc2 = ERR_WAITPID;
+
+	return MAX(rc, rc2);
 }

@@ -138,6 +138,33 @@ rsync_errx1(const char *fmt, ...)
 }
 
 /*
+ * Prints a warning message if we're running -v.
+ */
+void
+rsync_warnx1(const char *fmt, ...)
+{
+	char    *buf = NULL;
+	va_list  ap;
+
+	if (verbose < 1)
+		return;
+
+	if (fmt != NULL) {
+		va_start(ap, fmt);
+		if (vasprintf(&buf, fmt, ap) == -1) {
+			va_end(ap);
+			return;
+		}
+		va_end(ap);
+	}
+
+	fprintf(stderr, "%s: warning%s%s\n", getprogname(),
+	    (buf != NULL) ? ": " : "",
+	    (buf != NULL) ? buf : "");
+	free(buf);
+}
+
+/*
  * Prints a warning message.
  */
 void

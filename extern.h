@@ -298,6 +298,8 @@ extern int verbose;
 	rsync_errx1( (_fmt), ##__VA_ARGS__)
 #define WARNX(_fmt, ...) \
 	rsync_warnx( (_fmt), ##__VA_ARGS__)
+#define WARNX1(_fmt, ...) \
+	rsync_warnx1( (_fmt), ##__VA_ARGS__)
 #define WARN(_fmt, ...) \
 	rsync_warn(0,  (_fmt), ##__VA_ARGS__)
 #define WARN1(_fmt, ...) \
@@ -318,6 +320,8 @@ void	rsync_log(int, const char *, ...)
 void	rsync_warn(int, const char *, ...)
 			__attribute__((format(printf, 2, 3)));
 void	rsync_warnx(const char *, ...)
+			__attribute__((format(printf, 1, 2)));
+void	rsync_warnx1(const char *, ...)
 			__attribute__((format(printf, 1, 2)));
 void	rsync_err(const char *, ...)
 			__attribute__((format(printf, 1, 2)));
