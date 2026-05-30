@@ -169,6 +169,7 @@ struct	opts {
 #if 0
 	char		*syncfile;		/* --sync-file */
 #endif
+	char		 ipf;			/* 0 (unspec), 4 (IPV4), 6 (IPV6) */
 };
 
 enum rule_type {
@@ -273,9 +274,11 @@ struct arglist {
 	u_int	num;
 	u_int	nalloc;
 };
-void	addargs(arglist *, const char *, ...)
-	    __attribute__((format(printf, 2, 3)));
-void	freeargs(arglist *);
+
+void		 addargs(arglist *, const char *, ...)
+		   __attribute__((format(printf, 2, 3)));
+const char	*getarg(const arglist *, size_t);
+void		 freeargs(arglist *);
 
 struct	download;
 struct	upload;

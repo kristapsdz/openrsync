@@ -173,7 +173,12 @@ inet_resolve(struct sess *sess, const char *host, size_t *sz, int passive)
 	*sz = 0;
 
 	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = PF_UNSPEC;
+	if (sess->opts->ipf == 4)
+		hints.ai_family = AF_INET;
+	else if (sess->opts->ipf == 6)
+		hints.ai_family = AF_INET6;
+	else             
+		hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	if (passive) {
 		hints.ai_flags = SOCK_STREAM;

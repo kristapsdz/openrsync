@@ -1,5 +1,5 @@
 .\"
-.\" Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
+.\" Copyright (c) Kristaps Dzonsons <kristaps@bsd.lv>
 .\"
 .\" Permission to use, copy, modify, and distribute this software for any
 .\" purpose with or without fee is hereby granted, provided that the above
@@ -21,7 +21,7 @@
 .Nd synchronise local and remote files
 .Sh SYNOPSIS
 .Nm openrsync
-.Op Fl aDgIJlnOoprtVvx
+.Op Fl 46aDgIJlnOoprtVvx
 .Op Fl e Ar program
 .Op Fl -address Ns = Ns Ar sourceaddr
 .Op Fl -compare-dest Ns = Ns Ar directory
@@ -36,6 +36,7 @@
 .Op Fl -no-motd
 .Op Fl -numeric-ids
 .Op Fl -port Ns = Ns Ar service
+.Op Fl -rsh Ns = Ns Ar program
 .Op Fl -rsync-path Ns = Ns Ar program
 .Op Fl -size-only
 .Op Fl -timeout Ns = Ns Ar seconds
@@ -57,6 +58,21 @@ may be remote,
 but not both.
 The arguments are as follows:
 .Bl -tag -width Ds
+.It Fl 4 , -ipv4
+Use IPv4 when connecting to a remote host.
+If
+.Nm
+is configured to use an
+.Fl -rsh
+program named
+.Dq ssh ,
+then it will pass
+.Fl 4
+to it.
+.It Fl 6 , -ipv6
+Like
+.Fl 4 ,
+but for IPv6.
 .It Fl a , -archive
 Shorthand for
 .Fl Dgloprt .
@@ -96,6 +112,10 @@ Only applicable with
 .It Fl e Ar program , Fl -rsh Ns = Ns Ar program
 Specify alternative communication program, defaults to
 .Xr ssh 1 .
+.Nm
+will generally handle quotes, but it makes no attempt to deal with
+escape sequences.
+In particular, escaped quotation marks will not be escaped.
 .It Fl -exclude Ar pattern
 Exclude files matching
 .Em pattern .

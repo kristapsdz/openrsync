@@ -303,7 +303,7 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 #define OP_MIN_SIZE	1013
 #define OP_CONTIMEOUT	1014
 
-const char rsync_shopts[] = "aDe:ghIJlnOoprtVvxz";
+const char rsync_shopts[] = "46aDe:ghIJlnOoprtVvxz";
 const struct option	 lopts[] = {
     { "address",	required_argument, NULL,		OP_ADDRESS },
     { "archive",	no_argument,	NULL,			'a' },
@@ -327,6 +327,8 @@ const struct option	 lopts[] = {
     { "ignore-times",	no_argument,	NULL,			'I' },
     { "include",	required_argument, NULL,		OP_INCLUDE },
     { "include-from",	required_argument, NULL,		OP_INCLUDE_FROM },
+    { "ipv4",           no_argument,    NULL,                   '4' },
+    { "ipv6",           no_argument,    NULL,                   '6' },
     { "links",		no_argument,	&opts.preserve_links,	1 },
     { "max-size",	required_argument, NULL,		OP_MAX_SIZE },
     { "min-size",	required_argument, NULL,		OP_MIN_SIZE },
@@ -373,7 +375,7 @@ usage(void)
 	    "\t[--contimeout=seconds] [--compare-dest=dir] [--del] [--exclude]\n"
 	    "\t[--exclude-from=file] [--include] [--include-from=file]\n"
 	    "\t[--no-motd] [--numeric-ids] [--port=portnumber]\n"
-	    "\t[--rsync-path=program] [--size-only] [--timeout=seconds]\n"
+	    "\t[--rsh=program] [--rsync-path=program] [--size-only] [--timeout=seconds]\n"
 	    "\tsource ... directory\n",
 	    getprogname());
 }
@@ -399,6 +401,12 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter __unused,
 
 	while ((c = getopt_long(argc, argv, rsync_shopts, lopts, &lidx)) != -1) {
 		switch (c) {
+		case '4':
+			opts.ipf = 4;           
+			break;
+		case '6':
+			opts.ipf = 6;
+			break;
 		case 'D':
 			opts.devices = 1;
 			opts.specials = 1;
@@ -558,6 +566,8 @@ basedir:
 			return NULL;
 		}
 	}
+
+        assert(opts.ipf == 0 || opts.ipf == 4 || opts.ipf == 6);
 
 	if (opts.port == NULL)
 		opts.port = (char *)"rsync";

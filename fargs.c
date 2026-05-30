@@ -44,6 +44,27 @@ alt_base_mode(int mode)
 	}
 }
 
+/*
+ * Check whether the given binary (usually the first position of the
+ * argv set) is ssh: the final (or only) path component must be ssh.
+ */
+static int
+fargs_is_ssh(const char *prog)
+{
+	const char *base;
+
+	if (prog == NULL)
+		return 0;
+
+	base = strrchr(prog, '/');
+	if (base == NULL)
+		base = prog;
+	else
+		base++;
+
+	return strcmp(base, "ssh") == 0;
+}
+
 char **
 fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 {
@@ -82,6 +103,11 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 			}
 		} else
 			addargs(&args, "ssh");
+
+		/* If specified, pass IPV4 or IPV6 to ssh. */
+
+		if (sess->opts->ipf && fargs_is_ssh(getarg(&args, 0)))
+			addargs(&args, "-%d", sess->opts->ipf);
 
 		addargs(&args, "%s", f->host);
 		addargs(&args, "%s", rsync_path);

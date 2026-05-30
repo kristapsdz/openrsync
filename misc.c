@@ -68,6 +68,19 @@ addargs(arglist *args, const char *fmt, ...)
 	args->list[args->num] = NULL;
 }
 
+/*
+ * Get the argument at position idx of the arglist or NULL if the list
+ * is unset or the not large enough.  THE RETURNED POINTER IS ONLY VALID
+ * UNTIL THE NEXT CALL TO ADDARGS.
+ */
+const char *
+getarg(const arglist *args, size_t idx)
+{
+	if (args->list == NULL || args->num < idx)
+		return NULL;
+	return args->list[idx];
+}
+
 void
 freeargs(arglist *args)
 {
