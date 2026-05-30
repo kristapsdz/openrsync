@@ -1,6 +1,5 @@
-/*	$Id$ */
 /*
- * Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
+ * Copyright (c) Kristaps Dzonsons <kristaps@bsd.lv>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,6 +17,7 @@
 #define EXTERN_H
 
 #include "md4.h"
+#include <stdbool.h>
 
 #if !HAVE_PLEDGE
 # define pledge(x, y) (1)
@@ -170,6 +170,7 @@ struct	opts {
 	char		*syncfile;		/* --sync-file */
 #endif
 	char		 ipf;			/* 0 (unspec), 4 (IPV4), 6 (IPV6) */
+	bool		 bit8;			/* -8 */
 };
 
 enum rule_type {

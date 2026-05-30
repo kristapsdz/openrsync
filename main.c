@@ -288,22 +288,25 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 	return f;
 }
 
-#define OP_ADDRESS	1000
-#define OP_PORT		1001
-#define OP_RSYNCPATH	1002
-#define OP_TIMEOUT	1003
-#define OP_EXCLUDE	1005
-#define OP_INCLUDE	1006
-#define OP_EXCLUDE_FROM	1007
-#define OP_INCLUDE_FROM	1008
-#define OP_COMP_DEST	1009
-#define OP_COPY_DEST	1010
-#define OP_LINK_DEST	1011
-#define OP_MAX_SIZE	1012
-#define OP_MIN_SIZE	1013
-#define OP_CONTIMEOUT	1014
+enum {
+	OP_ADDRESS = CHAR_MAX + 1,
+	OP_PORT,
+	OP_RSYNCPATH,
+	OP_TIMEOUT,
+	OP_EXCLUDE,
+	OP_INCLUDE,
+	OP_EXCLUDE_FROM,
+	OP_INCLUDE_FROM,
+	OP_COMP_DEST,
+	OP_COPY_DEST,
+	OP_LINK_DEST,
+	OP_MAX_SIZE,
+	OP_MIN_SIZE,
+	OP_CONTIMEOUT,
+	OP_BIT8,
+};
 
-const char rsync_shopts[] = "46aDe:ghIJlnOoprtVvxz";
+const char rsync_shopts[] = "468aDe:ghIJlnOoprtVvxz";
 const struct option	 lopts[] = {
     { "address",	required_argument, NULL,		OP_ADDRESS },
     { "archive",	no_argument,	NULL,			'a' },
@@ -364,6 +367,7 @@ const struct option	 lopts[] = {
     { "verbose",	no_argument,	&verbose,		1 },
     { "no-verbose",	no_argument,	&verbose,		0 },
     { "version",	no_argument,	NULL,			'V' },
+    { "8-bit-output",	no_argument,	NULL,			OP_BIT8 },
     { NULL,		0,		NULL,			0 }
 };
 
@@ -371,7 +375,7 @@ static void
 usage(void)
 {
 	fprintf(stderr, "usage: %s"
-	    " [-aDgIJlnOoprtVvx] [-e program] [--address=sourceaddr]\n"
+	    " [-468aDgIJlnOoprtVvx] [-e program] [--8-bit-output] [--address=sourceaddr]\n"
 	    "\t[--contimeout=seconds] [--compare-dest=dir] [--del] [--exclude]\n"
 	    "\t[--exclude-from=file] [--include] [--include-from=file]\n"
 	    "\t[--no-motd] [--numeric-ids] [--port=portnumber]\n"
@@ -406,6 +410,9 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter __unused,
 			break;
 		case '6':
 			opts.ipf = 6;
+			break;
+		case '8':
+			opts.bit8 = true;
 			break;
 		case 'D':
 			opts.devices = 1;
@@ -556,6 +563,9 @@ basedir:
 			if (scan_scaled(optarg, &tmpint) == -1)
 				err(1, "bad min-size");
 			opts.min_size = tmpint;
+			break;
+		case OP_BIT8:
+			opts.bit8 = true;
 			break;
 		case 'h':
 			usage();

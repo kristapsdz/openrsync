@@ -21,7 +21,7 @@
 .Nd synchronise local and remote files
 .Sh SYNOPSIS
 .Nm openrsync
-.Op Fl 46aDgIJlnOoprtVvx
+.Op Fl 468aDgIJlnOoprtVvx
 .Op Fl e Ar program
 .Op Fl -address Ns = Ns Ar sourceaddr
 .Op Fl -compare-dest Ns = Ns Ar directory
@@ -40,6 +40,7 @@
 .Op Fl -rsync-path Ns = Ns Ar program
 .Op Fl -size-only
 .Op Fl -timeout Ns = Ns Ar seconds
+.Op Fl -8-bit-output
 .Ar source ...
 .Ar directory
 .Sh DESCRIPTION
@@ -73,6 +74,8 @@ to it.
 Like
 .Fl 4 ,
 but for IPv6.
+.It Fl 8 , Fl -8-bit-output
+Do not escape high-bit characters in the output, which is the default.
 .It Fl a , -archive
 Shorthand for
 .Fl Dgloprt .

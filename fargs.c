@@ -65,6 +65,10 @@ fargs_is_ssh(const char *prog)
 	return strcmp(base, "ssh") == 0;
 }
 
+/*
+ * Create the arguments used when communicating to the remote
+ * rsync-enabled server.
+ */
 char **
 fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 {
@@ -166,6 +170,8 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "--max-size=%lld", (long long)sess->opts->max_size);
 	if (sess->opts->min_size >= 0)
 		addargs(&args, "--min-size=%lld", (long long)sess->opts->min_size);
+	if (sess->opts->bit8)
+		addargs(&args, "-8");
 
 	/* extra options for the receiver (local is sender) */
 	if (f->mode == FARGS_SENDER) {
