@@ -1,5 +1,5 @@
 .\"
-.\" Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
+.\" Copyright (c) Kristaps Dzonsons <kristaps@bsd.lv>
 .\"
 .\" Permission to use, copy, modify, and distribute this software for any
 .\" purpose with or without fee is hereby granted, provided that the above
@@ -383,14 +383,12 @@ Then for each block:
 .Pp
 .Bl -enum -compact
 .It
-data chunk size (integer)
+remote data chunk size if >0, local chunk size of <0 (recast as -size -
+1), or zero for no more blocks (integer)
 .It
-data chunk (bytes)
-.It
-block index subsequent to chunk or zero for finished (integer)
-.El
+if data chunk is remote and size is non-zero, data chunk (bytes)
 .Pp
-Following this sequence, the sender sends the following:
+Following the final block of size zero, the sender sends the following:
 .Pp
 .Bl -enum -compact
 .It

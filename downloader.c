@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
+ * Copyright (c) Kristaps Dzonsons <kristaps@bsd.lv>
+ * Copyright (c) 2024, Klara, Inc.
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -46,6 +47,17 @@ enum	downloadst {
 };
 
 /*
+ * The "token" stands in as the header of each block.  This is the
+ * return code from parsing the token.
+ */
+enum protocol_token_result {
+	TOKEN_ERROR, /* error */
+	TOKEN_EOF, /* no more blocks */
+	TOKEN_NEXT, /* blocks remain, but need be waited for */
+	TOKEN_RETRY, /* blocks remain and are available */
+};
+
+/*
  * Like struct upload, but used to keep track of what we're downloading.
  * This also is managed by the receiver process.
  */
@@ -69,7 +81,6 @@ struct	download {
 	size_t		    obufsz; /* current size of obuf */
 	size_t		    obufmax; /* max size we'll wbuffer */
 };
-
 
 /*
  * Simply log the filename.
@@ -284,6 +295,113 @@ buf_copy(const char *buf, size_t sz, struct download *p)
 }
 
 /*
+ * Local copy: protocol_token_raw() determined that the block should be
+ * copied from the locally-mapped file.  Returns TOKEN_ERROR on failure,
+ * TOKEN_RETRY on success and immediate retry, and TOKEN_NEXT on success
+ * and wait.
+ */
+static enum protocol_token_result
+protocol_token_ff(struct sess *sess, struct download *p, size_t tok)
+{
+	const char	*buf; /* pointer to copy from */
+	size_t		 sz; /* size to copy */
+	int		 c; /* temporary */
+
+	if (tok >= p->blk.blksz) {
+		ERRX("%s: token not in block set: %zu (have %zu blocks)",
+		    p->fname, tok, p->blk.blksz);
+		return TOKEN_ERROR;
+	}
+
+	sz = (tok == p->blk.blksz - 1 && p->blk.rem) ? p->blk.rem : p->blk.len;
+	assert(sz);
+	assert(p->map != MAP_FAILED);
+	buf = p->map + (tok * p->blk.len);
+
+	/*
+	 * Now we read from our block.
+	 * We should only be at this point if we have a block to read
+	 * from, i.e., if we were able to map our origin file and create
+	 * a block profile from it.
+	 */
+
+	assert(p->map != MAP_FAILED);
+	if (!buf_copy(buf, sz, p)) {
+		ERRX1("buf_copy");
+		return TOKEN_ERROR;
+	}
+	p->total += sz;
+	LOG4("%s: copied %zu B", p->fname, sz);
+	MD4_Update(&p->ctx, buf, sz);
+
+	/* Fast-track more reads as they arrive. */
+
+	if ((c = io_read_check(p->fdin)) < 0) {
+		ERRX1("io_read_check");
+		return TOKEN_ERROR;
+	} else if (c > 0)
+		return TOKEN_RETRY;
+
+	return TOKEN_NEXT;
+}
+
+/*
+ * Handles data blocks: whether to download a block (token >0), whether
+ * to copy from the local file (token <0), or whether no more blocks
+ * remain (token =0).  Returns TOKEN_ERROR on failure, TOKEN_RETRY on
+ * success and immediately more blocks, TOKEN_NEXT on success and to
+ * wait for more blocks, TOKEN_EOF on success and no more blocks.
+ */
+static enum protocol_token_result
+protocol_token_raw(struct sess *sess, struct download *p)
+{
+	char            *buf = NULL; /* block buffer */
+	size_t           sz; /* size of block buffer */
+	int32_t          rawtok; /* size/inv-block token */
+	int              c; /* temporary value */
+
+	if (!io_read_int(sess, p->fdin, &rawtok)) {
+		ERRX1("io_read_int");
+		return TOKEN_ERROR;
+	}
+
+	if (rawtok > 0) {
+		sz = rawtok;
+		if ((buf = malloc(sz)) == NULL) {
+			ERR("realloc");
+			return TOKEN_ERROR;
+		}
+		if (!io_read_buf(sess, p->fdin, buf, sz)) {
+			ERRX1("io_read_int");
+			free(buf);
+			return TOKEN_ERROR;
+		} else if (!buf_copy(buf, sz, p)) {
+			ERRX1("buf_copy");
+			free(buf);
+			return TOKEN_ERROR;
+		}
+		p->total += sz;
+		p->downloaded += sz;
+		LOG4("%s: received %zu B block", p->fname, sz);
+		MD4_Update(&p->ctx, buf, sz);
+		free(buf);
+
+		/* Fast-track more reads as they arrive. */
+
+		if ((c = io_read_check(p->fdin)) < 0) {
+			ERRX1("io_read_check");
+			return TOKEN_ERROR;
+		} else if (c > 0)
+			return TOKEN_RETRY;
+
+		return TOKEN_NEXT;
+	} else if (rawtok < 0)
+		return protocol_token_ff(sess, p, -rawtok - 1);
+
+	return TOKEN_EOF;
+}
+
+/*
  * The downloader waits on a file the sender is going to give us, opens
  * and mmaps the existing file, opens a temporary file, dumps the file
  * (or metadata) into the temporary file, then renames.
@@ -294,14 +412,12 @@ buf_copy(const char *buf, size_t sz, struct download *p)
 int
 rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 {
-	int		 c;
-	int32_t		 idx, rawtok;
-	const struct flist *f;
-	size_t		 sz, tok;
-	struct stat	 st;
-	char		*buf = NULL;
-	unsigned char	 ourmd[MD4_DIGEST_LENGTH],
-			 md[MD4_DIGEST_LENGTH];
+	int32_t		 		 idx; /* file index */
+	const struct flist		*f; /* file at index */
+	struct stat	 		 st; /* original file */
+	unsigned char	 		 ourmd[MD4_DIGEST_LENGTH],
+			 		 md[MD4_DIGEST_LENGTH];
+	enum protocol_token_result	 tokres; 
 
 	/*
 	 * If we don't have a download already in session, then the next
@@ -448,90 +564,31 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 
 again:
 	assert(p->state == DOWNLOAD_READ_REMOTE);
-	assert(p->fname != NULL);
-	assert(p->fd != -1);
+	assert(p->fname != NULL || sess->opts->dry_run);
 	assert(p->fdin != -1);
 
-	if (!io_read_int(sess, p->fdin, &rawtok)) {
-		ERRX1("io_read_int");
+	tokres = protocol_token_raw(sess, p);
+	switch (tokres) { 
+	case TOKEN_EOF:
+		break;  
+	case TOKEN_RETRY:
+		goto again;
+	case TOKEN_NEXT: 
+		return 1;
+	case TOKEN_ERROR:
+		/* FALLTHROUGH */
+	default:
 		goto out;
 	}
 
-	if (rawtok > 0) {
-		sz = rawtok;
-		if ((buf = malloc(sz)) == NULL) {
-			ERR("realloc");
-			goto out;
-		}
-		if (!io_read_buf(sess, p->fdin, buf, sz)) {
-			ERRX1("io_read_int");
-			goto out;
-		} else if (!buf_copy(buf, sz, p)) {
-			ERRX1("buf_copy");
-			goto out;
-		}
-		p->total += sz;
-		p->downloaded += sz;
-		LOG4("%s: received %zu B block", p->fname, sz);
-		MD4_Update(&p->ctx, buf, sz);
-		free(buf);
-
-		/* Fast-track more reads as they arrive. */
-
-		if ((c = io_read_check(p->fdin)) < 0) {
-			ERRX1("io_read_check");
-			goto out;
-		} else if (c > 0)
-			goto again;
-
-		return 1;
-	} else if (rawtok < 0) {
-		tok = -rawtok - 1;
-		if (tok >= p->blk.blksz) {
-			ERRX("%s: token not in block set: %zu (have %zu blocks)",
-			    p->fname, tok, p->blk.blksz);
-			goto out;
-		}
-		sz = tok == p->blk.blksz - 1 ? p->blk.rem : p->blk.len;
-		assert(sz);
-		assert(p->map != MAP_FAILED);
-		buf = p->map + (tok * p->blk.len);
-
-		/*
-		 * Now we read from our block.
-		 * We should only be at this point if we have a
-		 * block to read from, i.e., if we were able to
-		 * map our origin file and create a block
-		 * profile from it.
-		 */
-
-		assert(p->map != MAP_FAILED);
-		if (!buf_copy(buf, sz, p)) {
-			ERRX1("buf_copy");
-			goto out;
-		}
-		p->total += sz;
-		LOG4("%s: copied %zu B", p->fname, sz);
-		MD4_Update(&p->ctx, buf, sz);
-
-		/* Fast-track more reads as they arrive. */
-
-		if ((c = io_read_check(p->fdin)) < 0) {
-			ERRX1("io_read_check");
-			goto out;
-		} else if (c > 0)
-			goto again;
-
-		return 1;
-	}
-
-	if (!buf_copy(NULL, 0, p)) {
+	if (!sess->opts->dry_run && p->state == DOWNLOAD_READ_REMOTE &&
+	    !buf_copy(NULL, 0, p)) {
 		ERRX1("buf_copy");
 		goto out;
 	}
 
-	assert(rawtok == 0);
-	assert(p->obufsz == 0);
+	assert(p->fd == -1 || p->obufsz < 0 || sess->opts->dry_run);
+	assert(tokres == TOKEN_EOF);
 
 	/*
 	 * Make sure our resulting MD4 hashes match.
