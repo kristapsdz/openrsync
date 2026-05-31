@@ -39,6 +39,7 @@
 #include <unistd.h>
 
 #include "extern.h"
+#include "rules.h"
 
 /*
  * We allocate our file list in chunk sizes so as not to do it one by
@@ -828,7 +829,8 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
 		return 0;
 	} else if (S_ISREG(st.st_mode)) {
 		/* filter files */
-		if (rules_match(root, 0) == -1) {
+		if (rules_match(root, S_ISDIR(st.st_mode), FARGS_SENDER,
+		    false) == -1) {
 			WARNX("%s: skipping excluded file", root);
 			return 1;
 		}
@@ -850,7 +852,8 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
 			return 1;
 		}
 		/* filter files */
-		if (rules_match(root, 0) == -1) {
+		if (rules_match(root, S_ISDIR(st.st_mode), FARGS_SENDER,
+		    false) == -1) {
 			WARNX("%s: skipping excluded symlink", root);
 			return 1;
 		}
@@ -959,7 +962,7 @@ flist_gen_dirent(struct sess *sess, char *root, struct flist **fl, size_t *sz,
 
 		/* filter files */
 		if (rules_match(ent->fts_path + stripdir,
-		    (ent->fts_info == FTS_D)) == -1) {
+		    (ent->fts_info == FTS_D), FARGS_SENDER, false) == -1) {
 			WARNX("%s: skipping excluded file",
 			    ent->fts_path + stripdir);
 			fts_set(fts, ent, FTS_SKIP);
@@ -1098,7 +1101,8 @@ flist_gen_files(struct sess *sess, size_t argc, char **argv,
 		}
 
 		/* filter files */
-		if (rules_match(argv[i], S_ISDIR(st.st_mode)) == -1) {
+		if (rules_match(argv[i], S_ISDIR(st.st_mode),
+		    FARGS_SENDER, false) == -1) {
 			WARNX("%s: skipping excluded file", argv[i]);
 			continue;
 		}
@@ -1496,7 +1500,7 @@ flist_gen_dels(struct sess *sess, const char *root, struct flist **fl,
 		/* filter files on delete */
 		/* TODO handle --delete-excluded */
 		if (rules_match(ent->fts_path + stripdir,
-		    (ent->fts_info == FTS_D)) == -1) {
+		    (ent->fts_info == FTS_D), FARGS_SENDER, false) == -1) {
 			WARNX("skip excluded file %s",
 			    ent->fts_path + stripdir);
 			fts_set(fts, ent, FTS_SKIP);

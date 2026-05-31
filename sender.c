@@ -30,6 +30,7 @@
 #include <unistd.h>
 
 #include "extern.h"
+#include "rules.h"
 
 /*
  * A request from the receiver to download updated file data.

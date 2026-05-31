@@ -53,3 +53,7 @@ distclean: clean
 	rm -f Makefile.configure config.h config.log
 
 $(ALLOBJS): extern.h config.h md4.h
+
+flist.o main.o receiver.o rules.o sender.o: rules.h
+
+rules.h: extern.h

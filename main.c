@@ -39,6 +39,7 @@
 #endif
 
 #include "extern.h"
+#include "rules.h"
 
 static struct opts opts;
 typedef int (rsync_option_filter)(struct sess *, int, const struct option *);
@@ -304,9 +305,10 @@ enum {
 	OP_MIN_SIZE,
 	OP_CONTIMEOUT,
 	OP_BIT8,
+	OP_DEL,
 };
 
-const char rsync_shopts[] = "468B:aDe:ghIJlnOoprtVvxz";
+const char rsync_shopts[] = "468B:CaDe:ghIJlnOoprtVvxz";
 const struct option	 lopts[] = {
     { "address",	required_argument, NULL,		OP_ADDRESS },
     { "archive",	no_argument,	NULL,			'a' },
@@ -318,8 +320,9 @@ const struct option	 lopts[] = {
 #endif
     { "compress",	no_argument,	NULL,			'z' },
     { "contimeout",	required_argument, NULL,		OP_CONTIMEOUT },
-    { "del",		no_argument,	&opts.del,		1 },
-    { "delete",		no_argument,	&opts.del,		1 },
+    { "cvs-exclude",	no_argument,	NULL,			'C' },
+    { "del",		no_argument,	NULL,			OP_DEL },
+    { "delete",		no_argument,	NULL,			OP_DEL },
     { "devices",	no_argument,	&opts.devices,		1 },
     { "no-devices",	no_argument,	&opts.devices,		0 },
     { "dry-run",	no_argument,	&opts.dry_run,		1 },
@@ -376,7 +379,7 @@ static void
 usage(void)
 {
 	fprintf(stderr, "usage: %s"
-	    " [-468BaDgIJlnOoprtVvx] [-e program] [--8-bit-output] [--address=sourceaddr]\n"
+	    " [-468BCaDgIJlnOoprtVvx] [-e program] [--8-bit-output] [--address=sourceaddr]\n"
 	    "\t[--block-size=size] [--contimeout=seconds] [--compare-dest=dir] [--del] [--exclude]\n"
 	    "\t[--exclude-from=file] [--include] [--include-from=file]\n"
 	    "\t[--no-motd] [--numeric-ids] [--port=portnumber]\n"
@@ -398,9 +401,11 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter __unused,
 {
 	long long	 tmpint; /* temporary */
 	int		 c, /* getopt return */
+			 rc, /* temporary */
 			 lidx; /* getopt long index */
 	size_t		 basedir_cnt = 0; /* number of base directories */
 	const char	*errstr; /* temporary error string */
+	bool		 cvs_excl = false; /* exclude CVS */
 
 	*exitcode = 0;
 
@@ -425,6 +430,9 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter __unused,
 				errx(1, "--block-size=%s: invalid numeric value", optarg);
 			opts.block_size = tmpint; 
 			break;  
+		case 'C':
+			cvs_excl = true;
+			break;
 		case 'D':
 			opts.devices = 1;
 			opts.specials = 1;
@@ -515,20 +523,20 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter __unused,
 				    errstr, optarg);
 			break;
 		case OP_EXCLUDE:
-			if (parse_rule(optarg, RULE_EXCLUDE) == -1)
+			if (parse_rule(optarg, RULE_EXCLUDE, '\0') == -1)
 				errx(ERR_SYNTAX, "syntax error in exclude: %s",
 				    optarg);
 			break;
 		case OP_INCLUDE:
-			if (parse_rule(optarg, RULE_INCLUDE) == -1)
+			if (parse_rule(optarg, RULE_INCLUDE, '\0') == -1)
 				errx(ERR_SYNTAX, "syntax error in include: %s",
 				    optarg);
 			break;
 		case OP_EXCLUDE_FROM:
-			parse_file(optarg, RULE_EXCLUDE);
+			parse_file_rule(optarg, RULE_EXCLUDE, '\n');
 			break;
 		case OP_INCLUDE_FROM:
-			parse_file(optarg, RULE_INCLUDE);
+			parse_file_rule(optarg, RULE_INCLUDE, '\n');
 			break;
 		case OP_COMP_DEST:
 			if (opts.alt_base_mode !=0 &&
@@ -578,6 +586,9 @@ basedir:
 		case OP_BIT8:
 			opts.bit8 = true;
 			break;
+		case OP_DEL:
+			opts.del = true;
+			break;
 		case 'h':
 			usage();
 			return NULL;
@@ -604,6 +615,16 @@ basedir:
 		poll_timeout = -1;
 	else
 		poll_timeout *= 1000;
+
+	if (!opts.server && cvs_excl) {
+		rc = parse_rule("-C", RULE_NONE, '\n');
+		assert(rc == 0);
+		rc = parse_rule(":C", RULE_NONE, '\n');
+		assert(rc == 0);
+
+		/* Silence NDEBUG warnings. */
+		(void)rc;
+	}
 
 	return &opts;
 }

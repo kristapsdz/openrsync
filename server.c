@@ -64,6 +64,7 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 
 	memset(&sess, 0, sizeof(struct sess));
 	sess.opts = opts;
+	sess.mode = sess.opts->sender ? FARGS_SENDER : FARGS_RECEIVER;
 
 	/* Begin by making descriptors non-blocking. */
 

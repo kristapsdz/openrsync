@@ -35,6 +35,7 @@
 #include <unistd.h>
 
 #include "extern.h"
+#include "rules.h"
 
 #ifndef S_ISTXT
 #define S_ISTXT S_ISVTX

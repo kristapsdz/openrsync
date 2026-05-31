@@ -64,6 +64,7 @@
  */
 #define ERR_SYNTAX	1
 #define ERR_PROTOCOL	2
+#define ERR_FILEGEN	3
 #define ERR_SOCK_IO	10
 #define ERR_FILE_IO	11
 #define ERR_WIREPROTO	12
@@ -148,7 +149,8 @@ struct	opts {
 	int		 preserve_links;	/* -l */
 	int		 preserve_gids;		/* -g */
 	int		 preserve_uids;		/* -u */
-	int		 del;			/* --delete */
+	bool		 del;			/* --delete */
+	bool		 del_excl;		/* --delete-excluded */
 	int		 devices;		/* --devices */
 	int		 specials;		/* --specials */
 	int		 no_motd;		/* --no-motd */
@@ -172,21 +174,6 @@ struct	opts {
 	char		 ipf;			/* 0 (unspec), 4 (IPV4), 6 (IPV6) */
 	bool		 bit8;			/* -8 */
 	long		 block_size;		/* -B */
-};
-
-enum rule_type {
-	RULE_NONE,
-	RULE_EXCLUDE,
-	RULE_INCLUDE,
-	RULE_CLEAR,
-#ifdef NOTYET
-	RULE_MERGE,
-	RULE_DIR_MERGE,
-	RULE_SHOW,
-	RULE_HIDE,
-	RULE_PROTECT,
-	RULE_RISK,
-#endif
 };
 
 /*
@@ -250,6 +237,7 @@ struct	blkset {
  */
 struct	sess {
 	const struct opts *opts; /* system options */
+	enum fmode	   mode; /* sender or receiver */
 	int32_t		   seed; /* checksum seed */
 	int32_t		   lver; /* local version */
 	int32_t		   rver; /* remote version */
@@ -426,12 +414,6 @@ char		*mkstempfifoat(int, char *);
 char		*mkstempnodat(int, char *, mode_t, dev_t);
 char		*mkstempsock(const char *, char *);
 int		 mktemplate(char **, const char *, int);
-
-int		 parse_rule(char *line, enum rule_type);
-void		 parse_file(const char *, enum rule_type);
-void		 send_rules(struct sess *, int);
-void		 recv_rules(struct sess *, int);
-int		 rules_match(const char *, int);
 
 int		 rmatch(const char *, const char *, int);
 

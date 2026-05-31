@@ -49,6 +49,7 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 		err(ERR_IPC, "pledge");
 
 	memset(&sess, 0, sizeof(struct sess));
+	sess.mode = f->mode;
 	sess.opts = opts;
 	sess.lver = RSYNC_PROTOCOL;
 
