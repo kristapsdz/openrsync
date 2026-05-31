@@ -105,7 +105,7 @@ struct	fargs {
 	size_t	   sourcesz; /* number of sources */
 	char	  *sink; /* transfer endpoint */
 	enum fmode mode; /* mode of operation */
-	int	   remote; /* uses rsync:// or :: for remote */
+	bool	   remote; /* uses rsync:// or :: for remote */
 	char	  *module; /* if rsync://, the module */
 };
 
@@ -140,26 +140,26 @@ struct	flist {
  * See struct fargs.
  */
 struct	opts {
-	int		 sender;		/* --sender */
-	int		 server;		/* --server */
-	int		 recursive;		/* -r */
-	int		 dry_run;		/* -n */
-	int		 preserve_times;	/* -t */
-	int		 preserve_perms;	/* -p */
-	int		 preserve_links;	/* -l */
-	int		 preserve_gids;		/* -g */
-	int		 preserve_uids;		/* -u */
+	bool		 sender;		/* --sender */
+	bool		 server;		/* --server */
+	bool		 recursive;		/* -r */
+	bool		 dry_run;		/* -n */
+	bool		 preserve_times;	/* -t */
+	bool		 preserve_perms;	/* -p */
+	bool		 preserve_links;	/* -l */
+	bool		 preserve_gids;		/* -g */
+	bool		 preserve_uids;		/* -u */
 	bool		 del;			/* --delete */
 	bool		 del_excl;		/* --delete-excluded */
-	int		 devices;		/* --devices */
-	int		 specials;		/* --specials */
-	int		 no_motd;		/* --no-motd */
-	int		 numeric_ids;		/* --numeric-ids */
-	int		 one_file_system;	/* -x */
-	int		 ignore_times;		/* -I */
-	int		 ignore_dir_times;	/* -O */
-	int		 ignore_link_times;	/* -J */
-	int		 size_only;		/* --size-only */
+	bool		 devices;		/* --devices */
+	bool		 specials;		/* --specials */
+	bool		 no_motd;		/* --no-motd */
+	bool		 numeric_ids;		/* --numeric-ids */
+	size_t		 one_file_system;	/* -x */
+	bool		 ignore_times;		/* -I */
+	bool		 omit_dir_times;	/* -O */
+	bool		 omit_link_times;	/* -J */
+	bool		 size_only;		/* --size-only */
 	int		 alt_base_mode;
 	off_t		 max_size;		/* --max-size */
 	off_t		 min_size;		/* --min-size */

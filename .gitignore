@@ -5,4 +5,5 @@ config.h.old
 config.log
 config.log.old
 *.o
+*.swp
 openrsync

@@ -177,9 +177,9 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 
 	/* extra options for the receiver (local is sender) */
 	if (f->mode == FARGS_SENDER) {
-		if (sess->opts->ignore_dir_times)
+		if (sess->opts->omit_dir_times)
 			addargs(&args, "-O");
-		if (sess->opts->ignore_link_times)
+		if (sess->opts->omit_link_times)
 			addargs(&args, "-J");
 		if (sess->opts->size_only)
 			addargs(&args, "--size-only");

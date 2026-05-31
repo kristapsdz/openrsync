@@ -612,7 +612,7 @@ post_dir(struct sess *sess, const struct upload *u, size_t idx)
 	 * FIXME: run rsync_set_metadata()?
 	 */
 
-	if (!sess->opts->ignore_dir_times) {
+	if (!sess->opts->omit_dir_times) {
 		if (u->newdir[idx] ||
 		    (sess->opts->preserve_times &&
 		     st.st_mtime != f->st.mtime)) {
@@ -1103,7 +1103,7 @@ rsync_uploader_tail(struct upload *u, struct sess *sess)
 {
 	size_t	 i;
 
-	if ((!sess->opts->preserve_times || sess->opts->ignore_dir_times) &&
+	if ((!sess->opts->preserve_times || sess->opts->omit_dir_times) &&
 	    !sess->opts->preserve_perms)
 		return 1;
 

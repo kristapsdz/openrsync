@@ -140,7 +140,7 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 	if (f->host != NULL) {
 		if (strncasecmp(f->host, "rsync://", 8) == 0) {
 			/* rsync://host[:port]/module[/path] */
-			f->remote = 1;
+			f->remote = true;
 			len = strlen(f->host) - 8 + 1;
 			memmove(f->host, f->host + 8, len);
 			if ((cp = strchr(f->host, '/')) == NULL)
@@ -162,7 +162,7 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 			*cp++ = '\0';
 			if (*cp == ':') {
 				/* host::module[/path] */
-				f->remote = 1;
+				f->remote = true;
 				f->module = ++cp;
 				cp = strchr(f->module, '/');
 				if (cp != NULL)
@@ -304,77 +304,77 @@ enum {
 	OP_MAX_SIZE,
 	OP_MIN_SIZE,
 	OP_CONTIMEOUT,
-	OP_BIT8,
-	OP_DEL,
+	OP_SET_BOOL_FALSE,
+	OP_SET_BOOL_TRUE,
 };
 
 const char rsync_shopts[] = "468B:CDFae:f:ghIJlnOoprtVvxz";
 const struct option	 lopts[] = {
-    { "address",	required_argument, NULL,		OP_ADDRESS },
-    { "archive",	no_argument,	NULL,			'a' },
-    { "block-size",	required_argument, NULL,		'B' },
-    { "compare-dest",	required_argument, NULL,		OP_COMP_DEST },
 #if 0
     { "copy-dest",	required_argument, NULL,		OP_COPY_DEST },
     { "link-dest",	required_argument, NULL,		OP_LINK_DEST },
 #endif
+    { "8-bit-output",	no_argument,	NULL,			'8' },
+    { "address",	required_argument, NULL,		OP_ADDRESS },
+    { "archive",	no_argument,	NULL,			'a' },
+    { "block-size",	required_argument, NULL,		'B' },
+    { "compare-dest",	required_argument, NULL,		OP_COMP_DEST },
     { "compress",	no_argument,	NULL,			'z' },
     { "contimeout",	required_argument, NULL,		OP_CONTIMEOUT },
     { "cvs-exclude",	no_argument,	NULL,			'C' },
-    { "del",		no_argument,	NULL,			OP_DEL },
-    { "delete",		no_argument,	NULL,			OP_DEL },
-    { "devices",	no_argument,	&opts.devices,		1 },
-    { "no-devices",	no_argument,	&opts.devices,		0 },
-    { "dry-run",	no_argument,	&opts.dry_run,		1 },
+    { "del",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "delete",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "devices",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "dry-run",	no_argument,	NULL,			'n' },
     { "exclude",	required_argument, NULL,		OP_EXCLUDE },
     { "exclude-from",	required_argument, NULL,		OP_EXCLUDE_FROM },
     { "filter",		required_argument, NULL,		'f' },
-    { "group",		no_argument,	&opts.preserve_gids,	1 },
-    { "no-group",	no_argument,	&opts.preserve_gids,	0 },
+    { "group",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "help",		no_argument,	NULL,			'h' },
     { "ignore-times",	no_argument,	NULL,			'I' },
     { "include",	required_argument, NULL,		OP_INCLUDE },
     { "include-from",	required_argument, NULL,		OP_INCLUDE_FROM },
     { "ipv4",           no_argument,    NULL,                   '4' },
     { "ipv6",           no_argument,    NULL,                   '6' },
-    { "links",		no_argument,	&opts.preserve_links,	1 },
+    { "links",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "max-size",	required_argument, NULL,		OP_MAX_SIZE },
     { "min-size",	required_argument, NULL,		OP_MIN_SIZE },
-    { "no-links",	no_argument,	&opts.preserve_links,	0 },
-    { "no-motd",	no_argument,	&opts.no_motd,		1 },
-    { "numeric-ids",	no_argument,	&opts.numeric_ids,	1 },
-    { "omit-dir-times",	no_argument,	&opts.ignore_dir_times,	1 },
-    { "no-O",		no_argument,	&opts.ignore_dir_times,	0 },
-    { "no-omit-dir-times",	no_argument,	&opts.ignore_dir_times, 0 },
-    { "omit-link-times",	no_argument,	&opts.ignore_link_times, 1 },
-    { "no-J",		no_argument,	&opts.ignore_link_times, 0 },
-    { "no-omit-link-times",	no_argument,	&opts.ignore_link_times, 0 },
-    { "owner",		no_argument,	&opts.preserve_uids,	1 },
-    { "no-owner",	no_argument,	&opts.preserve_uids,	0 },
-    { "perms",		no_argument,	&opts.preserve_perms,	1 },
-    { "no-perms",	no_argument,	&opts.preserve_perms,	0 },
-    { "one-file-system", no_argument,	&opts.one_file_system,	1 },
+    { "no-J",		no_argument,	NULL, 			OP_SET_BOOL_FALSE }, /* XXX */
+    { "no-O",		no_argument,	NULL,			OP_SET_BOOL_FALSE }, /* XXX */
+    { "no-devices",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
+    { "no-group",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
+    { "no-links",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
+    { "no-motd",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
+    { "no-omit-dir-times", no_argument,	NULL,			OP_SET_BOOL_FALSE },
+    { "no-omit-link-times", no_argument, NULL,			OP_SET_BOOL_FALSE },
+    { "no-owner",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
+    { "no-perms",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
+    { "no-recursive",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
+    { "no-specials",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
+    { "no-times",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
+    { "no-verbose",	no_argument,	&verbose,		0 },
+    { "numeric-ids",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "omit-dir-times",	no_argument,	NULL,			'O' },
+    { "omit-link-times", no_argument,	NULL,			'J' },
+    { "one-file-system", no_argument,	NULL,			'x' },
+    { "owner",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "perms",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "port",		required_argument, NULL,		OP_PORT },
-    { "recursive",	no_argument,	&opts.recursive,	1 },
-    { "no-recursive",	no_argument,	&opts.recursive,	0 },
+    { "recursive",	no_argument,	NULL,			'r' },
     { "rsh",		required_argument, NULL,		'e' },
     { "rsync-path",	required_argument, NULL,		OP_RSYNCPATH },
-    { "sender",		no_argument,	&opts.sender,		1 },
-    { "server",		no_argument,	&opts.server,		1 },
-    { "size-only",	no_argument,	&opts.size_only,	1 },
-    { "specials",	no_argument,	&opts.specials,		1 },
+    { "sender",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "server",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "size-only",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "specials",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "timeout",	required_argument, NULL,		OP_TIMEOUT },
+    { "times",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "verbose",	no_argument,	NULL,			'v' },
+    { "version",	no_argument,	NULL,			'V' },
+    { NULL,		0,		NULL,			0 }
 #if 0
     { "sync-file",	required_argument, NULL,		6 },
 #endif
-    { "no-specials",	no_argument,	&opts.specials,		0 },
-    { "timeout",	required_argument, NULL,		OP_TIMEOUT },
-    { "times",		no_argument,	&opts.preserve_times,	1 },
-    { "no-times",	no_argument,	&opts.preserve_times,	0 },
-    { "verbose",	no_argument,	&verbose,		1 },
-    { "no-verbose",	no_argument,	&verbose,		0 },
-    { "version",	no_argument,	NULL,			'V' },
-    { "8-bit-output",	no_argument,	NULL,			OP_BIT8 },
-    { NULL,		0,		NULL,			0 }
 };
 
 static void
@@ -461,6 +461,62 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 
 	while ((c = getopt_long(argc, argv, rsync_shopts, lopts, &lidx)) != -1) {
 		switch (c) {
+		case OP_SET_BOOL_TRUE:
+			if (strcmp(lopts[lidx].name, "specials") == 0)
+				opts.specials = true;
+			else if (strcmp(lopts[lidx].name, "devices") == 0)
+				opts.devices = true;
+			else if (strcmp(lopts[lidx].name, "delete") == 0)
+				opts.del = true;
+			else if (strcmp(lopts[lidx].name, "del") == 0)
+				opts.del = true;
+			else if (strcmp(lopts[lidx].name, "size-only") == 0)
+				opts.size_only = true;
+			else if (strcmp(lopts[lidx].name, "numeric-ids") == 0)
+				opts.numeric_ids = true;
+			else if (strcmp(lopts[lidx].name, "perms") == 0)
+				opts.preserve_perms = true;
+			else if (strcmp(lopts[lidx].name, "owner") == 0)
+				opts.preserve_uids = true;
+			else if (strcmp(lopts[lidx].name, "group") == 0)
+				opts.preserve_gids = true;
+			else if (strcmp(lopts[lidx].name, "links") == 0)
+				opts.preserve_links = true;
+			else if (strcmp(lopts[lidx].name, "times") == 0)
+				opts.preserve_times = true;
+			else if (strcmp(lopts[lidx].name, "sender") == 0)
+				opts.sender = true;
+			else if (strcmp(lopts[lidx].name, "server") == 0)
+				opts.server = true;
+			break;
+		case OP_SET_BOOL_FALSE:
+			if (strcmp(lopts[lidx].name, "no-O") == 0)
+				opts.omit_dir_times = false;
+			else if (strcmp(lopts[lidx].name, "no-omit-dir-times") == 0)
+				opts.omit_dir_times = false;
+			else if (strcmp(lopts[lidx].name, "no-J") == 0)
+				opts.omit_link_times = false;
+			else if (strcmp(lopts[lidx].name, "no-omit-link-times") == 0)
+				opts.omit_link_times = false;
+			else if (strcmp(lopts[lidx].name, "specials") == 0)
+				opts.specials = false;
+			else if (strcmp(lopts[lidx].name, "devices") == 0)
+				opts.devices = false;
+			else if (strcmp(lopts[lidx].name, "no-motd") == 0)
+				opts.no_motd = false;
+			else if (strcmp(lopts[lidx].name, "no-perms") == 0)
+				opts.preserve_perms = false;
+			else if (strcmp(lopts[lidx].name, "no-owner") == 0)
+				opts.preserve_uids = false;
+			else if (strcmp(lopts[lidx].name, "no-group") == 0)
+				opts.preserve_gids = false;
+			else if (strcmp(lopts[lidx].name, "no-links") == 0)
+				opts.preserve_links = false;
+			else if (strcmp(lopts[lidx].name, "no-times") == 0)
+				opts.preserve_times = false;
+			else if (strcmp(lopts[lidx].name, "no-recursive") == 0)
+				opts.recursive = false;
+			break;
 		case '4':
 			opts.ipf = 4;           
 			break;
@@ -485,8 +541,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			cvs_excl = true;
 			break;
 		case 'D':
-			opts.devices = 1;
-			opts.specials = 1;
+			opts.devices = true;
+			opts.specials = true;
 			break;
 		case 'F':
 			new_rule = NULL;
@@ -511,14 +567,14 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			assert(rc == 0);
 			break;
 		case 'a':
-			opts.recursive = 1;
-			opts.preserve_links = 1;
-			opts.preserve_perms = 1;
-			opts.preserve_times = 1;
-			opts.preserve_gids = 1;
-			opts.preserve_uids = 1;
-			opts.devices = 1;
-			opts.specials = 1;
+			opts.recursive = true;
+			opts.preserve_links = true;
+			opts.preserve_perms = true;
+			opts.preserve_times = true;
+			opts.preserve_gids = true;
+			opts.preserve_uids = true;
+			opts.devices = true;
+			opts.specials = true;
 			break;
 		case 'e':
 			opts.ssh_prog = optarg;
@@ -529,34 +585,34 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				    "error", optarg);
 			break;
 		case 'g':
-			opts.preserve_gids = 1;
+			opts.preserve_gids = true;
 			break;
 		case 'I':
-			opts.ignore_times = 1;
+			opts.ignore_times = true;
 			break;
 		case 'J':
-			opts.ignore_link_times = 1;
+			opts.omit_link_times = true;
 			break;
 		case 'l':
-			opts.preserve_links = 1;
+			opts.preserve_links = true;
 			break;
 		case 'n':
-			opts.dry_run = 1;
+			opts.dry_run = true;
 			break;
 		case 'O':
-			opts.ignore_dir_times = 1;
+			opts.omit_dir_times = true;
 			break;
 		case 'o':
-			opts.preserve_uids = 1;
+			opts.preserve_uids = true;
 			break;
 		case 'p':
-			opts.preserve_perms = 1;
+			opts.preserve_perms = true;
 			break;
 		case 'r':
-			opts.recursive = 1;
+			opts.recursive = true;
 			break;
 		case 't':
-			opts.preserve_times = 1;
+			opts.preserve_times = true;
 			break;
 		case 'v':
 			verbose++;
@@ -664,12 +720,6 @@ basedir:
 				errx(ERR_SYNTAX, "--min-size=%s: "
 				    "invalid numeric value", optarg);
 			opts.min_size = tmpint;
-			break;
-		case OP_BIT8:
-			opts.bit8 = true;
-			break;
-		case OP_DEL:
-			opts.del = true;
 			break;
 		case 'h':
 			usage();

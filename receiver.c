@@ -122,7 +122,7 @@ rsync_set_metadata_at(struct sess *sess, int newfile, int rootfd,
 	/* Conditionally adjust file modification time. */
 
 	if (sess->opts->preserve_times &&
-	    !(S_ISLNK(f->st.mode) && sess->opts->ignore_link_times)) {
+	    !(S_ISLNK(f->st.mode) && sess->opts->omit_link_times)) {
 		ts[0].tv_nsec = UTIME_NOW;
 		ts[1].tv_sec = f->st.mtime;
 		ts[1].tv_nsec = 0;
