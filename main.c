@@ -396,7 +396,7 @@ usage(void)
  * using the passed-in exitcode as its exit value.
  */
 static struct opts *
-rsync_getopt(int argc, char *argv[], rsync_option_filter *filter __unused,
+rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
     struct sess *sess, int *exitcode)
 {
 	long long	 tmpint; /* temporary */
@@ -406,6 +406,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter __unused,
 	size_t		 basedir_cnt = 0; /* number of base directories */
 	const char	*errstr; /* temporary error string */
 	bool		 cvs_excl = false; /* exclude CVS */
+
+	(void)filter; /* TODO: currently unused */
 
 	*exitcode = 0;
 
