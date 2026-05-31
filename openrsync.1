@@ -21,29 +21,56 @@
 .Nd synchronise local and remote files
 .Sh SYNOPSIS
 .Nm openrsync
-.Op Fl 468CaDgIJlnOoprtVvx
-.Op Fl B Ar size
-.Op Fl e Ar program
+.Op Fl DF
+.Op Fl -8-bit-output , Fl 8
 .Op Fl -address Ns = Ns Ar sourceaddr
-.Op Fl -block-size Ns = Ns Ar size
-.Op Fl -compare-dest Ns = Ns Ar directory
+.Op Fl -archive , Fl a
+.Op Fl -block-size Ns = Ns Ar size , Fl B Ar size
+.Op Fl -compare-dest Ns = Ns Ar dir
 .Op Fl -contimeout Ns = Ns Ar seconds
-.Op Fl -cvs-exclude
-.Op Fl -del
-.Op Fl -exclude Ar pattern
+.Op Fl -cvs-exclude , Fl C
+.Op Fl -del , Fl -delete
+.Op Fl -devices
+.Op Fl -dry-run , Fl n
 .Op Fl -exclude-from Ns = Ns Ar file
-.Op Fl -include Ar pattern
+.Op Fl -exclude Ns = Ns Ar pattern
+.Op Fl -filter Ns = Ns Ar filter , Fl f filter
+.Op Fl -group , Fl g
+.Op Fl -ignore-times , Fl I
 .Op Fl -include-from Ns = Ns Ar file
-.Op Fl -max-size Ns = Ns size
-.Op Fl -min-size Ns = Ns size
+.Op Fl -include Ns = Ns Ar pattern
+.Op Fl -ipv4 , Fl 4
+.Op Fl -ipv6 , Fl 6
+.Op Fl -links , Fl l
+.Op Fl -max-size Ns = Ns Ar size
+.Op Fl -min-size Ns = Ns Ar size
+.Op Fl -no-devices
+.Op Fl -no-group
+.Op Fl -no-links
 .Op Fl -no-motd
+.Op Fl -no-omit-dir-times
+.Op Fl -no-omit-link-times
+.Op Fl -no-owner
+.Op Fl -no-perms
+.Op Fl -no-recursive
+.Op Fl -no-specials
+.Op Fl -no-times
 .Op Fl -numeric-ids
-.Op Fl -port Ns = Ns Ar service
-.Op Fl -rsh Ns = Ns Ar program
+.Op Fl -omit-dir-times , Fl O
+.Op Fl -omit-link-times , Fl J
+.Op Fl -one-file-system , Fl x
+.Op Fl -owner , Fl o
+.Op Fl -perms , Fl p
+.Op Fl -port Ns = Ns Ar portnumber
+.Op Fl -recursive , Fl r
+.Op Fl -rsh Ns = Ns Ar program , Fl e program
 .Op Fl -rsync-path Ns = Ns Ar program
 .Op Fl -size-only
+.Op Fl -specials
 .Op Fl -timeout Ns = Ns Ar seconds
-.Op Fl -8-bit-output
+.Op Fl -times , Fl t
+.Op Fl -verbose , Fl v
+.Op Fl -version , Fl V
 .Ar source ...
 .Ar directory
 .Sh DESCRIPTION
@@ -62,32 +89,33 @@ may be remote,
 but not both.
 The arguments are as follows:
 .Bl -tag -width Ds
-.It Fl 4 , -ipv4
-Use IPv4 when connecting to a remote host.
-If
-.Nm
-is configured to use an
-.Fl -rsh
-program named
-.Dq ssh ,
-then it will pass
-.Fl 4
-to it.
-.It Fl 6 , -ipv6
-Like
-.Fl 4 ,
-but for IPv6.
-.It Fl 8 , Fl -8-bit-output
-Do not escape high-bit characters in the output, which is the default.
-.It Fl a , -archive
+.It Fl D
+Also transfer device and special files.
 Shorthand for
-.Fl Dgloprt .
+.Fl -devices -specials .
+.It Fl F
+Adds a standard
+.Pa .rsync-filter
+dir-merge filter rule.
+Specifically,
+.Fl F
+will add
+.Dq : /.rsync-filter
+the first time it is seen, and
+.Dq - .rsync-filter
+the second time it is seen.
+Subsequent uses have no effect.
+.It Fl -8-bit-output , Fl 8
+Do not escape high-bit characters in the output, which is the default.
 .It Fl -address Ns = Ns Ar sourceaddr
 When connecting to an rsync daemon, use
 .Ar sourceaddr
 as the source address for connections, which is useful on machines with
 multiple interfaces.
-.It Fl B , -block-size Ns = Ns Ar size
+.It Fl -archive , Fl a
+Shorthand for
+.Fl Dgloprt .
+.It Fl -block-size Ns = Ns Ar size , Fl B Ar size
 Specify the block size to be used for file transfers.
 The upper bound is 512M.
 .It Fl -compare-dest Ns = Ns Ar directory
@@ -106,7 +134,7 @@ is a relative path, it is relative to the destination directory.
 Set the connection timeout in seconds.
 Exit if no connection established within the specified time.
 The default is 0, which means no timeout.
-.It Fl C , Fl -cvs-exclude
+.It Fl -cvs-exclude , Fl C
 Exclude a common list of files as
 .Xr cvs 1
 would.
@@ -138,10 +166,6 @@ files.
 .\" equivalent of specifying
 .\" .Fl f Dq Ar -C
 .\" .Fl f Dq Ar :C .
-.It Fl D
-Also transfer device and special files.
-Shorthand for
-.Fl -devices -specials .
 .It Fl -del , -delete
 Delete files in
 .Ar directory
@@ -150,16 +174,14 @@ not found in
 directories.
 Only applicable with
 .Fl r .
-.It Fl e Ar program , Fl -rsh Ns = Ns Ar program
-Specify alternative communication program, defaults to
-.Xr ssh 1 .
-.Nm
-will generally handle quotes, but it makes no attempt to deal with
-escape sequences.
-In particular, escaped quotation marks will not be escaped.
-.It Fl -exclude Ar pattern
-Exclude files matching
-.Em pattern .
+.It Fl -devices
+Also transfer device files.
+Negate with
+.Fl -no-devices .
+.It Fl -dry-run , Fl n
+Do not actually modify the destination.
+Mainly useful in combination with
+.Fl v .
 .It Fl -exclude-from Ns = Ns Ar file
 Load
 .Em patterns
@@ -167,9 +189,25 @@ and
 .Em rules
 from
 .Em file .
-.It Fl -devices
-Also transfer device files.
-.It Fl g , -group
+.It Fl -exclude Ar pattern
+Exclude files matching
+.Em pattern .
+.It Fl -filter Ns = Ns Ar filter , Fl f Ar filter
+Process
+.Ar filter
+against the global filter chain.
+The specified
+.Ar filter
+may be a rule to include a filter file, or to include a per-directory
+filter file.
+Regular filter files are processed immediately, while per-directory
+filter files are processed as directories are encountered.
+.\" See
+.\" .Sx PATTERNS AND RULES
+.\" for more details about the syntax and capabilities of
+.\" .Nm
+.\" filters.
+.It Fl -group , Fl g
 Set the group name to match the source.
 For example, group
 .Qq kristaps
@@ -180,11 +218,10 @@ If
 .Fl -numeric-ids
 is also given or if the remote group name is unknown on the local machine,
 set the numeric group ID to match the source instead.
-.It Fl I , -ignore-times
+Negate with
+.Fl -no-group .
+.It Fl -ignore-times , Fl I
 Do not skip based on file size and modification time.
-.It Fl -include Ar pattern
-Include files matching
-.Em pattern .
 .It Fl -include-from Ns = Ns Ar file
 Load
 .Em patterns
@@ -192,13 +229,31 @@ and
 .Em rules
 from
 .Em file .
-.It Fl J , -omit-link-times
-Don't set symlink modification times to match the source.
-.It Fl l , -links
+.It Fl -include Ns = Ns Ar pattern
+Include files matching
+.Em pattern .
+.It Fl -ipv4 , Fl 4
+Use IPv4 when connecting to a remote host.
+If
+.Nm
+is configured to use an
+.Fl -rsh
+program named
+.Dq ssh ,
+then it will pass
+.Fl 4
+to it.
+.It Fl -ipv6 , Fl 6
+Like
+.Fl 4 ,
+but for IPv6.
+.It Fl -links , Fl l
 Also transfer symbolic links.
 The link is transferred as a standalone file: if the destination does
 not exist, it will be broken.
-.It Fl -max-size Ar size
+Negate with
+.Fl -no-links .
+.It Fl -max-size Ns = Ns Ar size
 Don't transfer any file that is larger than
 .Ar size
 bytes.
@@ -207,17 +262,13 @@ Alternatively
 may instead use a multiplier, as documented in
 .Xr scan_scaled 3 ,
 to specify the size.
-.It Fl -min-size Ar size
+.It Fl -min-size Ns = Ns Ar size
 Don't transfer any file that is smaller than
 .Ar size
 bytes.
 See
 .Fl -max-size
 on the definition of size.
-.It Fl n , -dry-run
-Do not actually modify the destination.
-Mainly useful in combination with
-.Fl v .
 .It Fl -no-motd
 Do not display the Message of the Day.
 .It Fl -numeric-ids
@@ -227,9 +278,21 @@ Has no effect unless
 or
 .Fl o
 is also given.
-.It Fl O , -omit-dir-times
+.It Fl -omit-dir-times , Fl O
 Don't set directory modification times to match the source.
-.It Fl o , -owner
+Negate with
+.Fl -no-omit-dir-times .
+.It Fl -omit-link-times , Fl J
+Don't set symlink modification times to match the source.
+Negate with
+.Fl -no-omit-link-times .
+.It Fl -one-file-system , Fl x
+Do not cross filesystem boundaries.
+If this option is repeated, all mount point directories from the copy
+are omitted.
+Otherwise, it includes an empty directory at each mount point it
+encounters.
+.It Fl -owner , Fl o
 Set the user name to match the source, with similar matching logic as for
 .Fl g .
 If
@@ -237,9 +300,13 @@ If
 is also given or if the remote user name is unknown on the local machine,
 set the numeric user ID to match the source instead.
 Only works if run as root.
-.It Fl p , -perms
+Negate with
+.Fl -no-owner .
+.It Fl -perms , Fl p
 Set destination file or directory permissions to match the source when
 it is updated.
+Negate with
+.Fl -no-perms .
 .It Fl -port Ns = Ns Ar service
 Specify an alternative TCP port number.
 The
@@ -249,7 +316,7 @@ can be given as a decimal integer or as a name to be looked up in the
 database.
 The default is
 .Dq rsync .
-.It Fl r , -recursive
+.It Fl -recursive , Fl r
 If
 .Ar source
 designates a directory, synchronise the directory and the entire subtree
@@ -262,6 +329,15 @@ directory itself.
 If
 .Ar source
 is a file, this has no effect.
+Negate with
+.Fl -no-recursive .
+.It Fl -rsh Ns = Ns Ar program , Fl e Ar program
+Specify alternative communication program, defaults to
+.Xr ssh 1 .
+.Nm
+will generally handle quotes, but it makes no attempt to deal with
+escape sequences.
+In particular, escaped quotation marks will not be escaped.
 .It Fl -rsync-path Ns = Ns Ar program
 Run
 .Ar program
@@ -271,25 +347,24 @@ on the remote host instead of the default
 Skip files based only on size, don't check timestamp.
 .It Fl -specials
 Also transfer fifo and unix domain socket files.
+Negate with
+.Fl -no-specials .
 .It Fl -timeout Ns = Ns Ar seconds
 Set the I/O timeout in seconds.
 Exit if no data was transferred for the specified time.
 The default is 0, which means no timeout.
-.It Fl t , -times
+.It Fl -times , Fl t
 Set destination file and directory modification time to match the source
 when it is updated or created.
-.It Fl V , -version
-Print version and exit.
-.It Fl v , -verbose
+Negate with
+.Fl -no-times .
+.It Fl -verbose , Fl v
 Increase verbosity.
 Specify once for files being transferred, twice for specific status,
 thrice for per-file transfer information, and four times for per-file
 breakdowns.
-.It Fl x
-Do not cross filesystem boundaries.
-If this option is repeated, all mount point directories from the copy are
-omitted.
-Otherwise, it includes an empty directory at each mount point it encounters.
+.It Fl -version , Fl V
+Print version and exit.
 .El
 .Pp
 A remote

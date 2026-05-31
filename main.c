@@ -308,7 +308,7 @@ enum {
 	OP_DEL,
 };
 
-const char rsync_shopts[] = "468B:CaDe:ghIJlnOoprtVvxz";
+const char rsync_shopts[] = "468B:CDFae:f:ghIJlnOoprtVvxz";
 const struct option	 lopts[] = {
     { "address",	required_argument, NULL,		OP_ADDRESS },
     { "archive",	no_argument,	NULL,			'a' },
@@ -328,6 +328,7 @@ const struct option	 lopts[] = {
     { "dry-run",	no_argument,	&opts.dry_run,		1 },
     { "exclude",	required_argument, NULL,		OP_EXCLUDE },
     { "exclude-from",	required_argument, NULL,		OP_EXCLUDE_FROM },
+    { "filter",		required_argument, NULL,		'f' },
     { "group",		no_argument,	&opts.preserve_gids,	1 },
     { "no-group",	no_argument,	&opts.preserve_gids,	0 },
     { "help",		no_argument,	NULL,			'h' },
@@ -352,6 +353,7 @@ const struct option	 lopts[] = {
     { "no-owner",	no_argument,	&opts.preserve_uids,	0 },
     { "perms",		no_argument,	&opts.preserve_perms,	1 },
     { "no-perms",	no_argument,	&opts.preserve_perms,	0 },
+    { "one-file-system", no_argument,	&opts.one_file_system,	1 },
     { "port",		required_argument, NULL,		OP_PORT },
     { "recursive",	no_argument,	&opts.recursive,	1 },
     { "no-recursive",	no_argument,	&opts.recursive,	0 },
@@ -378,12 +380,56 @@ const struct option	 lopts[] = {
 static void
 usage(void)
 {
-	fprintf(stderr, "usage: %s"
-	    " [-468BCaDgIJlnOoprtVvx] [-e program] [--8-bit-output] [--address=sourceaddr]\n"
-	    "\t[--block-size=size] [--contimeout=seconds] [--compare-dest=dir] [--del] [--exclude]\n"
-	    "\t[--exclude-from=file] [--include] [--include-from=file]\n"
-	    "\t[--no-motd] [--numeric-ids] [--port=portnumber]\n"
-	    "\t[--rsh=program] [--rsync-path=program] [--size-only] [--timeout=seconds]\n"
+	fprintf(stderr, "usage: %s [-DF]\n"
+	    "\t[--8-bit-output, -8]\n"
+	    "\t[--address=sourceaddr]\n"
+	    "\t[--archive, -a]\n"
+	    "\t[--block-size=size, -B size]\n"
+	    "\t[--compare-dest=dir]\n"
+	    "\t[--contimeout=seconds]\n"
+	    "\t[--cvs-exclude, -C]\n"
+	    "\t[--del, --delete]\n"
+	    "\t[--devices]\n"
+	    "\t[--dry-run, -n]\n"
+	    "\t[--exclude-from=file]\n"
+	    "\t[--exclude=pattern]\n"
+	    "\t[--filter=filter, -f filter]\n"
+	    "\t[--group, -g]\n"
+	    "\t[--ignore-times, -I]\n"
+	    "\t[--include-from=file]\n"
+	    "\t[--include]\n"
+	    "\t[--ipv4, -4]\n"
+	    "\t[--ipv6, -6]\n"
+	    "\t[--links, -l]\n"
+	    "\t[--max-size=size]\n"
+	    "\t[--min-size=size]\n"
+	    "\t[--no-devices]\n"
+	    "\t[--no-group]\n"
+	    "\t[--no-links]\n"
+	    "\t[--no-motd]\n"
+	    "\t[--no-omit-dir-times]\n"
+	    "\t[--no-omit-link-times]\n"
+	    "\t[--no-owner]\n"
+	    "\t[--no-perms]\n"
+	    "\t[--no-recursive]\n"
+	    "\t[--no-specials]\n"
+	    "\t[--no-times]\n"
+	    "\t[--numeric-ids]\n"
+	    "\t[--omit-dir-times, -O]\n"
+	    "\t[--omit-link-times, -J]\n"
+	    "\t[--one-file-system, -x]\n"
+	    "\t[--owner, -o]\n"
+	    "\t[--perms, -p]\n"
+	    "\t[--port=portnumber]\n"
+	    "\t[--recursive, -r]\n"
+	    "\t[--rsh=program, -e program]\n"
+	    "\t[--rsync-path=program]\n"
+	    "\t[--size-only]\n"
+	    "\t[--specials]\n"
+	    "\t[--timeout=seconds]\n"
+	    "\t[--times, -t]\n"
+	    "\t[--verbose, -v]\n"
+	    "\t[--version, -V]\n"
 	    "\tsource ... directory\n",
 	    getprogname());
 }
@@ -403,9 +449,11 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 	int		 c, /* getopt return */
 			 rc, /* temporary */
 			 lidx; /* getopt long index */
-	size_t		 basedir_cnt = 0; /* number of base directories */
+	size_t		 basedir_cnt = 0, /* number of base directories */
+			 opts_F = 0; /* -F calls */
 	const char	*errstr; /* temporary error string */
 	bool		 cvs_excl = false; /* exclude CVS */
+	const char	*new_rule; /* filter rule */
 
 	(void)filter; /* TODO: currently unused */
 
@@ -429,7 +477,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			 */
 			if (scan_scaled(optarg, &tmpint) == -1 ||
 			    tmpint < 0 || tmpint > (512 << 20))
-				errx(1, "--block-size=%s: invalid numeric value", optarg);
+				errx(ERR_SYNTAX, "--block-size=%s: "
+				    "invalid numeric value", optarg);
 			opts.block_size = tmpint; 
 			break;  
 		case 'C':
@@ -438,6 +487,28 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 		case 'D':
 			opts.devices = 1;
 			opts.specials = 1;
+			break;
+		case 'F':
+			new_rule = NULL;
+			/*
+			 * If -F is specified once, the filter added is
+			 * a dir-merge; if twice, it's an exclusion.
+			 * (More than that, the -F ignored.)
+			 */
+			switch (++opts_F) {
+			case 1:
+				new_rule = ": /.rsync-filter";
+				break;  
+			case 2:
+				new_rule = "- .rsync-filter";
+				break;
+			default:
+				break;  
+			}
+			if (new_rule == NULL)
+				break;
+			rc = parse_rule(new_rule, RULE_NONE, '\n');
+			assert(rc == 0);
 			break;
 		case 'a':
 			opts.recursive = 1;
@@ -451,6 +522,11 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			break;
 		case 'e':
 			opts.ssh_prog = optarg;
+			break;
+		case 'f':
+			if (parse_rule(optarg, RULE_NONE, '\n') == -1)
+				errx(ERR_SYNTAX, "--filter=%s: syntax "
+				    "error", optarg);
 			break;
 		case 'g':
 			opts.preserve_gids = 1;
@@ -493,7 +569,7 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			opts.one_file_system++;
 			break;
 		case 'z':
-			fprintf(stderr, "%s: -z not supported yet\n", getprogname());
+			errx(ERR_SYNTAX, "-z: not supported yet");
 			break;
 		case 0:
 			/* Non-NULL flag values (e.g., --sender). */
@@ -507,10 +583,11 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			opts.address = optarg;
 			break;
 		case OP_CONTIMEOUT:
-			poll_contimeout = strtonum(optarg, 0, 60*60, &errstr);
+			poll_contimeout = strtonum(optarg, 0, 60 * 60,
+			    &errstr);
 			if (errstr != NULL)
-				errx(ERR_SYNTAX, "timeout is %s: %s",
-				    errstr, optarg);
+				errx(ERR_SYNTAX, "--contimeout=%s: %s",
+				    optarg, errstr);
 			break;
 		case OP_PORT:
 			opts.port = optarg;
@@ -519,20 +596,21 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			opts.rsync_path = optarg;
 			break;
 		case OP_TIMEOUT:
-			poll_timeout = strtonum(optarg, 0, 60*60, &errstr);
+			poll_timeout = strtonum(optarg, 0, 60 * 60,
+			    &errstr);
 			if (errstr != NULL)
-				errx(ERR_SYNTAX, "timeout is %s: %s",
-				    errstr, optarg);
+				errx(ERR_SYNTAX, "--timeout=%s: %s",
+				    optarg, errstr);
 			break;
 		case OP_EXCLUDE:
 			if (parse_rule(optarg, RULE_EXCLUDE, '\0') == -1)
-				errx(ERR_SYNTAX, "syntax error in exclude: %s",
-				    optarg);
+				errx(ERR_SYNTAX, "--exclude=%s: syntax "
+				    "error", optarg);
 			break;
 		case OP_INCLUDE:
 			if (parse_rule(optarg, RULE_INCLUDE, '\0') == -1)
-				errx(ERR_SYNTAX, "syntax error in include: %s",
-				    optarg);
+				errx(ERR_SYNTAX, "--include=%s: syntax "
+				    "error in include", optarg);
 			break;
 		case OP_EXCLUDE_FROM:
 			parse_file_rule(optarg, RULE_EXCLUDE, '\n');
@@ -541,10 +619,10 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			parse_file_rule(optarg, RULE_INCLUDE, '\n');
 			break;
 		case OP_COMP_DEST:
-			if (opts.alt_base_mode !=0 &&
+			if (opts.alt_base_mode != 0 &&
 			    opts.alt_base_mode != BASE_MODE_COMPARE) {
-				errx(1, "option --%s conflicts with %s",
-				    lopts[lidx].name,
+				errx(ERR_SYNTAX, "--%s: conflicts "
+				    "with %s", lopts[lidx].name,
 				    alt_base_mode(opts.alt_base_mode));
 			}
 			opts.alt_base_mode = BASE_MODE_COMPARE;
@@ -571,18 +649,20 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 basedir:
 #endif
 			if (basedir_cnt >= MAX_BASEDIR)
-				errx(1, "too many --%s directories specified",
-				    lopts[lidx].name);
+				errx(ERR_SYNTAX, "--%s: too many "
+				    "directories", lopts[lidx].name);
 			opts.basedir[basedir_cnt++] = optarg;
 			break;
 		case OP_MAX_SIZE:
 			if (scan_scaled(optarg, &tmpint) == -1)
-				errx(1, "--max-size=%s: invalid numeric value", optarg);
+				errx(ERR_SYNTAX, "--max-size=%s: "
+				    "invalid numeric value", optarg);
 			opts.max_size = tmpint;
 			break;
 		case OP_MIN_SIZE:
 			if (scan_scaled(optarg, &tmpint) == -1)
-				errx(1, "--min-size=%s: invalid numeric value", optarg);
+				errx(ERR_SYNTAX, "--min-size=%s: "
+				    "invalid numeric value", optarg);
 			opts.min_size = tmpint;
 			break;
 		case OP_BIT8:
