@@ -10,7 +10,7 @@ BSD (ISC) license.  It's compatible with a modern rsync (3.1.3 is used
 for testing, but any supporting protocol 27 will do), but accepts only a
 subset of rsync's command-line arguments.
 
-Its officially-supported operating system is OpenBSD, but it will
+It's officially-supported operating system is OpenBSD, but it will
 compile and run on other UNIX systems.  See [Portability](#Portability)
 for details.
 
@@ -311,36 +311,45 @@ The multitasking takes place by a finite state machine driven by data
 coming from the sender and files on disc are they are ready to be
 checksummed and uploaded.
 
+### The uploader
 The uploader scans through the list of files and asynchronously opens
 files to process blocks.
-While it waits for the files to open, it relinquishes control to the
+#### Waiting for files to open
+While waiting for the files to open, control is relinquished to the
 event loop.
-When files are available, it hashes and checksums blocks and uploads to
-the sender.
+#### Files are available
+When files are available, the uploader hashes and checksums blocks which are
+then uploaded to the sender.
 
+### The downloader
 The downloader waits on data from the sender.
+#### Waiting for data
 When data is ready (and prefixed by the file it will update), the
 downloader asynchronously opens the existing file to perform any block
 copying.
+#### Server data is available
 When the file is available for reading, it then continues to read data
 from the sender and copy from the existing file.
 
 ## Differences from rsync
 
+### The Generator
 The design of rsync involves another mode running alongside the
 receiver: the generator.
-This is implemented as another process
-[fork(2)](https://man.openbsd.org/fork.2)ed from the receiver, and
-communicating with the receiver and sender.
 
-In openrsync, the generator and receiver are one process, and an event
+The generator is implemented as another process
+[fork(2)](https://man.openbsd.org/fork.2)ed from the receiver to communicate
+with the receiver and sender.
+
+In openrsync, the *generator and receiver are one process*. An event
 loop is used for speedy responses to read and write requests.
 
 # Security
 
 Besides the usual defensive programming, openrsync makes significant use
-of native security features.
+of native OpenBSD security features.
 
+## Pledge
 The system operations available to executing code are foremost limited
 by OpenBSD's [pledge(2)](https://man.openbsd.org/pledge.2).  The pledges
 given depend upon the operating mode.  For example, the receiver needs
@@ -349,21 +358,24 @@ The daemon client needs DNS and network access, but only to a point.
 [pledge(2)](https://man.openbsd.org/pledge.2) allows available resources
 to be limited over the course of operation.
 
+## Unveil
 The second tool is OpenBSD's
 [unveil(2)](https://man.openbsd.org/unveil.2), which limits access to
-the file-system.  This protects against rogue attempts to "break out" of
+the file-system.  Unveil protects against rogue attempts to "break out" of
 the destination.  It's an attractive alternative to
-[chroot(2)](https://man.openbsd.org/chroot.2) because it doesn't require
+[chroot(2)](https://man.openbsd.org/chroot.2) since it doesn't need
 root permissions to execute.
 
 On the receiver side, the file-system is 
 [unveil(2)](https://man.openbsd.org/unveil.2)ed at and beneath the
 destination directory.
+
 After the creation of the destination directory, only targets within
 that directory may be accessed or modified.
 
+## Arcrandom is used forhashing seeds
 Lastly, the MD4 hashs are seeded with
-[arc4random(3)](https://man.openbsd.org/arc4random.3) instead of with
+[arc4random(3)](https://man.openbsd.org/arc4random.3) rather than with
 [time(3)](https://man.openbsd.org/time.3).  This is only applicable when
 running openrsync in server mode, as the server generates the seed.
 
@@ -371,15 +383,17 @@ running openrsync in server mode, as the server generates the seed.
 
 Many have asked about portability.
 
-The only officially-supported operating system is OpenBSD, as this has
-considerable security features.  openrsync does, however, use
+The only officially-supported operating system is OpenBSD, which provides
+considerable security features. Openrsync does, however, use
 [oconfigure](https://github.com/kristapsdz/oconfigure) for compilation
-on non-OpenBSD systems.  This is to encourage porting.
+on non-OpenBSD systems, to encourage porting.
 
-It currently is portable across Linux (glibc and musl), FreeBSD, NetBSD,
-Mac OS X, and OmniOS.  This is enforced by the GitHub CI mechanism,
-which tests on this systems.  Architectures tested for include x86\_64,
-aarch64, and s390x.
+Openrsync is currently portable across Linux (glibc and musl), FreeBSD, NetBSD,
+Mac OS X, and OmniOS. This portability is enforced by the GitHub CI mechanism,
+which tests on these systems.  Architectures tested for include 
+ - x86\_64,
+ - aarch64,
+ - s390x.
 
 The actual work of porting is matching the security features provided by
 OpenBSD's [pledge(2)](https://man.openbsd.org/pledge.2) and
@@ -388,10 +402,10 @@ elements to the functionality of the system.  Without them, your system
 accepts arbitrary data from the public network.
 
 This is possible (I think?) with FreeBSD's
-[Capsicum](https://man.freebsd.org/capsicum(4)), but Linux's security
-facilities are a mess, and will take an expert hand to properly secure.
+[Capsicum](https://man.freebsd.org/capsicum(4)), but security
+facilities in Linux are a mess, and will take an expert hand to properly secure.
 
 **rsync has specific running modes for the super-user**.
 It also pumps arbitrary data from the network onto your file-system.
-openrsync is about 10 000 lines of C code: do you trust me not to make
+Openrsync is about 10 000 lines of C code: do you trust me not to make
 mistakes?
