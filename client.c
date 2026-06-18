@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
+ * Copyright (c) Kristaps Dzonsons <kristaps@bsd.lv>
+ * Copyright (c) 2024, Klara, Inc.
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -49,9 +50,11 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 		err(ERR_IPC, "pledge");
 
 	memset(&sess, 0, sizeof(struct sess));
-	sess.mode = f->mode;
 	sess.opts = opts;
-	sess.lver = RSYNC_PROTOCOL;
+	sess.mode = f->mode;
+	sess.lver = sess.protocol = RSYNC_PROTOCOL;
+
+	LOG4("Printing(%d): itemize %d late %d", getpid(), 0, 0);
 
 	if (!io_write_int(&sess, fd, sess.lver)) {
 		ERRX1("io_write_int");
@@ -65,16 +68,20 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 	}
 
 	if (sess.rver < sess.lver) {
-		ERRX("remote protocol %d is older than our own %d: unsupported",
-		    sess.rver, sess.lver);
+		ERRX("remote protocol %d is older than our own %d: "
+		    "unsupported", sess.rver, sess.lver);
 		rc = 2;
 		goto out;
 	}
 
-	LOG2("client detected client version %d, server version %d, seed %d",
-	    sess.lver, sess.rver, sess.seed);
+	LOG3("client detected client version %d, server version %d, "
+	    "negotiated protocol version %d, seed %d",
+	    sess.lver, sess.rver, sess.protocol, sess.seed);
 
 	sess.mplex_reads = 1;
+
+	if (verbose > 1 && f->mode == FARGS_RECEIVER)
+		LOG0("Delta transmission disabled for this transfer");
 
 	/*
 	 * Now we need to get our list of files.
@@ -82,29 +89,43 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 	 */
 
 	if (f->mode != FARGS_RECEIVER) {
-		LOG2("client starting sender: %s",
+		LOG3("client starting sender: %s",
 		    f->host == NULL ? "(local)" : f->host);
+
+		sess.lreceiver = (f->host == NULL);
+
 		if (!rsync_sender(&sess, fd, fd, f->sourcesz,
 		    f->sources)) {
 			ERRX1("rsync_sender");
 			goto out;
 		}
 	} else {
-		LOG2("client starting receiver: %s",
+		LOG3("client starting receiver: %s",
 		    f->host == NULL ? "(local)" : f->host);
+
+		sess.lreceiver = true;
+
 		if (!rsync_receiver(&sess, fd, fd, f->sink)) {
 			ERRX1("rsync_receiver");
 			goto out;
 		}
 	}
 
-#if 0
-	/* Probably the EOF. */
-	if (io_read_check(&sess, fd))
-		WARNX("data remains in read pipe");
-#endif
+	/*
+	 * Make sure we flush out any remaining log messages or whatnot
+	 * before we leave.  This is especially important with higher
+	 * verbosity levels as smb rsync will be a lot more chatty with
+	 * non-data messages over the wire.  If there's still
+	 * data-tagged messages in after a flush, then.
+	 */
 
 	rc = 0;
+	if (!io_read_close(&sess, fd)) {
+		if (sess.mplex_read_remain > 0)
+			ERRX1("data remains in read pipe");
+		rc = ERR_IPC;
+	}
 out:
+	sess_cleanup(&sess);
 	return rc;
 }

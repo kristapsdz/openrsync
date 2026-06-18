@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
+ * Copyright (c) 2024, Klara, Inc.
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,6 +17,7 @@
 #include "config.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <grp.h>
 #include <inttypes.h>
 #include <pwd.h>
@@ -153,9 +155,9 @@ idents_remap(struct sess *sess, int isgid, struct ident *ids, size_t idsz)
  * upon "isgid", add it.
  * This also verifies that the name isn't too long.
  * Does nothing with user/group zero.
- * Return zero on failure, non-zero on success.
+ * Return false on failure, true on success.
  */
-int
+bool
 idents_add(int isgid, struct ident **ids, size_t *idsz, int32_t id)
 {
 	struct group	*grp;
@@ -165,39 +167,48 @@ idents_add(int isgid, struct ident **ids, size_t *idsz, int32_t id)
 	const char	*name;
 
 	if (id == 0)
-		return 1;
+		return true;
 
 	for (i = 0; i < *idsz; i++)
 		if ((*ids)[i].id == id)
-			return 1;
+			return true;
 
 	/*
 	 * Look up the reference in a type-specific way.
 	 * Make sure that the name length is sane: we transmit it using
-	 * a single byte.
+	 * a single byte.  Note that failing to resolve is not an issue, we
+	 * simply don't transmit a name and the other side cannot remap it.
 	 */
 
 	assert(i == *idsz);
 	if (isgid) {
+		errno = 0;
 		if ((grp = getgrgid((gid_t)id)) == NULL) {
-			ERR("%" PRIu32 ": unknown gid", id);
-			return 0;
+			if (errno != 0) {
+				ERR("%" PRIu32 ": unknown gid", id);
+				return false;
+			}
+			return true;
 		}
 		name = grp->gr_name;
 	} else {
+		errno = 0;
 		if ((usr = getpwuid((uid_t)id)) == NULL) {
-			ERR("%" PRIu32 ": unknown uid", id);
-			return 0;
+			if (errno != 0) {
+				ERR("%" PRIu32 ": unknown uid", id);
+				return false;
+			}
+			return true;
 		}
 		name = usr->pw_name;
 	}
 
 	if ((sz = strlen(name)) > UINT8_MAX) {
 		ERRX("%" PRIu32 ": name too long: %s", id, name);
-		return 0;
+		return false;
 	} else if (sz == 0) {
 		ERRX("%" PRIu32 ": zero-length name", id);
-		return 0;
+		return false;
 	}
 
 	/* Add the identifier to the array. */
@@ -205,31 +216,31 @@ idents_add(int isgid, struct ident **ids, size_t *idsz, int32_t id)
 	pp = reallocarray(*ids, *idsz + 1, sizeof(struct ident));
 	if (pp == NULL) {
 		ERR("reallocarray");
-		return 0;
+		return false;
 	}
 	*ids = pp;
 	(*ids)[*idsz].id = id;
 	(*ids)[*idsz].name = strdup(name);
 	if ((*ids)[*idsz].name == NULL) {
 		ERR("strdup");
-		return 0;
+		return false;
 	}
 
 	LOG4("adding identifier to list: %s (%u)",
 	    (*ids)[*idsz].name, (*ids)[*idsz].id);
 	(*idsz)++;
-	return 1;
+	return true;
 }
 
 /*
  * Send a list of struct ident.
  * See idents_recv().
  * We should only do this if we're preserving gids/uids.
- * Return zero on failure, non-zero on success.
+ * Return false on failure, true on success.
  */
-int
-idents_send(struct sess *sess,
-	int fd, const struct ident *ids, size_t idsz)
+bool
+idents_send(struct sess *sess, int fd, const struct ident *ids,
+    size_t idsz)
 {
 	size_t	 i, sz;
 
@@ -240,33 +251,32 @@ idents_send(struct sess *sess,
 		assert(sz > 0 && sz <= UINT8_MAX);
 		if (!io_write_uint(sess, fd, ids[i].id)) {
 			ERRX1("io_write_uint");
-			return 0;
+			return false;
 		} else if (!io_write_byte(sess, fd, sz)) {
 			ERRX1("io_write_byte");
-			return 0;
+			return false;
 		} else if (!io_write_buf(sess, fd, ids[i].name, sz)) {
 			ERRX1("io_write_buf");
-			return 0;
+			return false;
 		}
 	}
 
 	if (!io_write_int(sess, fd, 0)) {
 		ERRX1("io_write_int");
-		return 0;
+		return false;
 	}
 
-	return 1;
+	return true;
 }
 
 /*
  * Receive a list of struct ident.
  * See idents_send().
  * We should only do this if we're preserving gids/uids.
- * Return zero on failure, non-zero on success.
+ * Return false on failure, true on success.
  */
-int
-idents_recv(struct sess *sess,
-	int fd, struct ident **ids, size_t *idsz)
+bool
+idents_recv(struct sess *sess, int fd, struct ident **ids, size_t *idsz)
 {
 	uint32_t id;
 	uint8_t	 sz;
@@ -275,7 +285,7 @@ idents_recv(struct sess *sess,
 	for (;;) {
 		if (!io_read_uint(sess, fd, &id)) {
 			ERRX1("io_read_uint");
-			return 0;
+			return false;
 		} else if (id == 0)
 			break;
 
@@ -283,7 +293,7 @@ idents_recv(struct sess *sess,
 			*idsz + 1, sizeof(struct ident));
 		if (pp == NULL) {
 			ERR("reallocarray");
-			return 0;
+			return false;
 		}
 		*ids = pp;
 		memset(&(*ids)[*idsz], 0, sizeof(struct ident));
@@ -296,23 +306,22 @@ idents_recv(struct sess *sess,
 
 		if (!io_read_byte(sess, fd, &sz)) {
 			ERRX1("io_read_byte");
-			return 0;
+			return false;
 		} else if (sz == 0)
 			WARNX("zero-length name in identifier list");
 
-		assert(id < INT32_MAX);
 		(*ids)[*idsz].id = id;
 		(*ids)[*idsz].name = calloc(sz + 1, 1);
 		if ((*ids)[*idsz].name == NULL) {
 			ERR("calloc");
-			return 0;
+			return false;
 		}
 		if (!io_read_buf(sess, fd, (*ids)[*idsz].name, sz)) {
 			ERRX1("io_read_buf");
-			return 0;
+			return false;
 		}
 		(*idsz)++;
 	}
 
-	return 1;
+	return true;
 }

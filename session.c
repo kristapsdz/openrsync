@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
+ * Copyright (c) 2024, Klara, Inc.
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -95,35 +96,37 @@ stats_log(struct sess *sess,
  * At the end of transmission, we write our statistics if we're the
  * server, then log only if we're not the server.
  * Either way, only do this if we're in verbose mode.
- * Returns zero on failure, non-zero on success.
+ * Returns false on failure, true on success.
  */
-int
+bool
 sess_stats_send(struct sess *sess, int fd)
 {
-	uint64_t tw, tr, ts;
-
-	if (verbose == 0)
-		return 1;
+	uint64_t	 tw, tr, ts;
 
 	tw = sess->total_write;
 	tr = sess->total_read;
 	ts = sess->total_size;
 
+	if (verbose > 0)
+		stats_log(sess, tr, tw, ts);
+
+	if (!sess->opts->server && verbose == 0)
+		return true;
+
 	if (sess->opts->server) {
 		if (!io_write_ulong(sess, fd, tr)) {
 			ERRX1("io_write_ulong");
-			return 0;
+			return false;
 		} else if (!io_write_ulong(sess, fd, tw)) {
 			ERRX1("io_write_ulong");
-			return 0;
+			return false;
 		} else if (!io_write_ulong(sess, fd, ts)) {
 			ERRX1("io_write_ulong");
-			return 0;
+			return false;
 		}
 	}
 
-	stats_log(sess, tr, tw, ts);
-	return 1;
+	return true;
 }
 
 /*
@@ -131,27 +134,45 @@ sess_stats_send(struct sess *sess, int fd)
  * Only do this (1) if we're in verbose mode and (2) if we're the
  * server.
  * Then log the findings.
- * Return zero on failure, non-zero on success.
+ * Return false on failure, true on success.
  */
-int
+bool
 sess_stats_recv(struct sess *sess, int fd)
 {
 	uint64_t tr, tw, ts;
 
-	if (sess->opts->server || verbose == 0)
-		return 1;
+	if (sess->opts->server)
+		return true;
 
 	if (!io_read_ulong(sess, fd, &tw)) {
 		ERRX1("io_read_ulong");
-		return 0;
+		return false;
 	} else if (!io_read_ulong(sess, fd, &tr)) {
 		ERRX1("io_read_ulong");
-		return 0;
+		return false;
 	} else if (!io_read_ulong(sess, fd, &ts)) {
 		ERRX1("io_read_ulong");
-		return 0;
+		return false;
 	}
 
-	stats_log(sess, tr, tw, ts);
-	return 1;
+	if (verbose > 0)
+		stats_log(sess, tr, tw, ts);
+	return true;
 }
+
+
+/*
+ * Clean up a download session.  Should be called before discarding a
+ * session object to ensure all accumlated resources are released.
+ */
+void
+sess_cleanup(struct sess *sess)
+{
+	free(sess->token_dbuf);
+	sess->token_dbuf = NULL;
+	free(sess->token_cbuf);
+	sess->token_cbuf = NULL;
+	free(sess->token_buf);
+	sess->token_buf = NULL;
+}
+

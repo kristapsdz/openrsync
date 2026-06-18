@@ -36,13 +36,34 @@
 
 #include "extern.h"
 
-/* Code taken directly from mkdir(1).
+/*
+ * We're using AT_RESOLVE_BENEATH in a couple of places just for some
+ * additional safety on platforms that support it, so it's not a hard
+ * requirement.
+ */
+#ifndef AT_RESOLVE_BENEATH
+# define AT_RESOLVE_BENEATH	0
+#else /* AT_RESOLVE_BENEATH */
+/*
+ * We need to be able to pick out fstatat() errors due to 'sandbox'
+ * restrictions on systems that support it, so we map the errno here.
+ */
+# ifdef ENOTCAPABLE
+#  define AT_RESOLVE_BENEATH_ERRNO ENOTCAPABLE
+# else
+#  error This system supports AT_RESOLVE_BENEATH, but needs a mapping for ENOTCAPABLE
+# endif
+#endif /* !AT_RESOLVE_BENEATH */
 
+/*
+ * Code taken directly from mkdir(1).
+ * Difference: added "mode".
+ *
  * mkpath -- create directories.
  *	path     - path
  */
 int
-mkpath(char *path)
+mkpath(char *path, mode_t mode)
 {
 	struct stat sb;
 	char *slash;
@@ -57,7 +78,7 @@ mkpath(char *path)
 		done = (*slash == '\0');
 		*slash = '\0';
 
-		if (mkdir(path, 0777) != 0) {
+		if (mkdir(path, mode) != 0) {
 			int mkdir_errno = errno;
 
 			if (stat(path, &sb) == -1) {
@@ -79,4 +100,58 @@ mkpath(char *path)
 	}
 
 	return (0);
+}
+
+int
+mkpathat(int fd, char *path, mode_t mode)
+{
+	struct stat	 sb;
+	char		*slash;
+	bool		 done;
+
+	slash = path;
+
+	for (;;) {
+		slash += strspn(slash, "/");
+		slash += strcspn(slash, "/");
+
+		done = (*slash == '\0');
+		*slash = '\0';
+
+		if (mkdirat(fd, path, mode) != 0) {
+			int mkdir_errno = errno;
+
+			if (fstatat(fd, path, &sb, AT_RESOLVE_BENEATH) == -1) {
+				/*
+				 * fstatat() likely failed because the
+				 * directory is not there, but there are
+				 * other reasons.  We'll largely ignore
+				 * those and just kick back the original
+				 * mkdir() error, but if it's an
+				 * AT_RESOLVE_BENEATH violation then we
+				 * want to kick that back instead.
+				 */
+				*slash = '/';
+#ifdef AT_RESOLVE_BENEATH_ERRNO
+				if (errno == AT_RESOLVE_BENEATH_ERRNO)
+					return -1;
+#endif
+				errno = mkdir_errno;
+				return -1;
+			}
+			if (!S_ISDIR(sb.st_mode)) {
+				/* Is there, but isn't a directory */
+				errno = ENOTDIR;
+				*slash = '/';
+				return -1;
+			}
+		}
+
+		if (done)
+			break;
+
+		*slash = '/';
+	}
+
+	return 0;
 }

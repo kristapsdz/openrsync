@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
+ * Copyright (c) 2024, Klara, Inc.
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -402,9 +403,9 @@ rsync_socket(const struct opts *opts, int sd, const struct fargs *f)
 		err(ERR_IPC, "pledge");
 
 	memset(&sess, 0, sizeof(struct sess));
-	sess.lver = RSYNC_PROTOCOL;
 	sess.opts = opts;
 	sess.mode = f->mode;
+	sess.lver = sess.protocol = RSYNC_PROTOCOL;
 
 	assert(f->host != NULL);
 	assert(f->module != NULL);
@@ -476,11 +477,13 @@ rsync_socket(const struct opts *opts, int sd, const struct fargs *f)
 	 * Emit a standalone newline afterward.
 	 */
 
-	for (i = skip ; args[i] != NULL; i++)
+	for (i = skip ; args[i] != NULL; i++) {
+		LOG2("exec[%zu] = %s", i, args[i]);
 		if (!io_write_line(&sess, sd, args[i])) {
 			ERRX1("io_write_line");
 			goto out;
 		}
+	}
 	if (!io_write_byte(&sess, sd, '\n')) {
 		ERRX1("io_write_line");
 		goto out;
@@ -530,6 +533,7 @@ rsync_socket(const struct opts *opts, int sd, const struct fargs *f)
 
 	rc = 0;
 out:
+	sess_cleanup(&sess);
 	free(args);
 	return rc;
 }

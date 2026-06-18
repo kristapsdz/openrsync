@@ -1,5 +1,6 @@
 /*
  * Copyright (c) Kristaps Dzonsons <kristaps@bsd.lv>
+ * Copyright (c) 2024, Klara, Inc.
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -52,12 +53,15 @@ int poll_timeout;
  * A remote host is has a colon before the first path separator.
  * This works for rsh remote hosts (host:/foo/bar), implicit rsync
  * remote hosts (host::/foo/bar), and explicit (rsync://host/foo).
- * Return zero if local, non-zero if remote.
+ * Return false if local, true if remote.
  */
-static int
+static bool
 fargs_is_remote(const char *v)
 {
 	size_t	 pos;
+
+	if (v == NULL)
+		return false;
 
 	pos = strcspn(v, ":/");
 	return v[pos] == ':';
@@ -65,18 +69,84 @@ fargs_is_remote(const char *v)
 
 /*
  * Test whether a remote host is specifically an rsync daemon.
- * Return zero if not, non-zero if so.
+ * Return false if not, true if so.
  */
-static int
+static bool
 fargs_is_daemon(const char *v)
 {
 	size_t	 pos;
 
 	if (strncasecmp(v, "rsync://", 8) == 0)
-		return 1;
-
+		return true;
 	pos = strcspn(v, ":/");
 	return v[pos] == ':' && v[pos + 1] == ':';
+}
+
+/*
+ * Strips the hostnames from the remote host.
+ *   rsync://host/module/path -> module/path
+ *   host::module/path -> module/path
+ *   host:path -> path
+ * Also make sure that the remote hosts are the same.
+ */
+static void
+fargs_normalize_spec(const struct fargs *f, char *spec, size_t hostlen)
+{
+	char	*cp, *ccp, *host_part, *module_part;
+	size_t	 j;
+
+	cp = spec;
+	j = strlen(cp);
+	if (f->remote && strncasecmp(cp, "rsync://", 8) == 0) {
+		/* rsync://[user@]host[:port]/path */
+
+		/* cp is the host part */
+		host_part = cp + 8;
+		if ((ccp = strchr(host_part, '@')) != NULL)
+			host_part = ccp + 1;
+
+		/* skip :port */
+		if ((ccp = strchr(host_part, ':')) != NULL) {
+			*ccp = '\0';
+			ccp++;
+		} else {
+			ccp = host_part;
+		}
+
+		/*
+		 * ccp is the part just after our hostname, which may include a
+		 * port number.
+		 */
+		module_part = strchr(ccp + 1, '/');
+		if (module_part != NULL)
+			module_part++;
+		else
+			module_part = &ccp[strlen(ccp) - 1];
+
+		if (strncmp(host_part, f->host, hostlen) ||
+		    (host_part[hostlen] != '/' && host_part[hostlen] != '\0'))
+			errx(ERR_SYNTAX, "different remote host: %s", spec);
+
+		memmove(spec, module_part, strlen(module_part) + 1);
+	} else if (f->remote && strncmp(cp, "::", 2) == 0) {
+		/* ::path */
+		memmove(spec, spec + 2, j - 1);
+	} else if (f->remote) {
+		/* host::path */
+		if (strncmp(cp, f->host, hostlen) ||
+		    (cp[hostlen] != ':' && cp[hostlen] != '\0'))
+			errx(ERR_SYNTAX, "different remote host: %s", spec);
+		memmove(spec, spec + hostlen + 2, j - hostlen - 1);
+	} else if (cp[0] == ':') {
+		/* :path */
+		memmove(spec, spec + 1, j);
+	} else {
+		/* host:path */
+		if (strncmp(cp, f->host, hostlen) ||
+		    (cp[hostlen] != ':' && cp[hostlen] != '\0'))
+			errx(ERR_SYNTAX, "different remote host: %s", spec);
+		memmove(spec, spec + hostlen + 1, j - hostlen);
+	}
 }
 
 /*
@@ -92,24 +162,37 @@ fargs_is_daemon(const char *v)
 static struct fargs *
 fargs_parse(size_t argc, char *argv[], struct opts *opts)
 {
-	struct fargs	*f = NULL;
-	char		*cp, *ccp;
-	size_t		 i, j, len = 0;
+	struct fargs	*f; /* returned arguments */
+	char		*cp; /* temporary */
+	size_t		 i, /* temporary */
+			 j, /* temporary */
+			 hostlen = 0;
+	size_t		 sinkarg; /* write into this host */
 
 	/* Allocations. */
 
 	if ((f = calloc(1, sizeof(struct fargs))) == NULL)
 		err(ERR_NOMEM, NULL);
 
-	f->sourcesz = argc - 1;
-	if ((f->sources = calloc(f->sourcesz, sizeof(char *))) == NULL)
-		err(ERR_NOMEM, NULL);
+	if (argc > 1) {
+		sinkarg = argc - 1;
+		f->sourcesz = argc - 1;
+	} else {
+		sinkarg = argc;
+		f->sourcesz = 1;
+	}
 
-	for (i = 0; i < argc - 1; i++)
-		if ((f->sources[i] = strdup(argv[i])) == NULL)
+	if (f->sourcesz > 0) {
+		f->sources = calloc(f->sourcesz, sizeof(char *));
+		if (f->sources == NULL)
 			err(ERR_NOMEM, NULL);
+		for (i = 0; i < sinkarg; i++)
+			if ((f->sources[i] = strdup(argv[i])) == NULL)
+				err(ERR_NOMEM, NULL);
+	}
 
-	if ((f->sink = strdup(argv[i])) == NULL)
+	if (argv[sinkarg] != NULL &&
+	    (f->sink = strdup(argv[sinkarg])) == NULL)
 		err(ERR_NOMEM, NULL);
 
 	/*
@@ -117,12 +200,13 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 	 * If the last is a remote host, then we're sending from the
 	 * local to the remote host ("sender" mode).
 	 * If the first, remote to local ("receiver" mode).
-	 * If neither, a local transfer in sender style.
+	 * If neither, a local transfer in sender style unless we're doing an
+	 * implied --list-only.
 	 */
 
-	f->mode = FARGS_SENDER;
+	f->mode = f->sink == NULL ? FARGS_RECEIVER : FARGS_SENDER;
 
-	if (fargs_is_remote(f->sink)) {
+	if (f->sink != NULL && fargs_is_remote(f->sink)) {
 		f->mode = FARGS_SENDER;
 		if ((f->host = strdup(f->sink)) == NULL)
 			err(ERR_NOMEM, NULL);
@@ -139,17 +223,42 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 
 	if (f->host != NULL) {
 		if (strncasecmp(f->host, "rsync://", 8) == 0) {
-			/* rsync://host[:port]/module[/path] */
-			f->remote = true;
-			len = strlen(f->host) - 8 + 1;
-			memmove(f->host, f->host + 8, len);
-			if ((cp = strchr(f->host, '/')) == NULL)
+			/* rsync://[user@]host[:port]/module[/path] */
+
+			f->remote = 1;
+			hostlen = strlen(f->host) - 8;
+
+			/* [user@]host --> extract host */
+
+			if ((cp = strchr(f->host + 8, '@')) != NULL) {
+				f->user = strndup(f->host + 8,
+				    cp - (f->host + 8));
+				if (f->user == NULL)
+					err(ERR_NOMEM, NULL);
+
+				cp++;
+				hostlen = strlen(cp);
+			} else {
+				cp = f->host + 8;
+			}
+
+			memmove(f->host, cp, hostlen + 1 /* NUL */);
+
+			if ((cp = strchr(f->host, '/')) == NULL &&
+			    f->sink != NULL) {
 				errx(ERR_SYNTAX,
 				    "rsync protocol requires a module name");
-			*cp++ = '\0';
-			f->module = cp;
-			if ((cp = strchr(f->module, '/')) != NULL)
-				*cp = '\0';
+			}
+
+			if (cp != NULL) {
+				*cp++ = '\0';
+				f->module = cp;
+				if ((cp = strchr(f->module, '/')) != NULL)
+					*cp = '\0';
+			} else {
+				f->module = "";
+			}
+
 			if ((cp = strchr(f->host, ':')) != NULL) {
 				/* host:port --> extract port */
 				*cp++ = '\0';
@@ -162,18 +271,35 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 			*cp++ = '\0';
 			if (*cp == ':') {
 				/* host::module[/path] */
-				f->remote = true;
+				f->remote = 1;
 				f->module = ++cp;
 				cp = strchr(f->module, '/');
 				if (cp != NULL)
 					*cp = '\0';
 			}
 		}
-		if ((len = strlen(f->host)) == 0)
+
+		if ((hostlen = strlen(f->host)) == 0)
 			errx(ERR_SYNTAX, "empty remote host");
-		if (f->remote && strlen(f->module) == 0)
+
+		/*
+		 * Leaving off the module is fine if we're just
+		 * requesting a listing.
+		 */
+
+		if (f->remote &&
+		    (f->module == NULL || strlen(f->module) == 0) &&
+		    f->sink != NULL)
 			errx(ERR_SYNTAX, "empty remote module");
 	}
+
+	/*
+	 * For an implied --list-only transfer, we don't need to verify
+	 * anything here because there's just the one arg.
+	 */
+
+	if (f->sink == NULL)
+		goto skipverify;
 
 	/* Make sure we have the same "hostspec" for all files. */
 
@@ -199,91 +325,59 @@ fargs_parse(size_t argc, char *argv[], struct opts *opts)
 				    "remote sources: %s", f->sources[i]);
 			}
 	} else {
-		if (f->mode != FARGS_RECEIVER)
-			errx(ERR_SYNTAX, "sender mode for remote "
-				"daemon receivers not yet supported");
-		for (i = 0; i < f->sourcesz; i++) {
-			if (fargs_is_daemon(f->sources[i]))
-				continue;
-			errx(ERR_SYNTAX, "non-remote daemon file "
-				"in list of remote daemon sources: "
-				"%s", f->sources[i]);
-		}
+		if (f->mode == FARGS_SENDER)
+			for (i = 0; i < f->sourcesz; i++) {
+				if (!fargs_is_remote(f->sources[i]))
+					continue;
+				errx(ERR_SYNTAX,
+				    "remote file in list of local sources: %s",
+				    f->sources[i]);
+			}
+		if (f->mode == FARGS_RECEIVER)
+			for (i = 0; i < f->sourcesz; i++) {
+				if (fargs_is_daemon(f->sources[i]))
+					continue;
+				errx(ERR_SYNTAX, "non-remote daemon file "
+					"in list of remote daemon sources: "
+					"%s", f->sources[i]);
+			}
 	}
 
+skipverify:
 	/*
 	 * If we're not remote and a sender, strip our hostname.
 	 * Then exit if we're a sender or a local connection.
 	 */
-
 	if (!f->remote) {
 		if (f->host == NULL)
 			return f;
 		if (f->mode == FARGS_SENDER) {
 			assert(f->host != NULL);
-			assert(len > 0);
-			j = strlen(f->sink);
-			memmove(f->sink, f->sink + len + 1, j - len);
+			assert(hostlen > 0);
+			if (f->sink != NULL) {
+				j = strlen(f->sink);
+				memmove(f->sink, f->sink + hostlen + 1,
+				    j - hostlen);
+			}
 			return f;
 		} else if (f->mode != FARGS_RECEIVER)
 			return f;
 	}
 
-	/*
-	 * Now strip the hostnames from the remote host.
-	 *   rsync://host/module/path -> module/path
-	 *   host::module/path -> module/path
-	 *   host:path -> path
-	 * Also make sure that the remote hosts are the same.
-	 */
-
 	assert(f->host != NULL);
-	assert(len > 0);
+	assert(hostlen > 0);
 
-	for (i = 0; i < f->sourcesz; i++) {
-		cp = f->sources[i];
-		j = strlen(cp);
-		if (f->remote &&
-		    strncasecmp(cp, "rsync://", 8) == 0) {
-			/* rsync://host[:port]/path */
-			size_t module_offset = len;
-			cp += 8;
-			/* skip :port */
-			if ((ccp = strchr(cp, ':')) != NULL) {
-				*ccp = '\0';
-				module_offset += strcspn(ccp + 1, "/") + 1;
-			}
-			if (strncmp(cp, f->host, len) ||
-			    (cp[len] != '/' && cp[len] != '\0'))
-				errx(ERR_SYNTAX, "different remote host: %s",
-				    f->sources[i]);
-			memmove(f->sources[i],
-				f->sources[i] + module_offset + 8 + 1,
-				j - module_offset - 8);
-		} else if (f->remote && strncmp(cp, "::", 2) == 0) {
-			/* ::path */
-			memmove(f->sources[i],
-				f->sources[i] + 2, j - 1);
-		} else if (f->remote) {
-			/* host::path */
-			if (strncmp(cp, f->host, len) ||
-			    (cp[len] != ':' && cp[len] != '\0'))
-				errx(ERR_SYNTAX, "different remote host: %s",
-				    f->sources[i]);
-			memmove(f->sources[i], f->sources[i] + len + 2,
-			    j - len - 1);
-		} else if (cp[0] == ':') {
-			/* :path */
-			memmove(f->sources[i], f->sources[i] + 1, j);
-		} else {
-			/* host:path */
-			if (strncmp(cp, f->host, len) ||
-			    (cp[len] != ':' && cp[len] != '\0'))
-				errx(ERR_SYNTAX, "different remote host: %s",
-				    f->sources[i]);
-			memmove(f->sources[i],
-				f->sources[i] + len + 1, j - len);
-		}
+	if (f->mode == FARGS_RECEIVER) {
+		for (i = 0; i < f->sourcesz; i++)
+			fargs_normalize_spec(f, f->sources[i], hostlen);
+	} else if (f->sink != NULL) {
+		/*
+		 * ssh and local transfers bailed out earlier and
+		 * stripped the host: part as needed.  If we got here,
+		 * we're connecting to a daemon as a sender.
+		 */
+		assert(f->remote);
+		fargs_normalize_spec(f, f->sink, hostlen);
 	}
 
 	return f;
@@ -293,6 +387,7 @@ enum {
 	OP_ADDRESS = CHAR_MAX + 1,
 	OP_PORT,
 	OP_RSYNCPATH,
+	OP_PROTOCOL,
 	OP_TIMEOUT,
 	OP_EXCLUDE,
 	OP_INCLUDE,
@@ -308,7 +403,7 @@ enum {
 	OP_SET_BOOL_TRUE,
 };
 
-const char rsync_shopts[] = "468B:CDFae:f:ghIJlnOoprtVvxz";
+const char rsync_shopts[] = "468B:CDFade:f:ghIJlnOoprtVvxz";
 const struct option	 lopts[] = {
 #if 0
     { "copy-dest",	required_argument, NULL,		OP_COPY_DEST },
@@ -360,6 +455,7 @@ const struct option	 lopts[] = {
     { "owner",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "perms",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "port",		required_argument, NULL,		OP_PORT },
+    { "protocol",	required_argument, NULL,		OP_PROTOCOL },
     { "recursive",	no_argument,	NULL,			'r' },
     { "rsh",		required_argument, NULL,		'e' },
     { "rsync-path",	required_argument, NULL,		OP_RSYNCPATH },
@@ -371,6 +467,7 @@ const struct option	 lopts[] = {
     { "times",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "verbose",	no_argument,	NULL,			'v' },
     { "version",	no_argument,	NULL,			'V' },
+    { "dirs",		no_argument,	NULL,			'd' },
     { NULL,		0,		NULL,			0 }
 #if 0
     { "sync-file",	required_argument, NULL,		6 },
@@ -390,6 +487,7 @@ usage(void)
 	    "\t[--cvs-exclude, -C]\n"
 	    "\t[--del, --delete]\n"
 	    "\t[--devices]\n"
+	    "\t[--dirs, -d]\n"
 	    "\t[--dry-run, -n]\n"
 	    "\t[--exclude-from=file]\n"
 	    "\t[--exclude=pattern]\n"
@@ -421,6 +519,7 @@ usage(void)
 	    "\t[--owner, -o]\n"
 	    "\t[--perms, -p]\n"
 	    "\t[--port=portnumber]\n"
+	    "\t[--protocol]\n"
 	    "\t[--recursive, -r]\n"
 	    "\t[--rsh=program, -e program]\n"
 	    "\t[--rsync-path=program]\n"
@@ -450,7 +549,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			 rc, /* temporary */
 			 lidx; /* getopt long index */
 	size_t		 basedir_cnt = 0, /* number of base directories */
-			 opts_F = 0; /* -F calls */
+			 opts_F = 0, /* -F calls */
+			 opts_no_dirs = 0; /* transitional */
 	const char	*errstr; /* temporary error string */
 	bool		 cvs_excl = false; /* exclude CVS */
 	const char	*new_rule; /* filter rule */
@@ -467,13 +567,13 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			else if (strcmp(lopts[lidx].name, "devices") == 0)
 				opts.devices = true;
 			else if (strcmp(lopts[lidx].name, "delete") == 0)
-				opts.del = true;
+				opts.del = DMODE_BEFORE;
 			else if (strcmp(lopts[lidx].name, "del") == 0)
-				opts.del = true;
+				opts.del = DMODE_BEFORE;
 			else if (strcmp(lopts[lidx].name, "size-only") == 0)
 				opts.size_only = true;
 			else if (strcmp(lopts[lidx].name, "numeric-ids") == 0)
-				opts.numeric_ids = true;
+				opts.numeric_ids = NIDS_FULL;
 			else if (strcmp(lopts[lidx].name, "perms") == 0)
 				opts.preserve_perms = true;
 			else if (strcmp(lopts[lidx].name, "owner") == 0)
@@ -576,6 +676,9 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			opts.devices = true;
 			opts.specials = true;
 			break;
+		case 'd':
+			opts.dirs = DIRMODE_REQUESTED;
+			break;
 		case 'e':
 			opts.ssh_prog = optarg;
 			break;
@@ -597,7 +700,10 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			opts.preserve_links = true;
 			break;
 		case 'n':
-			opts.dry_run = true;
+			if (opts.dry_run == DRY_DISABLED)
+				opts.dry_run = DRY_XFER;
+			else if (opts.dry_run == DRY_XFER)
+				opts.dry_run = DRY_FULL;
 			break;
 		case 'O':
 			opts.omit_dir_times = true;
@@ -625,7 +731,7 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			opts.one_file_system++;
 			break;
 		case 'z':
-			errx(ERR_SYNTAX, "-z: not supported yet");
+			opts.compress = true;
 			break;
 		case 0:
 			/* Non-NULL flag values (e.g., --sender). */
@@ -650,6 +756,11 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			break;
 		case OP_RSYNCPATH:
 			opts.rsync_path = optarg;
+			break;
+		case OP_PROTOCOL:
+			if (strcmp(optarg, "27") != 0)
+				errx(ERR_SYNTAX, "--protocol=%s: only "
+				   "27 is currently supported", optarg);
 			break;
 		case OP_TIMEOUT:
 			poll_timeout = strtonum(optarg, 0, 60 * 60,
@@ -731,6 +842,17 @@ basedir:
 		}
 	}
 
+	if (opts.del > DMODE_NONE &&
+	    !(opts.recursive || opts.dirs != DIRMODE_OFF))
+		errx(ERR_SYNTAX, "--delete does not work without "
+		    "--recursive or --dirs");
+
+	if (opts.dirs && opts_no_dirs)
+		ERRX1("Cannot use --dirs and --no-dirs at the same time");
+
+	if (opts.recursive && opts.dirs == DIRMODE_OFF && !opts_no_dirs)
+		opts.dirs = DIRMODE_IMPLIED;
+
         assert(opts.ipf == 0 || opts.ipf == 4 || opts.ipf == 6);
 
 	if (opts.port == NULL)
@@ -764,6 +886,7 @@ basedir:
 int
 main(int argc, char *argv[])
 {
+	char 		 *msg, *ptr = NULL; /* temporary */
 	pid_t		  child; /* return value of fork() */
 	int		  fds[2], /* 0 is for parent, 1 for child */
 			  sd = -1, /* socket for daemon */
@@ -775,6 +898,13 @@ main(int argc, char *argv[])
 	struct sess	  sess;
 	struct fargs	 *fargs;
 	char		**args;
+
+	/* 
+	 * We cannot safely log to stdout until we are certain that
+	 * we're the client (i.e., the server must enable multiplexing
+	 * before logging to stdout).
+	 */
+	rsync_set_logfile(isatty(STDOUT_FILENO) ? stdout : stderr, NULL);
 
 	/* Global pledge. */
 
@@ -804,6 +934,8 @@ main(int argc, char *argv[])
 	if (opts.server)
 		exit(rsync_server(&opts, (size_t)argc, argv));
 
+	rsync_set_logfile(stdout, NULL);
+
 	/*
 	 * Now we know that we're the client on the local machine
 	 * invoking rsync(1).
@@ -816,6 +948,18 @@ main(int argc, char *argv[])
 
 	fargs = fargs_parse(argc, argv, &opts);
 	assert(fargs != NULL);
+
+	/*
+	 * For implied --list-only mode, we set --dirs up early so that
+	 * it can be inherited by the other paths.  We won't touch
+	 * opts.list_only yet because we don't want to send a spurious
+	 * --list-only to the reference rsync.
+	 */
+
+	if (fargs->sink == NULL) {
+		assert(fargs->mode == FARGS_RECEIVER);
+		opts.dirs = DIRMODE_REQUESTED;
+	}
 
 	/*
 	 * If we're contacting an rsync:// daemon, then we don't need to
@@ -866,18 +1010,39 @@ main(int argc, char *argv[])
 
 		args = fargs_cmdline(&sess, fargs, NULL);
 
-		for (i = 0; args[i] != NULL; i++)
-			LOG2("exec[%d] = %s", i, args[i]);
+		if (verbose > 1) {
+			msg = strdup("opening connection using:");
+			for (i = 0; args[i] != NULL && msg != NULL; i++) {
+				if (asprintf(&ptr, "%s %s", msg, args[i]) < 0)
+					break;
+				free(msg);
+				msg = ptr;
+			}
+			LOG0("%s%s (%d args)", msg != NULL ? msg :
+			    args[0], ptr ? "" : " ...", i);
+			free(msg);
+		}
+
+		fflush(stdout);
 
 		/* Make sure the child's stdin is from the sender. */
+
 		if (dup2(fds[1], STDIN_FILENO) == -1)
 			err(ERR_IPC, "dup2");
 		if (dup2(fds[1], STDOUT_FILENO) == -1)
 			err(ERR_IPC, "dup2");
 		execvp(args[0], args);
+		ERR("exec on '%s'", args[0]);
 		_exit(ERR_IPC);
 		/* NOTREACHED */
 	default:
+		if (fargs->sink == NULL) {
+			assert(fargs->mode == FARGS_RECEIVER);
+			fargs->sink = strdup(".");
+			if (fargs->sink == NULL)
+				errx(ERR_NOMEM, NULL);
+		}
+
 		close(fds[1]);
 		if (!fargs->remote)
 			rc = rsync_client(&opts, fds[0], fargs);

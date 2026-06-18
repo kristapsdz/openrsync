@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
+ * Copyright (c) Kristaps Dzonsons <kristaps@bsd.lv>
+ * Copyright (c) 2024, Klara, Inc.
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -98,4 +99,45 @@ void
 hash_file_final(MD4_CTX *ctx, unsigned char *md)
 {
 	MD4_Final(md, ctx);
+}
+
+static void
+hash_fmap_chunks(const struct fmap *map, size_t mapsz, MD4_CTX *ctx)
+{
+	off_t		 offset = 0;
+	size_t		 cursz;
+	const void	*data;
+
+	while (mapsz != 0) {
+		cursz = MINIMUM(HASH_LARGE_CHUNK_SIZE, mapsz);
+		data = fmap_data(map, offset, cursz);
+		MD4_Update(ctx, data, cursz);
+		offset += cursz;
+		mapsz -= cursz;
+	}
+}
+
+/* FIXME: mapsz is in fmap */
+bool
+hash_fmap(const char *path, const struct fmap *map, size_t mapsz,
+    unsigned char *md, const struct sess *sess)
+{
+	MD4_CTX	 ctx;
+	int32_t	 seed;
+
+	MD4_Init(&ctx);
+	if (sess != NULL) {
+		seed = htole32(sess->seed);
+		MD4_Update(&ctx, &seed, sizeof(int32_t));
+	}
+
+	if (!fmap_trap(map)) {
+		ERRX("%s: file truncated while hashing", path);
+		return false;
+	}
+
+	hash_fmap_chunks(map, mapsz, &ctx);
+	fmap_untrap(map);
+	MD4_Final(md, &ctx);
+	return true;
 }

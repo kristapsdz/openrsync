@@ -31,6 +31,7 @@
 .Op Fl -cvs-exclude , Fl C
 .Op Fl -del , Fl -delete
 .Op Fl -devices
+.Op Fl -dirs , Fl d
 .Op Fl -dry-run , Fl n
 .Op Fl -exclude-from Ns = Ns Ar file
 .Op Fl -exclude Ns = Ns Ar pattern
@@ -62,6 +63,7 @@
 .Op Fl -owner , Fl o
 .Op Fl -perms , Fl p
 .Op Fl -port Ns = Ns Ar portnumber
+.Op Fl -protocol Ns = Ns Ar protocol
 .Op Fl -recursive , Fl r
 .Op Fl -rsh Ns = Ns Ar program , Fl e program
 .Op Fl -rsync-path Ns = Ns Ar program
@@ -178,6 +180,15 @@ Only applicable with
 Also transfer device files.
 Negate with
 .Fl -no-devices .
+.It Fl d , -dirs
+Copies directories, which are normally skipped unless
+.Fl -recursive
+is specified.
+Directory contents are not copied, unless the path specified includes a
+trailing slash
+.Po Do dir/ Dc Pc
+or is the literal
+.Dq \&. .
 .It Fl -dry-run , Fl n
 Do not actually modify the destination.
 Mainly useful in combination with
@@ -316,6 +327,9 @@ can be given as a decimal integer or as a name to be looked up in the
 database.
 The default is
 .Dq rsync .
+.It Fl -protocol Ns = Ns Ar protocol
+The protocol to use.
+This currently may only be set to 27.
 .It Fl -recursive , Fl r
 If
 .Ar source

@@ -34,10 +34,13 @@ enum rule_type {
 	RULE_RISK,
 };
 
-int	  parse_rule(const char *line, enum rule_type, char);
-void	  parse_file_rule(const char *, enum rule_type, char);
-void	  send_rules(struct sess *, int);
-void	  recv_rules(struct sess *, int);
-int  	  rules_match(const char *, bool, enum fmode, bool);
+int	parse_rule(const char *line, enum rule_type, char);
+void	parse_file_rule(const char *, enum rule_type, char);
+void	send_rules(struct sess *, int);
+void	recv_rules(struct sess *, int);
+int  	rules_match(const char *, bool, enum fmode, bool);
+void	rules_base(const char *);
+void	rules_dir_push(const char *, size_t, int);
+void	rules_dir_pop(const char *, size_t);
 
 #endif /*!RULES_H*/

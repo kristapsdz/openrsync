@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2019 Kristaps Dzonsons <kristaps@bsd.lv>
+ * Copyright (c) 2024, Klara, Inc.
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -127,9 +128,9 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 
 	/* Shared arguments. */
 
-	if (sess->opts->del)
+	if (sess->opts->del != DMODE_NONE)
 		addargs(&args, "--delete");
-	if (sess->opts->numeric_ids)
+	if (sess->opts->numeric_ids == NIDS_FULL)
 		addargs(&args, "--numeric-ids");
 	if (sess->opts->preserve_gids)
 		addargs(&args, "-g");
@@ -161,6 +162,8 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "-x");
 	if (sess->opts->one_file_system > 0)
 		addargs(&args, "-x");
+	if (sess->opts->compress)
+		addargs(&args, "-z");
 	if (sess->opts->specials && !sess->opts->devices)
 		addargs(&args, "--specials");
 	if (!sess->opts->specials && sess->opts->devices)
@@ -170,6 +173,8 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "--max-size=%lld", (long long)sess->opts->max_size);
 	if (sess->opts->min_size >= 0)
 		addargs(&args, "--min-size=%lld", (long long)sess->opts->min_size);
+	if (sess->opts->dirs > 0)
+		addargs(&args, "--dirs");
 	if (sess->opts->bit8)
 		addargs(&args, "-8");
         if (sess->opts->block_size > 0)

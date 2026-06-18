@@ -22,6 +22,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -304,22 +305,43 @@ mkstempsock(const char *root, char *path)
  * (excluding the final '\0').
  */
 int
-mktemplate(char **ret, const char *path, int recursive)
+mktemplate(char **ret, const char *path, bool hasdir, bool tmp)
 {
-	int		 n, dirlen;
-	const char	*cp;
+	const char	 suffix[] = ".XXXXXXXXXX";
+	const size_t	 maxfnlen = NAME_MAX - (sizeof(suffix) - 1) - 1;
+	int		 n, /* return code */
+			 dirlen, /* length of directory part */
+			 fnlen; /* length of file part */
+	const char	*cp; /* temporary */
 
-	if (recursive && (cp = strrchr(path, '/')) != NULL) {
-		dirlen = cp - path;
-		n = asprintf(ret, "%.*s/.%s.XXXXXXXXXX",
-			dirlen, path, path + dirlen + 1);
+	if (tmp) {
+		cp = strrchr(path, '/');
+		if (cp == NULL)
+			cp = path;
+		else
+			cp++;
+		fnlen = strnlen(cp, maxfnlen);
+		n = asprintf(ret, ".%.*s%s", fnlen, cp, suffix);
 		if (n == -1) {
 			ERR("asprintf");
 			*ret = NULL;
 		}
-	} else if ((n = asprintf(ret, ".%s.XXXXXXXXXX", path)) == -1) {
-		ERR("asprintf");
-		*ret = NULL;
+	} else if (hasdir && (cp = strrchr(path, '/')) != NULL) {
+		dirlen = (int)(cp - path);
+		fnlen = strnlen(path + dirlen + 1, maxfnlen);
+		n = asprintf(ret, "%.*s/.%.*s%s",
+		    dirlen, path, fnlen, path + dirlen + 1, suffix);
+		if (n == -1) {
+			ERR("asprintf");
+			*ret = NULL;
+		}
+	} else {
+		fnlen = strnlen(path, maxfnlen);
+		n = asprintf(ret, ".%.*s%s", fnlen, path, suffix);
+		if (n == -1) {
+			ERR("asprintf");
+			*ret = NULL;
+		}
 	}
 
 	return n;

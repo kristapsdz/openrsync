@@ -1,0 +1,18 @@
+#! /bin/sh
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+mkdir dir1
+cd dir1
+mkdirfile one.txt
+
+mkdir ../dir2
+cd ../dir2
+mkdir dir1
+cd dir1
+mkdirfile one.txt
+
+cd ../..
+$rsync -az dir1 dir3
+compare_trees dir2 dir3

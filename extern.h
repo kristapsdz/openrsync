@@ -1,5 +1,6 @@
 /*
  * Copyright (c) Kristaps Dzonsons <kristaps@bsd.lv>
+ * Copyright (c) 2024, Klara, Inc.
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -17,14 +18,31 @@
 #define EXTERN_H
 
 #include "md4.h"
+#include <fts.h> /* FTSENT */
 #include <stdbool.h>
+#include <stdio.h> /* FILE */
+#include <time.h> /* struct timespec */
 
 #if !HAVE_PLEDGE
 # define pledge(x, y) (1)
 #endif
-#if !HAVE_UNVEIL
 # define unveil(x, y) (1)
+
+/*
+ * Mirror the reference rsync here; they don't really entertain path
+ * limitations lower than 4096.
+ */
+
+#if PATH_MAX <= 4096
+# define BIGPATH_MAX	(4096 + 1024)
+#else
+# define BIGPATH_MAX	(PATH_MAX + 1024)
 #endif
+
+/*
+ * Chunk large fmaps into 4MB pieces, arbitrarily
+ */
+#define	HASH_LARGE_CHUNK_SIZE (4 * 1024 * 1024)
 
 /*
  * This is the rsync protocol version that we support.
@@ -32,9 +50,48 @@
 #define	RSYNC_PROTOCOL	(27)
 
 /*
+ * Itemise-changes flags.
+ */
+#define	IFLAG_ATIME		(1U << 0)
+#define	IFLAG_CHECKSUM		(1U << 1)
+#define	IFLAG_SIZE		(1U << 2)
+#define	IFLAG_TIME		(1U << 3)
+#define	IFLAG_PERMS		(1U << 4)
+#define	IFLAG_OWNER		(1U << 5)
+#define	IFLAG_GROUP		(1U << 6)
+#define	IFLAG_ACL		(1U << 7)
+#define	IFLAG_XATTR		(1U << 8)
+#define	IFLAG_BASIS_FOLLOWS	(1U << 11)
+#define	IFLAG_HLINK_FOLLOWS	(1U << 12)
+#define	IFLAG_NEW		(1U << 13)
+#define	IFLAG_LOCAL_CHANGE	(1U << 14)
+#define	IFLAG_TRANSFER		(1U << 15)
+/*
+ * (Not for transmission...)
+ */
+#define	IFLAG_MISSING_DATA	(1U << 16)
+#define	IFLAG_DELETED		(1U << 17) /* used by log_format() */
+#define	IFLAG_HAD_BASIS		(1U << 18) /* had basis, used by sender_get_iflags() */
+
+#define	SIGNIFICANT_IFLAGS	\
+	(~(IFLAG_BASIS_FOLLOWS | IFLAG_HLINK_FOLLOWS | IFLAG_LOCAL_CHANGE))
+
+/*
  * Maximum amount of file data sent over the wire at once.
  */
 #define MAX_CHUNK	(32 * 1024)
+
+/*
+ * Maximum size of a compression chunk.  Saves 2 bytes to fit a 14 bit
+ * count and compression flags.
+ */
+#define MAX_COMP_CHUNK  16383
+
+/*
+ * Decompression buffer size: zlib needs a bit of extra space in the
+ * buffer.
+ */
+#define MAX_CHUNK_BUF   ((MAX_CHUNK)*1001/1000+16)
 
 /*
  * This is the minimum size for a block of data not including those in
@@ -46,6 +103,18 @@
  * Maximum number of base directories that can be used.
  */
 #define MAX_BASEDIR	20
+
+enum dirmode {
+	DIRMODE_OFF = 0,	/* No --dirs */
+	DIRMODE_IMPLIED,	/* Implied --dirs */
+	DIRMODE_REQUESTED,	/* --dirs */
+};
+
+enum dryrun {
+	DRY_DISABLED = 0,	/* full run */
+	DRY_XFER,		/* xfer only */
+	DRY_FULL,		/* full dry-run */
+};
 
 #define BASE_MODE_COMPARE	1
 #define BASE_MODE_COPY		2
@@ -96,17 +165,58 @@ enum	fmode {
 };
 
 /*
+ * FIXME: document
+ */
+#define	IOTAG_OFFSET	7
+
+/*
+ * A resizable buffer used for storing data.
+ */
+struct	iobuf {
+	uint8_t	*buffer; /* the data buffer */
+	size_t	 offset; /* position in buffer */
+	size_t	 resid; /* amount read into buffer */
+	size_t	 size; /* allocated size */
+	bool	 eof; /* whether EOF has been seen */
+};
+
+/*
+ * Codes used during multiplexing.
+ */
+enum	iotag {
+	IT_DATA = 0,
+	IT_ERROR_XFER,
+	IT_INFO,
+	IT_ERROR, // protocol 30+
+	IT_WARNING, // protocol 30+
+	IT_SUCCESS = 100,
+	IT_DELETED,
+	IT_NO_SEND,
+};
+
+/*
+ * A buffer of fixed size, but filled with multiple attempts.  The
+ * vstring is "complete" when the offset equals the size.
+ */
+struct	vstring {
+	char		*vstring_buffer; /* binary contents */
+	size_t		 vstring_offset; /* current size */
+	size_t		 vstring_size; /* expected size */
+};
+
+/*
  * File arguments given on the command line.
  * See struct opts.
  */
 struct	fargs {
-	char	  *host; /* hostname or NULL if local */
-	char	 **sources; /* transfer source */
-	size_t	   sourcesz; /* number of sources */
-	char	  *sink; /* transfer endpoint */
-	enum fmode mode; /* mode of operation */
-	bool	   remote; /* uses rsync:// or :: for remote */
-	char	  *module; /* if rsync://, the module */
+	char		  *user; /* username or NULL if unspecified or local */
+	char		  *host; /* hostname or NULL if local */
+	char		 **sources; /* transfer source */
+	size_t		   sourcesz; /* number of sources */
+	char		  *sink; /* transfer endpoint */
+	enum fmode	   mode; /* mode of operation */
+	bool		   remote; /* uses rsync:// or :: for remote */
+	const char	  *module; /* if rsync://, the module */
 };
 
 /*
@@ -114,16 +224,82 @@ struct	fargs {
  * (There are some parts we don't use yet.)
  */
 struct	flstat {
+	unsigned int	 flags; /* see FLSTAT_xxx */
 	mode_t		 mode;	/* mode */
 	uid_t		 uid;	/* user */
 	gid_t		 gid;	/* group */
 	dev_t		 rdev;	/* device type */
 	off_t		 size;	/* size */
 	time_t		 mtime;	/* modification */
-	unsigned int	 flags;
+	int64_t		 device; /* device number, for hardlink detection */
+	int64_t		 inode;  /* inode number, for hardlink detection */
+	uint64_t	 nlink;  /* number of links, for hardlink detection */
 #define	FLSTAT_TOP_DIR	 0x01	/* a top-level directory */
-
 };
+
+/*
+ * Subset of stat(2) information from the original destination file that
+ * we need to apply to backup files.
+ */
+struct	fldstat {
+	mode_t		 mode;	 /* mode */
+	struct timespec	 atime;	 /* access */
+	struct timespec	 mtime;	 /* modification */
+	uid_t		 uid;	 /* user */
+	gid_t		 gid;	 /* group */
+};
+
+/*
+ * Used for logging messages.
+ */
+enum log_type {
+	LT_CLIENT,
+	LT_INFO,
+	LT_LOG,
+	LT_WARNING,
+	LT_ERROR,
+};
+
+/*
+ * Delete modes.  Currently only supports DMODE_BEFORE or no deletion.
+ */
+enum	delmode {
+	DMODE_NONE = 0,
+	DMODE_BEFORE,
+	DMODE_DURING, /* FIXME: NOT SUPPORTED */
+	DMODE_DELAY, /* FIXME: NOT SUPPORTED */
+};
+
+/* --numeric-ids mode */
+enum	nidsmode {
+	NIDS_OFF = 0,	/* no numeric IDs */
+	NIDS_STEALTH,	/* numeric IDs, client side is unaware */
+	NIDS_FULL,	/* numeric IDs, both sides know */
+};
+
+/*
+ * XXX: meaning?
+ */
+enum name_basis {
+	BASIS_DIR_LOW = 0,
+	BASIS_DIR_HIGH = 0x7F,
+	BASIS_NORMAL,
+	BASIS_PARTIAL_DIR,
+	BASIS_BACKUP,
+	BASIS_FUZZY,
+};
+
+/*
+ * The root of a file list.
+ */
+struct	froot {
+	char	*rootpath; /* path */
+	size_t	 refcount; /* references */
+	int	 rootfd; /* root dirfd */
+};
+
+struct froot *froot_acquire(struct froot *);
+void froot_release(struct froot *);
 
 /*
  * A list of files with their statistics.
@@ -133,7 +309,47 @@ struct	flist {
 	const char	*wpath; /* "working" path for receiver */
 	struct flstat	 st; /* file information */
 	char		*link; /* symlink target or NULL */
+	int32_t		 iflags; /* itemise flags */
+	enum name_basis	 basis; /* name basis */
+	enum fmode	 fmode; /* sender/receiver */
+	union {
+		struct {
+			struct froot *froot;
+		};
+		struct {
+			struct fldstat dstat; /* orig dest file info */
+			int flstate; /* flagged for redo or complete? */
+			int sendidx; /* sender index */
+		};
+	};
 };
+
+/*
+ * Flags for "flstate" of struct flist.
+ */
+#define	FLIST_COMPLETE		0x01	/* finished */
+#define	FLIST_REDO		0x02	/* finished, but go again */
+#define	FLIST_SUCCESS		0x04	/* finished and in place */
+#define	FLIST_FAILED		0x08	/* failed */
+#define	FLIST_SUCCESS_ACKED	0x10	/* sent success message */
+#define	FLIST_NEED_HLINK	0x20	/* needs to be hardlinked */
+#define	FLIST_SKIPPED		0x40	/* file should be skipped */
+#define	FLIST_SKIP_METADATA	0x80	/* file metadata should be skipped */
+#define	FLIST_DONE_MASK		(FLIST_SUCCESS | FLIST_REDO | FLIST_FAILED)
+
+/*
+ * Holds many struct flist and takes care of memory management.
+ */
+struct fl {
+	struct flist	*flp; /* list of flists */
+	size_t		 sz;   /* actual entries */
+	size_t		 max;  /* allocated size */
+	struct sess	*sess;	/* associated session */
+};
+
+void		 fl_init(struct sess *, struct fl *);
+void		 fl_pop(struct fl *);
+struct flist	*fl_new(struct fl *);
 
 /*
  * Options passed into the command line.
@@ -143,18 +359,18 @@ struct	opts {
 	bool		 sender;		/* --sender */
 	bool		 server;		/* --server */
 	bool		 recursive;		/* -r */
-	bool		 dry_run;		/* -n */
+	enum dryrun	 dry_run;		/* -n */
 	bool		 preserve_times;	/* -t */
 	bool		 preserve_perms;	/* -p */
 	bool		 preserve_links;	/* -l */
 	bool		 preserve_gids;		/* -g */
 	bool		 preserve_uids;		/* -u */
-	bool		 del;			/* --delete */
+	enum delmode	 del;			/* --delete */
 	bool		 del_excl;		/* --delete-excluded */
 	bool		 devices;		/* --devices */
 	bool		 specials;		/* --specials */
 	bool		 no_motd;		/* --no-motd */
-	bool		 numeric_ids;		/* --numeric-ids */
+	enum nidsmode	 numeric_ids;		/* --numeric-ids */
 	size_t		 one_file_system;	/* -x */
 	bool		 ignore_times;		/* -I */
 	bool		 omit_dir_times;	/* -O */
@@ -168,10 +384,13 @@ struct	opts {
 	char		*port;			/* --port */
 	char		*address;		/* --address */
 	char		*basedir[MAX_BASEDIR];
+	bool		 compress;		/* -z */
+	int		 compression_level;	/* --compress-level */
 #if 0
 	char		*syncfile;		/* --sync-file */
 #endif
 	char		 ipf;			/* 0 (unspec), 4 (IPV4), 6 (IPV6) */
+	enum dirmode	 dirs;			/* -d --dirs */
 	bool		 bit8;			/* -8 */
 	long		 block_size;		/* -B */
 };
@@ -196,6 +415,7 @@ enum	blkstatst {
 	BLKSTAT_HASH,
 	BLKSTAT_DONE,
 	BLKSTAT_PHASE,
+	BLKSTAT_FLUSH,
 };
 
 /*
@@ -206,8 +426,8 @@ struct	blkstat {
 	off_t		 total; /* total amount processed */
 	off_t		 dirty; /* total amount sent */
 	size_t		 hint; /* optimisation: next probable match */
-	void		*map; /* mapped file or MAP_FAILED otherwise */
-	size_t		 mapsz; /* size of file or zero */
+	struct fmap	*map; /* mapped file or NULL otherwise */
+	size_t		 mapsz; /* TODO: remove (fmap_size()) */
 	int		 fd; /* descriptor girding the map */
 	enum blkstatst	 curst; /* FSM for sending file blocks */
 	off_t		 curpos; /* sending: position in file to send */
@@ -217,6 +437,7 @@ struct	blkstat {
 	uint32_t	 s1; /* partial sum for computing fast hash */
 	uint32_t	 s2; /* partial sum for computing fast hash */
 	MD4_CTX		 ctx; /* context for hash_file */
+	bool		 error; /* is there an error on the send? */
 };
 
 /*
@@ -232,14 +453,51 @@ struct	blkset {
 	size_t		 blksz; /* number of blks */
 };
 
+/* TODO */
+enum	send_dl_state {
+	SDL_META = 0,
+	SDL_IFLAGS,
+	SDL_BLOCKS,
+	SDL_DONE,
+};
+
+/*
+ * Context for the role (sender/receiver).  The role may embed this into
+ * their own context struct.
+ */
+struct	role {
+	bool		 append; /* append mode active (TODO) */
+	int		 client; /* socket for the client */
+
+	/*
+	 * We basically track two different forms of phase: the metadata
+	 * phase, and the transfer phase.  The metadata phase may be
+	 * advanced from the transfer phase, as we'll immediately move
+	 * on to checking for or processing redo entries when the first
+	 * phase's file requests are done.
+	 *
+	 * Each role has its own way of tracking these, so we just have
+	 * them drop a pointer here to avoid having to keep things in
+	 * sync.  `append` above will be reset as the transfer phase
+	 * progresses, so parts dealing with block metadata should check
+	 * `phase` *and* `append` to determine if they need to
+	 * send/receive block checksums, and anything part of the data
+	 * transfer process should just be checking `append`.
+	 */
+	const size_t	*phase; /* metadata phase */
+};
+
 /*
  * Values required during a communication session.
  */
 struct	sess {
 	const struct opts *opts; /* system options */
+	size_t		   sender_flsz; /* sender's flist size */
 	enum fmode	   mode; /* sender or receiver */
 	int32_t		   seed; /* checksum seed */
 	int32_t		   lver; /* local version */
+	bool		   lreceiver; /* Receiver is local */
+	int32_t		   protocol; /* negotiated protocol version */
 	int32_t		   rver; /* remote version */
 	uint64_t	   total_read; /* non-logging wire/reads */
 	uint64_t	   total_size; /* total file size */
@@ -247,6 +505,34 @@ struct	sess {
 	int		   mplex_reads; /* multiplexing reads? */
 	size_t		   mplex_read_remain; /* remaining bytes */
 	int		   mplex_writes; /* multiplexing writes? */
+	struct role	  *role; /* role context */
+	char		  *token_buf; /* used for protocol token processing */
+	size_t		   token_bufsz; /* used for protocol token processing */
+	char		  *token_dbuf; /* decompression buffer */
+	size_t		   token_dbufsz; /* size of token_dbuf */
+	char		  *token_cbuf; /* decompression buffer */
+	size_t		   token_cbufsz; /* size of token_dbuf */
+	void		 **wbufp; /* senders's output buffer ptr */
+	size_t		  *wbufszp; /* senders's output buffer length */
+	size_t		  *wbufmaxp; /* senders's output buffer size */
+};
+
+#define TOKEN_END               0x00    /* end of sequence */
+#define TOKEN_LONG              0x20    /* Token is 32-bits */
+#define TOKEN_LONG_RUN          0x21    /* Token is 32-bits and has 16 bit run count */
+#define TOKEN_DEFLATED          0x40    /* Data is deflated */
+#define TOKEN_RELATIVE          0x80    /* Token number is relative */
+#define TOKEN_RUN_RELATIVE      0xc0    /* Run count is 16-bit */
+        
+#define TOKEN_MAX_DATA          MAX_COMP_CHUNK  /* reserve 2 bytes for flags */
+#define TOKEN_MAX_BUF           (TOKEN_MAX_DATA + 2)
+
+enum    zlib_state {
+	COMPRESS_INIT = 0,
+	COMPRESS_READY,
+	COMPRESS_SEQUENCE,
+	COMPRESS_RUN,
+	COMPRESS_DONE,
 };
 
 /*
@@ -274,6 +560,9 @@ struct	download;
 struct	upload;
 
 extern int verbose;
+
+#define TMPDIR_FD       (p->rootfd)
+#define IS_TMPDIR       (false)
 
 #define MINIMUM(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -323,36 +612,55 @@ void	rsync_errx(const char *, ...)
 void	rsync_errx1(const char *, ...)
 			__attribute__((format(printf, 1, 2)));
 
-int	flist_del(struct sess *, int, const struct flist *, size_t);
-int	flist_gen(struct sess *, size_t, char **, struct flist **, size_t *);
+bool	flist_add_del(struct sess *, const char *, size_t, struct flist **,
+	    size_t *, size_t *, const struct stat *);
+void	flist_del(const struct sess *, int, const struct flist *, size_t);
+int	flist_dir_cmp(const void *, const void *);
+bool	flist_gen(struct sess *, size_t, char **, struct fl *);
 void	flist_free(struct flist *, size_t);
 int	flist_recv(struct sess *, int, struct flist **, size_t *);
-int	flist_send(struct sess *, int, int, const struct flist *, size_t);
-int	flist_gen_dels(struct sess *, const char *, struct flist **, size_t *,
+bool	flist_send(struct sess *, int, int, const struct flist *, size_t);
+bool	flist_gen_dels(struct sess *, const char *, struct flist **, size_t *,
 	    const struct flist *, size_t);
+bool	flist_fts_check(struct sess *, FTSENT *, enum fmode);
+
+struct fmap	*fmap_open(const char *, int, size_t);
+bool		 fmap_access_valid(const struct fmap *, off_t, size_t);
+const void	*fmap_data(const struct fmap *, off_t, size_t);
+size_t		 fmap_size(const struct fmap *);
+void		 fmap_close(struct fmap *);
+bool		 fmap_trap(const struct fmap *);
+void		 fmap_untrap(const struct fmap *);
 
 const char	 *alt_base_mode(int);
 char		**fargs_cmdline(struct sess *, const struct fargs *, size_t *);
 
-int	io_read_buf(struct sess *, int, void *, size_t);
-int	io_read_byte(struct sess *, int, uint8_t *);
-int	io_read_check(int);
-int	io_read_flush(struct sess *, int);
-int	io_read_int(struct sess *, int, int32_t *);
-int	io_read_uint(struct sess *, int, uint32_t *);
-int	io_read_long(struct sess *, int, int64_t *);
-int	io_read_size(struct sess *, int, size_t *);
-int	io_read_ulong(struct sess *, int, uint64_t *);
-int	io_write_buf(struct sess *, int, const void *, size_t);
-int	io_write_byte(struct sess *, int, uint8_t);
-int	io_write_int(struct sess *, int, int32_t);
-int	io_write_uint(struct sess *, int, uint32_t);
-int	io_write_line(struct sess *, int, const char *);
-int	io_write_long(struct sess *, int, int64_t);
-int	io_write_ulong(struct sess *, int, uint64_t);
+bool	io_read_buf(struct sess *, int, void *, size_t);
+bool	io_read_byte(struct sess *, int, uint8_t *);
+int	io_read_check(const struct sess *, int);
+bool	io_read_close(struct sess *, int);
+bool	io_read_flush(struct sess *, int);
+bool	io_read_int(struct sess *, int, int32_t *);
+bool	io_read_uint(struct sess *, int, uint32_t *);
+bool	io_read_long(struct sess *, int, int64_t *);
+bool	io_read_size(struct sess *, int, size_t *);
+bool	io_read_ulong(struct sess *, int, uint64_t *);
+bool	io_read_vstring(struct sess *, int, char **);
+bool	io_write_blocking(int, const void *, size_t);
+bool	io_write_buf(struct sess *, int, const void *, size_t);
+bool	io_write_buf_tagged_safe(struct sess *, int, const void *, size_t, enum iotag);
+bool	io_write_byte(struct sess *, int, uint8_t);
+bool	io_write_int(struct sess *, int, int32_t);
+bool	io_write_uint(struct sess *, int, uint32_t);
+bool	io_write_int_tagged(struct sess *, int, int32_t, enum iotag);
+bool	io_write_line(struct sess *, int, const char *);
+bool	io_write_long(struct sess *, int, int64_t);
+bool	io_write_ulong(struct sess *, int, uint64_t);
 
-int	io_lowbuffer_alloc(struct sess *, void **, size_t *, size_t *, size_t);
+bool	io_lowbuffer_alloc(struct sess *, void **, size_t *, size_t *, size_t);
+bool	io_lowbuffer_alloc_safe(struct sess *, void **, size_t *, size_t *, size_t);
 void	io_lowbuffer_int(struct sess *, void *, size_t *, size_t, int32_t);
+void	io_lowbuffer_byte(struct sess *, void *, size_t *, size_t, int8_t);
 void	io_lowbuffer_buf(struct sess *, void *, size_t *, size_t, const void *,
 	    size_t);
 
@@ -360,37 +668,52 @@ void	io_buffer_int(void *, size_t *, size_t, int32_t);
 void	io_buffer_buf(void *, size_t *, size_t, const void *, size_t);
 
 void	io_unbuffer_int(const void *, size_t *, size_t, int32_t *);
-int	io_unbuffer_size(const void *, size_t *, size_t, size_t *);
+bool	io_unbuffer_size(const void *, size_t *, size_t, size_t *);
 void	io_unbuffer_buf(const void *, size_t *, size_t, void *, size_t);
 
-int	rsync_receiver(struct sess *, int, int, const char *);
-int	rsync_sender(struct sess *, int, int, size_t, char **);
+bool	iobuf_alloc(const struct sess *, struct iobuf *, size_t);
+size_t	iobuf_get_readsz(const struct iobuf *);
+bool	iobuf_seen_eof(const struct iobuf *);
+void	iobuf_eof(struct iobuf *);
+bool	iobuf_fill(struct sess *, struct iobuf *, int);
+int32_t	iobuf_peek_int(const struct iobuf *);
+void	iobuf_read_buf(struct iobuf *, void *, size_t);
+void	iobuf_read_int(struct iobuf *, int32_t *);
+bool	iobuf_read_size(struct iobuf *, size_t *);
+void	iobuf_read_byte(struct iobuf *, uint8_t *);
+int	iobuf_read_vstring(struct iobuf *, struct vstring *);
+
+bool	rsync_receiver(struct sess *, int, int, const char *);
+bool	rsync_sender(struct sess *, int, int, size_t, char **);
 int	rsync_client(const struct opts *, int, const struct fargs *);
 int	rsync_connect(const struct opts *, int *, const struct fargs *);
 int	rsync_socket(const struct opts *, int, const struct fargs *);
 int	rsync_server(const struct opts *, size_t, char *[]);
 int	rsync_downloader(struct download *, struct sess *, int *);
-int	rsync_set_metadata(struct sess *, int, int, const struct flist *,
-	    const char *);
-int	rsync_set_metadata_at(struct sess *, int, int, const struct flist *,
-	    const char *);
-int	rsync_uploader(struct upload *, int *, struct sess *, int *);
-int	rsync_uploader_tail(struct upload *, struct sess *);
+bool	rsync_set_metadata_at(const struct sess *, bool, int,
+	    const struct flist *, const char *);
+void	rsync_uploader_next_phase(struct upload *, struct sess *, int);
+void	rsync_uploader_ack_complete(struct upload *, struct sess *, int);
+int	rsync_uploader(struct upload *, struct sess *, int, int *, int *);
+bool	rsync_uploader_tail(struct upload *, struct sess *);
 
-struct download	*download_alloc(struct sess *, int, const struct flist *,
+bool		 download_needs_redo(const struct download *);
+const char	*download_partial_filepath(const struct flist *);
+struct download	*download_alloc(struct sess *, int, struct flist *,
 		    size_t, int);
-void		 download_free(struct download *);
+void		 download_free(struct sess *, struct download *);
 struct upload	*upload_alloc(const char *, int, int, size_t,
-		    const struct flist *, size_t, mode_t);
+		    struct flist *, size_t, size_t, mode_t);
 void		upload_free(struct upload *);
 
 struct blktab	*blkhash_alloc(void);
-int		 blkhash_set(struct blktab *, const struct blkset *);
+bool		 blkhash_set(struct blktab *, const struct blkset *);
 void		 blkhash_free(struct blktab *);
 
-struct blkset	*blk_recv(struct sess *, int, const char *);
-void		 blk_recv_ack(char [20], const struct blkset *, int32_t);
-void		 blk_match(struct sess *, const struct blkset *,
+struct blkset	*blk_recv(struct sess *, int, struct iobuf *, const char *,
+		    struct blkset *, size_t *, enum send_dl_state *);
+void		 blk_recv_ack(char [16], const struct blkset *, int32_t);
+bool		 blk_match(struct sess *, const struct blkset *,
 		    const char *, struct blkstat *);
 int		 blk_send(struct sess *, int, size_t, const struct blkset *,
 		    const char *);
@@ -403,34 +726,49 @@ void		 hash_slow(const void *, size_t, unsigned char *,
 void		 hash_file_start(MD4_CTX *, const struct sess *);
 void		 hash_file_buf(MD4_CTX *, const void *, size_t);
 void		 hash_file_final(MD4_CTX *, unsigned char *);
+bool		 hash_fmap(const char *, const struct fmap *, size_t,
+		    unsigned char *, const struct sess *);
 
 void		 copy_file(int, const char *, const struct flist *);
+bool   	 	 move_file(int, const char *, int, const char *, bool, bool);
 
-int		 mkpath(char *);
+int		 mkpath(char *, mode_t);
+int		 mkpathat(int fd, char *, mode_t);
 
 int		 mkstempat(int, char *);
 char		*mkstemplinkat(char*, int, char *);
 char		*mkstempfifoat(int, char *);
 char		*mkstempnodat(int, char *, mode_t, dev_t);
 char		*mkstempsock(const char *, char *);
-int		 mktemplate(char **, const char *, int);
+int		 mktemplate(char **, const char *, bool, bool);
 
 int		 rmatch(const char *, const char *, int);
 
-char		*symlink_read(const char *);
-char		*symlinkat_read(int, const char *);
+char		*symlink_read(const char *, size_t);
+char		*symlinkat_read(int, const char *, size_t);
 
-int		 sess_stats_send(struct sess *, int);
-int		 sess_stats_recv(struct sess *, int);
+bool		 sess_stats_send(struct sess *, int);
+bool		 sess_stats_recv(struct sess *, int);
+void		 sess_cleanup(struct sess *);
 
-int		 idents_add(int, struct ident **, size_t *, int32_t);
+bool		 idents_add(int, struct ident **, size_t *, int32_t);
 void		 idents_assign_gid(struct sess *, struct flist *, size_t,
 		    const struct ident *, size_t);
 void		 idents_assign_uid(struct sess *, struct flist *, size_t,
 		    const struct ident *, size_t);
 void		 idents_free(struct ident *, size_t);
-int		 idents_recv(struct sess *, int, struct ident **, size_t *);
+bool		 idents_recv(struct sess *, int, struct ident **, size_t *);
 void		 idents_remap(struct sess *, int, struct ident *, size_t);
-int		 idents_send(struct sess *, int, const struct ident *, size_t);
+bool		 idents_send(struct sess *, int, const struct ident *, size_t);
+
+struct sbuf;
+
+void		 our_strmode(mode_t, char *);
+void		 rsync_set_logfile(FILE *, struct sess *);
+bool		 log_item_impl(enum log_type, const struct sess *, const struct flist *);
+bool		 log_item(const struct sess *, const struct flist *);
+bool		 print_7_or_8_bit(const struct sess *, const char *,
+		    const char *, struct sbuf *)
+		    __attribute__((format(printf, 2, 0)));
 
 #endif /*!EXTERN_H*/

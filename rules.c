@@ -98,15 +98,17 @@ enum rule_iter_action {
 	RULE_ITER_CONTINUE, /* continue as normal */
 };
 
-typedef enum rule_iter_action (rule_iter_fn)(const struct ruleset *,
-    const struct rule *, const char *, void *);
+/* FIXME: can the rule and ruleset not be const? */
+typedef enum rule_iter_action (rule_iter_fn)(struct ruleset *,
+    struct rule *, const char *, void *);
 
 struct rule_export_ctx {
 	arglist			*args;
 	const struct sess	*sess;
 };
 
-static char rule_base[MAXPATHLEN];
+static char 		 rule_base[MAXPATHLEN];
+static char		*rule_base_cwdend;
 
 static struct ruleset global_ruleset = {
 	.lclear = (size_t)-1,
@@ -516,11 +518,49 @@ ruleset_add_merge(struct ruleset *ruleset)
 {
 #ifndef NDEBUG
 	struct ruleset *rs = ruleset;
-
 	do {
 		rs->numdrules++;
 	} while ((rs = rs->parent_set) != NULL);
 #endif
+}
+
+static void
+ruleset_remove_merge(struct ruleset *ruleset)
+{
+#ifndef NDEBUG
+	struct ruleset *rs = ruleset;
+	do {
+		assert(rs->numdrules != 0);
+		rs->numdrules--;
+	} while ((rs = rs->parent_set) != NULL);
+#endif
+}
+
+static void
+ruleset_free(struct ruleset *ruleset)
+{
+	struct rule	*r;
+	size_t		 i;
+
+	for (i = 0; i < ruleset->numrules; i++) {
+		r = &ruleset->rules[i];
+		if (r->type == RULE_DIR_MERGE) {
+			assert(ruleset->numdrules > 0);
+			assert(ruleset->parent_set->numdrules > 0);
+			/*
+			 * We should only be attempting to remove a
+			 * dir-merge rule if it doesn't have any active
+			 * directories left.
+			 */
+			assert(TAILQ_EMPTY(&r->merge_rule_chain));
+			ruleset_remove_merge(ruleset);
+		}
+		free(r->pattern);
+	}
+
+	assert(ruleset->numdrules == 0);
+	free(ruleset->rules);
+	free(ruleset);
 }
 
 static void
@@ -1089,6 +1129,56 @@ rule_abspath(const char *path, char *outpath, size_t outpathsz)
 }
 
 /*
+ * FIXME: what does this do?
+ */
+void
+rules_base(const char *root)
+{
+	size_t	 slen;
+
+	if (root[0] == '/') {
+		if (strlcpy(rule_base, root, sizeof(rule_base)) >=
+		    sizeof(rule_base)) {
+			errno = ENAMETOOLONG;
+			err(ERR_FILEGEN, "strlcpy");
+		}
+		rule_base_cwdend = NULL;
+		return;
+	}
+
+	if (rule_base_cwdend == NULL) {
+		getcwd(rule_base, sizeof(rule_base) - 1);
+		rule_base_cwdend = &rule_base[strlen(rule_base)];
+	}
+
+	/*
+	 * If we're working with a path within cwd, truncate this back to cwd
+	 * so that we can strlcat() it.
+	 */
+
+	*rule_base_cwdend = '/';
+	*(rule_base_cwdend + 1) = '\0';
+
+	if (strcmp(root, ".") == 0)
+		return;
+
+	slen = strlen(root);
+
+	if (strlcat(rule_base, root, sizeof(rule_base)) >= sizeof(rule_base)) {
+		errno = ENAMETOOLONG;
+		err(ERR_FILEGEN, "strlcat");
+	}
+
+	/* Guarantee / termination */
+
+	if (root[slen - 1] != '/' &&
+	    strlcat(rule_base, "/", sizeof(rule_base)) >= sizeof(rule_base)) {
+		errno = ENAMETOOLONG;
+		err(ERR_FILEGEN, "strlcat");
+	}
+}
+
+/*
  * Returns -1 if the rule matches and is hides, protects, excludes; or 1
  * if it matches and is shows, risks, includes.  Otherwise, return zero.
  */
@@ -1257,7 +1347,7 @@ rule_cleared(const struct ruleset *ruleset, const struct rule *r)
  * actionable or doesn't 
  */
 static enum rule_iter_action
-rule_match_evaluate(const struct ruleset *ruleset, const struct rule *r,
+rule_match_evaluate(struct ruleset *ruleset, struct rule *r,
     const char *path, void *cookie)
 {
 	struct rule_match_ctx *ctx = cookie;
@@ -1396,6 +1486,132 @@ rule_iter(struct ruleset *ruleset, const char *path, enum rule_type filter,
 
 	assert(ret != RULE_ITER_SKIP);
 	return ret == RULE_ITER_HALT ? false : true;
+}
+
+/*
+ * FIXME: THIS WILL EXIT ON FAILURE.
+ */
+static enum rule_iter_action
+rule_dir_push(struct ruleset *parent, struct rule *r, const char *path,
+    void *cookie)
+{
+	char			 mfile[PATH_MAX];
+	struct stat		 st;
+	struct merge_rule	*mrule;
+	struct rule_dir_ctx	 ctx = *(struct rule_dir_ctx *)cookie;
+	size_t			 stripdir = ctx.stripdir;
+	int			 delim = ctx.delim;
+
+	/*
+	 * This is just a bit of an optimization; if we had a clear rule
+	 * appear after this in the parent chain, then we won't be
+	 * evaluating these rules anyways so we can skip checking for
+	 * them entirely.  Even if we didn't do this here,
+	 * rule_match_evaluate() would still do the right thing and skip
+	 * any chains we loaded.
+	 */
+
+	if (rule_cleared(parent, r))
+		return RULE_ITER_SKIP;
+
+	/* Not worried about truncation; stat() will fail. */
+	(void)snprintf(mfile, sizeof(mfile), "%s/%s", path, r->pattern);
+
+	if (stat(mfile, &st) == -1) {
+		if (errno != ENOENT)
+			err(ERR_FILEGEN, "stat");
+		return RULE_ITER_CONTINUE;
+	}
+
+	/*
+	 * We have a file, now we need to allocate and populate a new
+	 * merge_rule.
+	 */
+
+	mrule = calloc(1, sizeof(*mrule));
+	if (mrule == NULL)
+		err(ERR_NOMEM, "calloc");
+
+	mrule->ruleset = calloc(1, sizeof(*mrule->ruleset));
+	if (mrule->ruleset == NULL)
+		err(ERR_NOMEM, "calloc");
+
+	mrule->path = strdup(path + stripdir);
+	if (mrule->path == NULL)
+		err(ERR_NOMEM, "strdup");
+
+	mrule->ruleset->parent_set = parent;
+	mrule->ruleset->lclear = (size_t)-1;
+	mrule->parent_rule = r;
+	mrule->inherited = (r->modifiers & MOD_MERGE_NO_INHERIT) == 0;
+	mrule->depth = rule_dir_depth;
+
+	TAILQ_INSERT_HEAD(&r->merge_rule_chain, mrule, entries);
+
+	ruleset_do_merge(mrule->ruleset, mfile, r->modifiers & MOD_MERGE_MASK, delim);
+
+	return RULE_ITER_CONTINUE;
+}
+
+/*
+ * FIXME: THIS WILL CALL err() ON ERRORS.
+ */
+void
+rules_dir_push(const char *path, size_t stripdir, int delim)
+{
+	struct rule_dir_ctx ctx;
+
+	ctx.stripdir = stripdir;
+	ctx.delim = delim;
+
+	rule_dir_depth++;
+	(void)rule_iter(&global_ruleset, path, RULE_DIR_MERGE, 0,
+	    &rule_dir_push, &ctx);
+}
+
+static void
+rule_dir_free(struct rule *r, struct merge_rule *mrule)
+{
+
+	TAILQ_REMOVE(&r->merge_rule_chain, mrule, entries);
+	ruleset_free(mrule->ruleset);
+	free(mrule->path);
+	free(mrule);
+}
+
+static enum rule_iter_action
+rule_dir_pop(struct ruleset *ruleset, struct rule *r, const char *path,
+    void *cookie)
+{
+	struct merge_rule *mrule;
+
+	mrule = TAILQ_FIRST(&r->merge_rule_chain);
+	if (mrule == NULL)
+		return RULE_ITER_CONTINUE;
+
+	if (strcmp(mrule->path, path) == 0)
+		rule_dir_free(r, mrule);
+
+	/*
+	 * If there's a rule earlier in the chain, then we messed up
+	 * somewhere along the line.
+	 */
+
+	TAILQ_FOREACH(mrule, &r->merge_rule_chain, entries)
+		assert(strcmp(mrule->path, path) != 0);
+
+	return RULE_ITER_CONTINUE;
+}
+
+/*
+ * Remove a directory from the global rule sets.
+ */
+void
+rules_dir_pop(const char *path, size_t stripdir)
+{
+	(void)rule_iter(&global_ruleset, path + stripdir, RULE_DIR_MERGE, 1,
+	    &rule_dir_pop, NULL);
+	rule_dir_depth--;
 }
 
 /*
