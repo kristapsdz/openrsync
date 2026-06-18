@@ -95,24 +95,27 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 regress_functional:: all
 	@OPENRSYNC=`readlink -f openrsync`; \
 	OPWD=`pwd` ; \
-	for FIRST in $$OPENRSYNC $(RSYNC) ; \
+	for OPTGROUP in "" "-z" ; \
 	do \
-		for SECOND in $$OPENRSYNC $(RSYNC) ; \
+		for FIRST in $$OPENRSYNC $(RSYNC) ; \
 		do \
-			if [ $$FIRST = $$SECOND ] && [ $$FIRST = $(RSYNC) ] ; \
-			then \
-				continue ; \
-			fi ; \
-			for f in $(REGRESS_SUCCESS); \
+			for SECOND in $$OPENRSYNC $(RSYNC) ; \
 			do \
-				TEST=`readlink -f $$f` ; \
-				TEMP=`mktemp -d` ; \
-				echo cd $$TEMP ; \
-				cd $$TEMP ; \
-				echo "$$TEST: $$FIRST -> $$SECOND" ; \
-				tstdir="$$OPWD/regress/functional" rsync="$$FIRST --protocol 27 --rsync-path=$$SECOND" sh $$TEST ; \
-				cd $$OPWD ; \
-				rm -rf $$TEMP ; \
+				if [ $$FIRST = $$SECOND ] && [ $$FIRST = $(RSYNC) ] ; \
+				then \
+					continue ; \
+				fi ; \
+				for f in $(REGRESS_SUCCESS); \
+				do \
+					TEST=`readlink -f $$f` ; \
+					TEMP=`mktemp -d` ; \
+					echo cd $$TEMP ; \
+					cd $$TEMP ; \
+					echo "$$TEST: $$FIRST -> $$SECOND (opts: $$OPTGROUP)" ; \
+					tstdir="$$OPWD/regress/functional" rsync="$$FIRST $$OPTGROUP --protocol 27 --rsync-path=$$SECOND" sh $$TEST ; \
+					cd $$OPWD ; \
+					rm -rf $$TEMP ; \
+				done ; \
 			done ; \
 		done ; \
 	done
