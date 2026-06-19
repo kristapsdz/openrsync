@@ -26,7 +26,15 @@
 #if !HAVE_PLEDGE
 # define pledge(x, y) (1)
 #endif
+#if !HAVE_UNVEIL
 # define unveil(x, y) (1)
+#endif
+
+#if __APPLE__
+# define st_atim st_atimespec
+# define st_ctim st_ctimespec
+# define st_mtim st_mtimespec
+#endif
 
 /*
  * Mirror the reference rsync here; they don't really entertain path

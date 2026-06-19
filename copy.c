@@ -169,7 +169,7 @@ move_file(int fromdfd, const char *fname, int todfd, const char *tname,
 
 		if (fromst.st_mtime != tost.st_mtime) {
 			struct timespec ts[] = {
-				fromst.st_atimespec, fromst.st_mtimespec
+				fromst.st_atim, fromst.st_mtim
 			};
 			ret = futimens(tofd, ts);
 			if (ret == -1)

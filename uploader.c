@@ -94,8 +94,8 @@ static void
 dstat_save(const struct stat *st, struct fldstat *dstat)
 {
 	dstat->mode = st->st_mode;
-	dstat->atime = st->st_atimespec;
-	dstat->mtime = st->st_mtimespec;
+	dstat->atime = st->st_atim;
+	dstat->mtime = st->st_mtim;
 	dstat->uid = st->st_uid;
 	dstat->gid = st->st_gid;
 }

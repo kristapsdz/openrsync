@@ -74,6 +74,7 @@ jobs:
     - name: Configure, build, and test on x86_64
       run: |
         cat /etc/alpine-release
+        echo "HAVE_FTS=1" > configure.local
         ./configure
         bmake
       shell: alpine-x86_64.sh {0}

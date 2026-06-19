@@ -17,9 +17,10 @@
 #include "config.h"
 
 #include <sys/stat.h>
+#include COMPAT_ENDIAN_H
 
-#ifdef HAVE_SBUF
-# ifdef __APPLE__
+#if HAVE_SBUF
+# if __APPLE__
 #  include <usbuf.h>
 # else
 #  include <sys/sbuf.h>
@@ -50,7 +51,7 @@ extern int verbose;
 static FILE *log_file;
 static struct sess *log_sess;
 
-#ifndef HAVE_SBUF
+#if !HAVE_SBUF
 struct sbuf {
 	char	*buf;
 	size_t	 len;
@@ -66,7 +67,7 @@ printf_doformat(const char *, int *, const struct sess *,
     const struct flist *, struct sbuf *)
     __attribute__((format(printf, 1, 0)));
 
-#ifndef HAVE_SBUF
+#if !HAVE_SBUF
 static struct sbuf *
 sbuf_new_auto(void)
 {
