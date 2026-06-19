@@ -4,6 +4,8 @@ include Makefile.configure
 
 RSYNC	    = rsync
 
+sinclude Makefile.local
+
 OBJS	    = blocks.o \
 	      client.o \
 	      compats.o \
