@@ -16,12 +16,14 @@
  */
 #include "config.h"
 
-#undef HAS_SBUF
-
 #include <sys/stat.h>
-#ifdef __FreeBSD__
-# include <sys/sbuf.h>
-# define HAS_SBUF
+
+#ifdef HAVE_SBUF
+# ifdef __APPLE__
+#  include <usbuf.h>
+# else
+#  include <sys/sbuf.h>
+# endif
 #endif
 
 #include <assert.h>
@@ -34,10 +36,6 @@
 #include <string.h>
 #include <syslog.h>
 #include <unistd.h>
-#ifdef __APPLE__
-# include <usbuf.h>
-# define HAS_SBUF
-#endif
 
 #include "extern.h"
 

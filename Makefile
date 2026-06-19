@@ -2,41 +2,55 @@
 
 include Makefile.configure
 
-RSYNC	   = /usr/local/bin/rsync
+RSYNC	    = /usr/local/bin/rsync
 
-OBJS	   = blocks.o \
-	     client.o \
-	     compats.o \
-	     copy.o \
-	     downloader.o \
-	     fargs.o \
-	     flist.o \
-	     fmap.o \
-	     hash.o \
-	     ids.o \
-	     io.o \
-	     log.o \
-	     md4.o \
-	     misc.o \
-	     mkpath.o \
-	     mktemp.o \
-	     receiver.o \
-	     rmatch.o \
-	     rules.o \
-	     sender.o \
-	     server.o \
-	     session.o \
-	     socket.o \
-	     strmode.o \
-	     symlinks.o \
-	     uploader.o
-ALLOBJS	   = $(OBJS) \
-	     main.o
+OBJS	    = blocks.o \
+	      client.o \
+	      compats.o \
+	      copy.o \
+	      downloader.o \
+	      fargs.o \
+	      flist.o \
+	      fmap.o \
+	      hash.o \
+	      ids.o \
+	      io.o \
+	      log.o \
+	      md4.o \
+	      misc.o \
+	      mkpath.o \
+	      mktemp.o \
+	      receiver.o \
+	      rmatch.o \
+	      rules.o \
+	      sender.o \
+	      server.o \
+	      session.o \
+	      socket.o \
+	      strmode.o \
+	      symlinks.o \
+	      uploader.o
+ALLOBJS	    = $(OBJS) \
+	      main.o
+UNAME 	   != uname
+LDADD_FTS  != pkg-config --libs musl-fts 2>/dev/null || echo ""
+CFLAGS_FTS != pkg-config --cflags musl-fts 2>/dev/null || echo ""
+LDADD_Z	   != pkg-config --libs zlib 2>/dev/null || echo "-lz"
+CFLAGS_Z   != pkg-config --cflags zlib 2>/dev/null || echo ""
+UNAME      != uname
+
+.if $(UNAME) == "Darwin" || $(UNAME) == "FreeBSD"
+LDADD	  += -lsbuf
+CFLAGS	  += -DHAVE_SBUF
+.endif
+
+CFLAGS	  += $(CFLAGS_FTS) $(CFLAGS_Z)
+LDADD	  += -lm $(LDADD_LIB_SOCKET) $(LDADD_SCAN_SCALED) $(LDADD_Z) $(LDADD_FTS)
 
 all: openrsync
 
 openrsync: $(ALLOBJS)
-	$(CC) -o $@ $(ALLOBJS) -lm $(LDADD_LIB_SOCKET) $(LDADD_SCAN_SCALED) $(LDFLAGS) -lz
+	$(CC) -o $@ $(ALLOBJS) $(LDFLAGS) $(LDADD)
 
 install: all
 	mkdir -p $(DESTDIR)$(BINDIR)
