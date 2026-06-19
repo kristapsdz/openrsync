@@ -33,10 +33,14 @@
 #include "extern.h"
 
 /*
- * Not defined on musl Linux.
+ * Not defined on musl Linux, but be encompassing just in case.
  */
-#ifndef ALLPERMS
-# define ALLPERMS (S_ISUID|S_ISGID|S_ISTXT|S_IRWXU|S_IRWXG|S_IRWXO)
+#if !ALLPERMS
+# if S_ISTXT
+#  define ALLPERMS (S_ISUID|S_ISGID|S_ISTXT|S_IRWXU|S_IRWXG|S_IRWXO)
+# else
+#  define ALLPERMS (S_ISUID|S_ISGID|S_ISVTX|S_IRWXU|S_IRWXG|S_IRWXO)
+# endif
 #endif
 
 /*
