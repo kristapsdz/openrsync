@@ -29,6 +29,7 @@
 # include <fcntl.h>
 #endif
 #include <getopt.h>
+#include <limits.h> /* CHAR_MAX */
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>

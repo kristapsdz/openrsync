@@ -68,6 +68,7 @@ jobs:
           build-base
           bmake
           musl-fts
+          musl-fts-dev
           zlib-dev
         shell-name: alpine-x86_64.sh
     - name: Configure, build, and test on x86_64

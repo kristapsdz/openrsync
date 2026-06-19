@@ -50,12 +50,12 @@ extern int verbose;
 static FILE *log_file;
 static struct sess *log_sess;
 
-#ifndef HAS_SBUF
+#ifndef HAVE_SBUF
 struct sbuf {
 	char	*buf;
 	size_t	 len;
 };
-#endif
+#endif /* !HAVE_SBUF */
 
 static void
 log_writef(enum log_type, const char *, ...)
@@ -66,7 +66,7 @@ printf_doformat(const char *, int *, const struct sess *,
     const struct flist *, struct sbuf *)
     __attribute__((format(printf, 1, 0)));
 
-#ifndef HAS_SBUF
+#ifndef HAVE_SBUF
 static struct sbuf *
 sbuf_new_auto(void)
 {
@@ -143,7 +143,7 @@ sbuf_finish(struct sbuf *s)
 		return 0;
 	return sbuf_putc(s, '\0');
 }
-#endif
+#endif /* !HAVE_SBUF */
 
 /*
  * Log a message at level "level", starting at zero, which corresponds
