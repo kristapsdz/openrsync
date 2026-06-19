@@ -1,0 +1,73 @@
+#! /bin/sh
+
+# Test that the --size-only option prevents destination files from being
+# updated if their size matches the source file, regardless of mtime.
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf src dst ref
+
+# Create the source tree:
+#
+mkdir src
+echo one > src/one
+echo two > src/two
+
+# Create the reference tree identical to the source tree,
+# with the exception that "ref/two" is the same size as
+# "src/two" but contains different data.
+#
+cp -a src ref
+echo owt > ref/two
+
+# Make src/two younger than ref/two to ensure that a simple
+# rsync would normally update dst/two.
+#
+touch -t 202308252015.01 ref/two
+touch -t 202308252015.02 src/two
+
+# Create the destination tree identical to the reference tree:
+#
+cp -a ref dst
+compare_trees -t ref dst
+
+# Try to rsync src/ to dst/ with the --size-only option.  The
+# mtime on dst/two should be updated to that of src/two, but
+# its contents should remain identical to ref/two:
+#
+$rsync -a --size-only -- src/ dst/
+compare_trees ref dst
+X=$(stat -f '%m' src/two)
+Y=$(stat -f '%m' dst/two)
+[ "$X" == "$Y" ]
+
+# A metadata update also should not cause dst/two's contents
+# to be updated:
+#
+for mode in 660 600 640 604 440 400 404 ; do
+    chmod ${mode} src/two ref/two
+    $rsync -a --size-only -- src/ dst/
+    compare_trees ref dst
+    X=$(stat -f '%m' src/two)
+    Y=$(stat -f '%m' dst/two)
+    [ "$X" == "$Y" ]
+done
+
+# Now that the mtime's match, a simple rsync should also not cause
+# dst/two's contents to change:
+#
+$rsync -a -- src/ dst/
+compare_trees ref dst
+X=$(stat -f '%m' src/two)
+Y=$(stat -f '%m' dst/two)
+[ "$X" == "$Y" ]
+
+# Finally, a simple rsync (ignoring times) should cause dst/two
+# to become identical to src/two:
+#
+$rsync -a --ignore-times -- src/ dst/
+compare_trees -t src dst

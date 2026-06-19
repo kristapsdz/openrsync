@@ -81,6 +81,7 @@ flist.o main.o receiver.o rules.o sender.o uploader.o: rules.h
 rules.h: extern.h
 
 # Doesn't work: regress/functional/test10b_perms.test
+# Doesn't work: regress/functional/test84_archive.test
 
 REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test0_noslash.test \
@@ -108,9 +109,10 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test13_perms.test \
 		  regress/functional/test13b_perms.test \
 		  regress/functional/test19_linkdest.test \
-		  regress/functional/test19b_linkdest-rel.test
+		  regress/functional/test19b_linkdest-rel.test \
+		  regress/functional/test28_size_only.test
 REGRESS_FAIL 	= regress/functional/test12d_inex.test
-REGRESS_MANUAL 	=
+REGRESS_MANUAL 	= 
 RSYNC_VERBOSE	= 
 
 regress_functional:: all
@@ -123,6 +125,24 @@ regress_functional:: all
 			for SECOND in $$OPENRSYNC $(RSYNC) ; \
 			do \
 				if [ $$FIRST = $$SECOND ] && [ $$FIRST = $(RSYNC) ] ; \
+				then \
+					continue ; \
+				fi ; \
+				for f in $(REGRESS_MANUAL); \
+				do \
+					TEST=`readlink -f $$f` ; \
+					TEMP=`mktemp -d` ; \
+					cd $$TEMP ; \
+					echo "$$TEST: $$FIRST -> $$SECOND (opts: $$OPTGROUP)" ; \
+					set +e ; \
+					tstdir="$$OPWD/regress/functional" \
+					    rsync="$$FIRST $$OPTGROUP $(RSYNC_VERBOSE) --rsync-path=$$SECOND" \
+					    sh $$TEST ; \
+					set -e ; \
+					cd $$OPWD ; \
+					echo $$TMP ; \
+				done ; \
+				if [ -n "$(REGRESS_MANUAL)" ] ; \
 				then \
 					continue ; \
 				fi ; \
@@ -156,20 +176,6 @@ regress_functional:: all
 					} ; \
 					echo $$TMP ; \
 					exit 1 ; \
-				done ; \
-				for f in $(REGRESS_MANUAL); \
-				do \
-					TEST=`readlink -f $$f` ; \
-					TEMP=`mktemp -d` ; \
-					cd $$TEMP ; \
-					echo "$$TEST: $$FIRST -> $$SECOND (opts: $$OPTGROUP)" ; \
-					set +e ; \
-					tstdir="$$OPWD/regress/functional" \
-					    rsync="$$FIRST $$OPTGROUP $(RSYNC_VERBOSE) --rsync-path=$$SECOND" \
-					    sh $$TEST ; \
-					set -e ; \
-					cd $$OPWD ; \
-					echo $$TMP ; \
 				done ; \
 			done ; \
 		done ; \

@@ -59,20 +59,32 @@ generate_tree_1 ()
 # first argument is a dir to chdir to
 findme ()
 {
+    local stat_fmt dirs
+
+    OPTIND=1
+    dirs=0
+    stat_fmt="%Sp %Su %Sg %N"
+    while getopts dt flag; do
+         case "$flag" in
+         d) dirs=1 ;;
+         t) stat_fmt="${stat_fmt} %m" ;;
+         esac
+    done
+
+    shift $((OPTIND - 1))
+
     if [ $# -lt 2 ] ; then
         echo usage: different 1>&2
         return 1
     fi
+
     (
         cd "$1" ; shift
-        # Remove unstable fields:
-        #    1: inode
-        #    2: size in blocks
-        # 8-10: last modification time
-        find "$@" -ls |
-        sed -e 's/^[[:space:]]*//' -e 's/[[:space:]][[:space:]]*/ /g' |
-        cut -d ' ' -f 3-7,11- |
-        sort
+	if [ ${dirs} -ne 0 ] ; then
+            find "$@" -type d -print0 | xargs -0 stat -f "$stat_fmt" | sort
+        else
+            find "$@" ! -type d -print0 | xargs -0 stat -f "$stat_fmt %z" | sort
+        fi
     )
 }
 
@@ -82,14 +94,32 @@ findme ()
 # - mtree
 compare_trees ()
 {
+    local need_time
+
+    need_time="--"
+    OPTIND=1
+    while getopts t flag; do
+         case "$flag" in
+         t) need_time="-t" ;;
+         esac
+    done
+
+    shift $((OPTIND - 1))
     if [ $# -ne 2 ] ; then
         echo usage: different 1>&2
         return 1
     fi
+
     # files_and_permissions
-    findme "$1" . > find1
-    findme "$2" . > find2
-    diff -u find[12]
+    findme "$need_time" "$1" . > find1
+    findme "$need_time" "$2" . > find2
+    diff -u find[12] 1>&2
+
+    # dirs_and_permissions
+    findme "-d" "$need_time" "$1" . > find1d
+    findme "-d" "$need_time" "$2" . > find2d
+    diff -u find[12]d 1>&2
+
     # file contents
     diff -ru "$1" "$2"
 }

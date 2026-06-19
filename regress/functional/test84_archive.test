@@ -1,0 +1,17 @@
+#! /bin/sh
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree and the tree we'll compare to
+mkdir dir1 dir2 dir3
+touch dir1/.dot dir2/.dot
+
+cd dir1
+# This won't break like it's supposed to in all circumstances under interop
+# testing, but it's best-effort and would catch a bug in at least a few of
+# our configurations.
+$rsync -a -- . ../dir3
+cd ../
+compare_trees dir2 dir3

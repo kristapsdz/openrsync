@@ -26,5 +26,5 @@ touch dir[1234]/file* dir[1234]/*/file*
 # create the target tree
 mkdir dir4
 
-rsync -a -vv --link-dest=../dir3/two -- dir1/. dir4/.
+$rsync -a -vv --link-dest=../dir3/two -- dir1/. dir4/.
 compare_trees dir2 dir4
