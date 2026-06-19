@@ -1485,7 +1485,9 @@ rule_iter(struct ruleset *ruleset, const char *path, enum rule_type filter,
 	 */
 
 	assert(ret != RULE_ITER_SKIP);
-	return ret == RULE_ITER_HALT ? false : true;
+	if (ret != RULE_ITER_CONTINUE && ret != RULE_ITER_HALT_CHAIN)
+		return false;
+	return true;
 }
 
 /*

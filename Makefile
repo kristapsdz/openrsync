@@ -81,7 +81,7 @@ flist.o main.o receiver.o rules.o sender.o uploader.o: rules.h
 rules.h: extern.h
 
 # Doesn't work: regress/functional/test10b_perms.test
-#
+
 REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test0_noslash.test \
 		  regress/functional/test10_perms.test \
@@ -107,11 +107,14 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test8_times.test \
 		  regress/functional/test8b_times.test \
 		  regress/functional/test9_norecurse.test
+REGRESS_FAIL 	= regress/functional/test12d_inex.test
+REGRESS_MANUAL 	= 
+RSYNC_VERBOSE	= 
 
 regress_functional:: all
 	@OPENRSYNC=`readlink -f openrsync`; \
 	OPWD=`pwd` ; \
-	for OPTGROUP in "" "-z" ; \
+	for OPTGROUP in "--protocol 27" "--protocol 27 -z" ; \
 	do \
 		for FIRST in $$OPENRSYNC $(RSYNC) ; \
 		do \
@@ -125,12 +128,46 @@ regress_functional:: all
 				do \
 					TEST=`readlink -f $$f` ; \
 					TEMP=`mktemp -d` ; \
-					echo cd $$TEMP ; \
 					cd $$TEMP ; \
 					echo "$$TEST: $$FIRST -> $$SECOND (opts: $$OPTGROUP)" ; \
-					tstdir="$$OPWD/regress/functional" rsync="$$FIRST $$OPTGROUP --protocol 27 --rsync-path=$$SECOND" sh $$TEST ; \
+					tstdir="$$OPWD/regress/functional" \
+					    rsync="$$FIRST $$OPTGROUP $(RSYNC_VERBOSE) --rsync-path=$$SECOND" \
+					    sh $$TEST || { \
+						echo $$TMP ; \
+						exit 1 ; \
+					} ; \
 					cd $$OPWD ; \
 					rm -rf $$TEMP ; \
+				done ; \
+				for f in $(REGRESS_FAIL); \
+				do \
+					TEST=`readlink -f $$f` ; \
+					TEMP=`mktemp -d` ; \
+					cd $$TEMP ; \
+					echo "$$TEST: $$FIRST -> $$SECOND (opts: $$OPTGROUP)" ; \
+					tstdir="$$OPWD/regress/functional" \
+					    rsync="$$FIRST $$OPTGROUP $(RSYNC_VERBOSE) --rsync-path=$$SECOND" \
+					    sh $$TEST || { \
+						cd $$OPWD ; \
+						rm -rf $$TEMP ; \
+						continue ; \
+					} ; \
+					echo $$TMP ; \
+					exit 1 ; \
+				done ; \
+				for f in $(REGRESS_MANUAL); \
+				do \
+					TEST=`readlink -f $$f` ; \
+					TEMP=`mktemp -d` ; \
+					cd $$TEMP ; \
+					echo "$$TEST: $$FIRST -> $$SECOND (opts: $$OPTGROUP)" ; \
+					set +e ; \
+					tstdir="$$OPWD/regress/functional" \
+					    rsync="$$FIRST $$OPTGROUP $(RSYNC_VERBOSE) --rsync-path=$$SECOND" \
+					    sh $$TEST ; \
+					set -e ; \
+					cd $$OPWD ; \
+					echo $$TMP ; \
 				done ; \
 			done ; \
 		done ; \

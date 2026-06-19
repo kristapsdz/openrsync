@@ -14,5 +14,5 @@ cd dir1
 mkdirfile one.txt
 
 cd ../..
-$rsync -az dir1 dir3
+$rsync -a dir1 dir3
 compare_trees dir2 dir3
