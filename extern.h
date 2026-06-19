@@ -723,9 +723,7 @@ struct blkset	*blk_recv(struct sess *, int, struct iobuf *, const char *,
 void		 blk_recv_ack(char [16], const struct blkset *, int32_t);
 bool		 blk_match(struct sess *, const struct blkset *,
 		    const char *, struct blkstat *);
-int		 blk_send(struct sess *, int, size_t, const struct blkset *,
-		    const char *);
-int		 blk_send_ack(struct sess *, int, struct blkset *);
+bool		 blk_send_ack(struct sess *, int, struct blkset *);
 
 uint32_t	 hash_fast(const void *, size_t);
 void		 hash_slow(const void *, size_t, unsigned char *,

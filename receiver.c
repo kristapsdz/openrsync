@@ -244,7 +244,10 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 		goto out;
 	}
 
-	/* The IO error is sent after the file list. */
+	/* 
+	 * Read: [io-error-value].
+	 * The IO error is sent after the file list.
+	 */
 
 	if (!io_read_int(sess, fdin, &ioerror)) {
 		ERRX1("io_read_int");
@@ -514,7 +517,6 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 			} else if (sess->mplex_read_remain == 0)
 				pfd[PFD_SENDER_IN].revents &= ~POLLIN;
 		}
-
 
 		/*
 		 * We run the uploader if we have files left to examine

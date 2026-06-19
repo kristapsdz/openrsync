@@ -303,96 +303,185 @@ has been specified.
 The sender then sends any IO error values, which for
 .Xr openrsync 1
 is always zero.
+The receiver reads it.
 .Pp
 .Bl -enum -compact
 .It
 constant zero (integer)
-.El
-.Pp
-The server sender then reads the exclusion list, which is always zero.
-.Pp
-.Bl -enum -compact
-.It
-if server, constant zero (integer)
+.Bq Em io-error-value
 .El
 .Pp
 Following that, the sender receives data regarding the receiver's copy
 of the file list contents.
 This data is not ordered in any way.
+The receiver performs the same actions, except writing.
 Each of these requests starts as follows:
 .Pp
 .Bl -enum -compact
 .It
-file index or -1 to signal a change of phase (integer)
-.El
-.Pp
+read file index (integer)
+.Bq Em file-cont-index
+.Bl -dash -compact
+.It
+If <0, increment phase and re-run.
 The phase starts in phase 1, then proceeds to phase 2, and phase 3
 signals an end of transmission (no subsequent blocks).
 If a phase change occurs, the sender must write back the -1 constant
-integer value and increment its phase state.
-.Pp
-Blocks are read as follows:
-.Pp
-.Bl -enum -compact
-.It
-block index (integer)
+integer value and increment its own phase.
 .El
-.Pp
+.It
+read block index (integer)
+.Bq Em block-cont-index
+.Bl -dash -compact
+.It
 In
 .Pq Fl n
 mode, the sender may immediately write back the index (integer) to skip
 the following.
-.Pp
+.El
+.It
+read number of blocks (integer)
+.Bq Em block-cont-count
+.It
+read block length in the file (integer)
+.Bq Em block-cont-length
+.It
+read long checksum length (integer)
+.Bq Em block-cont-cs-length
+.It
+read terminal (remainder) block length (integer)
+.Bq Em block-cont-rem
+.It
+then processing for each block:
 .Bl -enum -compact
 .It
-number of blocks (integer)
+read short checksum (integer)
+.Bq Em block-cont-block-cs-short
 .It
-block length in the file (integer)
-.It
-long checksum length (integer)
-.It
-terminal (remainder) block length (integer)
+read long checksum (bytes of checksum length)
+.Bq Em block-cont-block-cs-long
+.El
 .El
 .Pp
-And for each block:
+The receiver then compares the two files, block by block, and updates
+the server with mismatches as follows.
+The sender performs the same actions, except writing.
 .Pp
 .Bl -enum -compact
 .It
-short checksum (integer)
+read file index (integer)
+.Bq Em file-index
+.Bl -dash -compact
 .It
-long checksum (bytes of checksum length)
+if <0, halt and change phase
 .El
-.Pp
-The client then compares the two files, block by block, and updates the
-server with mismatches as follows.
-.Pp
-.Bl -enum -compact
 .It
-file index (integer)
-.It
-number of blocks (integer)
+read number of blocks (integer)
+.Bq Em file-block-count
 .It
 block length (integer)
+.Bq Em file-block-length
 .It
 long checksum length (integer)
+.Bq Em file-block-cs-length
 .It
 remainder block length (integer)
+.Bq Em file-block-rem
+.It
+then processing for each block:
+.Bl -dash -compact
+.It
+for each block in uncompressed exchange
+.Bl -enum -compact
+.It
+read header value (integer)
+.Bq Em block-xchng-unc-1
+.Bl -dash -compact
+.It
+if value is 0, no more blocks, halt
+.It
+if value >0, remote chunk size
+.Bl -enum -compact
+.It
+read data chunk of the given size
+(variable bytes)
+.Bq Em block-xchng-unc-1a
+.It
+return to
+.Bq block-xchng-unc-1
 .El
-.Pp
-Then for each block:
-.Pp
+.It
+if value <0, recast to an index as (-value - 1)
 .Bl -enum -compact
 .It
-remote data chunk size if >0, local chunk size of <0 (recast as -size -
-1), or zero for no more blocks (integer)
+copy from local file
 .It
-if data chunk is remote and size is non-zero, data chunk (bytes)
-.Pp
-Following the final block of size zero, the sender sends the following:
-.Pp
+return to
+.Bq block-xchng-unc-1
+.El
+.El
+.It
+read whole-file long checksum (16 bytes)
+.Bq Em block-xchng-com-2
+.El
+.It
+or for each block in compressed exchange (zlib)
 .Bl -enum -compact
 .It
-whole-file long checksum (16 bytes)
+read header flags (byte)
+.Bq Em block-xchng-com-1
+.Bl -dash -compact
+.It
+if value is 0, no more blocks, halt
+.It
+if bit 0x40 is set and bit 0x80 is not set, stay at the current block
+index
+.Bl -enum -compact
+.It
+read size low bits, then set chunk size as bit-wise OR with flag value
+shifted left and without its 0x40 set (byte)
+.Bq Em block-xchng-com-1a
+.It
+read data chunk of produced size (variable bytes) 
+.Bq Em block-xchng-com-1b
+.It
+return to
+.Bq block-xchng-com-1
+.El
+.It
+if bit 0x80 is set, set next block index as lower six bits and whether
+to read a
+.Dq run size
+if bit 0x40 is set
+.It
+if bit 0x20 is set and not bit 0x80, set whether to read a
+.Dq run size
+if bit 0x01 is set
+.Bl -enum -compact
+.It
+read next block index (integer)
+.Bq Em block-xchng-com-1c
+.El
+.It
+if reading a run size
+.Bl -enum -compact
+.It
+read lower byte of two-byte data size (byte)
+.Bq Em block-xchng-com-1d
+.It
+read upper byte of two-byte data size (byte)
+.Bq Em block-xchng-com-1e
+.El
+.It
+if a run size has been read and is non-zero, decompress that number of
+sequential blocks, then return to
+.Bq block-xchng-com-1
+.El
+.It
+read whole-file long checksum (16 bytes)
+.Bq Em block-xchng-unc-2
+.El
+.El
 .El
 .Pp
 The sender then either handles the next queued file or, if the receiver

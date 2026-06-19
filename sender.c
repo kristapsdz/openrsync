@@ -144,9 +144,9 @@ static bool
 sender_terminate_file_data(struct sess *sess, size_t padsz, void **wb,
 	size_t pos, size_t *wbsz, size_t *wbmax)
 {
-	char	 zerobuf[1024] = { 0 };
-	bool	 need_alloc = false;
-	size_t	 chunksz;
+	const char	 zerobuf[1024] = { 0 }; /* all zeroes */
+	bool		 need_alloc = false; /* only alloc if needed */
+	size_t		 chunksz; /* size to buffer */
 
 	while (padsz != 0) {
 		/*
@@ -156,6 +156,7 @@ sender_terminate_file_data(struct sess *sess, size_t padsz, void **wb,
 		 * Thus, we need an allocation for any subsequent write
 		 * to the buffer to handle multiplexing correctly.
 		 */
+
 		if (need_alloc &&
 		    !io_lowbuffer_alloc(sess, wb, wbsz, wbmax, 0)) {
 			ERRX("io_lowbuffer_alloc");
@@ -275,17 +276,20 @@ token_ff_compressed(struct sess *sess, struct send_up *up, size_t tok,
  */
 static bool
 send_up_fsm_compressed(struct sess *sess, size_t *phase,
-	struct send_up *up, void **wb, size_t *wbsz, size_t *wbmax,
-	struct flist *fl)
+    struct send_up *up, void **wb, size_t *wbsz, size_t *wbmax,
+    struct flist *fl)
 {
-	size_t		 pos = *wbsz, isz = sizeof(int32_t),
-			 dsz = MD4_DIGEST_LENGTH;
-	unsigned char	 fmd[MD4_DIGEST_LENGTH];
-	off_t		 sz, ssz;
-	char		 buf[16];
-	const char	*sbuf;
-	char		*cbuf;
-	int		 res, flush = Z_NO_FLUSH;
+	unsigned char	 fmd[MD4_DIGEST_LENGTH]; /* file hash */
+	char		 buf[16]; /* block header buffer */
+	const char	*sbuf; /* buffer to be compressed */
+	char		*cbuf; /* compressed buffer */
+	off_t		 sz, /* temporary */
+			 ssz; /* temporary */
+	size_t		 pos = *wbsz; /* current pos in write buffer */
+	const size_t	 dsz = MD4_DIGEST_LENGTH, /* write length */
+			 isz = sizeof(int32_t); /* write length */
+	int		 res, /* compression result */
+			 flush = Z_NO_FLUSH; /* whether to flush */
 
 	switch (up->stat.curst) {
 	case BLKSTAT_DATA:
@@ -345,15 +349,20 @@ send_up_fsm_compressed(struct sess *sess, size_t *phase,
 			if (ssz == 0)
 				break;
 
+			/*
+			 * Write: [block-xchng-com-1a].
+			 * Write: [block-xchng-com-1b].
+			 */
+
 			if (!io_lowbuffer_alloc(sess, wb, wbsz, wbmax, ssz + 2)) {
 				fmap_untrap(up->stat.map);
 				ERRX("io_lowbuffer_alloc");
 				return false;
 			}
-
 			cbuf[0] = (TOKEN_DEFLATED + (ssz >> 8)) & 0xff;
 			cbuf[1] = ssz & 0xff;
 			io_lowbuffer_buf(sess, *wb, &pos, *wbsz, cbuf, ssz + 2);
+
 			if (cctx.avail_out != 0)
 				break;
 			if (cctx.avail_out == 0) {
@@ -393,10 +402,13 @@ send_up_fsm_compressed(struct sess *sess, size_t *phase,
 
 		if (up->stat.curtok == 0) {
 			/* Empty files just need an END token */
+
 			if (!compress_reinit(sess)) {
 				ERRX1("compress_reinit");
 				return false;
 			}
+
+			/* Write: [block-xchng-com-1] (no more). */
 
 			if (!io_lowbuffer_alloc(sess, wb, wbsz, wbmax, 1)) {
 				ERRX1("io_lowbuffer_alloc");
@@ -408,18 +420,22 @@ send_up_fsm_compressed(struct sess *sess, size_t *phase,
 			return true;
 		}
 
+		/* Write: [block-xchng-com-1]. */
+
 		if (!io_lowbuffer_alloc(sess, wb, wbsz, wbmax, 1)) {
 			ERRX1("io_lowbuffer_alloc");
 			return false;
 		}
-		io_lowbuffer_byte(sess, *wb,
-			&pos, *wbsz, TOKEN_LONG);
+		io_lowbuffer_byte(sess, *wb, &pos, *wbsz, TOKEN_LONG);
+
+		/* Write: [block-xchng-com-1c]. */
+
 		if (!io_lowbuffer_alloc(sess, wb, wbsz, wbmax, isz)) {
 			ERRX1("io_lowbuffer_alloc");
 			return false;
 		}
-		io_lowbuffer_int(sess, *wb,
-			&pos, *wbsz, -(up->stat.curtok + 1));
+		io_lowbuffer_int(sess, *wb, &pos, *wbsz,
+		    -(up->stat.curtok + 1));
 
 		token_ff_compressed(sess, up, -(up->stat.curtok + 1), fl);
 		return true;
@@ -451,13 +467,12 @@ send_up_fsm_compressed(struct sess *sess, size_t *phase,
 			fmd[0]++;
 		}
 
+		/* Write: [block-xchng-com-2]. */
+
 		if (!io_lowbuffer_alloc(sess, wb, wbsz, wbmax, dsz)) {
 			ERRX1("io_lowbuffer_alloc");
 			return 0;
 		}
-
-		/* Write: [block-xchng-com-2]. */
-
 		io_lowbuffer_buf(sess, *wb, &pos, *wbsz, fmd, dsz);
 		up->stat.curst = BLKSTAT_DONE;
 		return true;
@@ -490,6 +505,12 @@ send_up_fsm_compressed(struct sess *sess, size_t *phase,
 				assert(ssz >= 4);
 				ssz -= 4; /* Trim off the trailer bytes */
 				if (ssz != 0 && res != Z_BUF_ERROR) {
+					/*
+					 * Write: [block-xchng-com-1d].
+					 * Write: [block-xchng-com-1e].
+					 * (I think?)
+					 */
+
 					if (!io_lowbuffer_alloc(sess, wb, wbsz,
 					    wbmax, ssz + 2)) {
 						ERRX("io_lowbuffer_alloc");
@@ -506,12 +527,13 @@ send_up_fsm_compressed(struct sess *sess, size_t *phase,
 				cctx.next_out += 4;
 				cctx.avail_out -= 4;
 			}
-			if (res != Z_OK && res != Z_BUF_ERROR) {
+
+			if (res != Z_OK && res != Z_BUF_ERROR)
 				LOG2("final deflate() res=%d", res);
-			}
 		}
 
-		/* Send the end of token marker */
+		/* Write: [block-xchng-com-1] (no more blocks). */
+
 		if (!io_lowbuffer_alloc(sess, wb, wbsz, wbmax, 1)) {
 			ERRX("io_lowbuffer_alloc");
 			return false;
@@ -575,6 +597,8 @@ send_up_fsm_compressed(struct sess *sess, size_t *phase,
 	 */
 
 	if (up->cur->idx < 0) {
+		/* Write: [file-index]. */
+
 		if (!io_lowbuffer_alloc(sess, wb, wbsz, wbmax, isz)) {
 			ERRX1("io_lowbuffer_alloc");
 			return false;
@@ -587,7 +611,16 @@ send_up_fsm_compressed(struct sess *sess, size_t *phase,
 	} else {
 		assert(up->stat.fd != -1);
 
+		/* Write: [file-index]. */
+
 		(void)send_iflags(sess, wb, wbsz, wbmax, &pos, fl, up->cur->idx);
+
+		/*
+		 * Write [file-block-count].
+		 * Write [file-block-length].
+		 * Write [file-block-cs-length].
+		 * Write [file-block-rem].
+		 */
 
 		assert(sizeof(buf) == 16);
 		if (!io_lowbuffer_alloc(sess, wb, wbsz, wbmax, sizeof(buf))) {
@@ -614,15 +647,15 @@ send_up_fsm_compressed(struct sess *sess, size_t *phase,
  * Returns false on failure, true on success.
  */
 static bool
-send_up_fsm(struct sess *sess, size_t *phase,
-	struct send_up *up, void **wb, size_t *wbsz, size_t *wbmax,
-	const struct flist *fl)
+send_up_fsm(struct sess *sess, size_t *phase, struct send_up *up,
+    void **wb, size_t *wbsz, size_t *wbmax, const struct flist *fl)
 {
-	size_t		 pos = 0, isz = sizeof(int32_t),
-			 dsz = MD4_DIGEST_LENGTH;
-	unsigned char	 fmd[MD4_DIGEST_LENGTH];
-	off_t		 sz;
-	char		 buf[16];
+	char		 buf[16]; /* temporary bufer */
+	unsigned char	 fmd[MD4_DIGEST_LENGTH]; /* file hash */
+	off_t		 sz; /* temporary */
+	size_t		 pos = 0; /* position in buffer */
+	const size_t	 isz = sizeof(int32_t), /* int32 length */
+			 dsz = MD4_DIGEST_LENGTH; /* md4 length */
 
 	switch (up->stat.curst) {
 	case BLKSTAT_DATA:
@@ -782,6 +815,8 @@ send_up_fsm(struct sess *sess, size_t *phase,
 	 */
 
 	if (up->cur->idx < 0) {
+		/* Write: [file-index] */
+
 		if (!io_lowbuffer_alloc(sess, wb, wbsz, wbmax, isz)) {
 			ERRX1("io_lowbuffer_alloc");
 			return false;
@@ -789,11 +824,25 @@ send_up_fsm(struct sess *sess, size_t *phase,
 		io_lowbuffer_int(sess, *wb, &pos, *wbsz, -1);
 		up->stat.curst = BLKSTAT_PHASE;
 	} else if (sess->opts->dry_run == DRY_FULL) {
+		/* Write: [file-index] */
+
 		(void)send_iflags(sess, wb, wbsz, wbmax, &pos, fl, up->cur->idx);
 		up->stat.curst = BLKSTAT_DONE;
 	} else {
 		assert(up->stat.fd != -1);
+
+		/* Write: [file-index] */
+
 		(void)send_iflags(sess, wb, wbsz, wbmax, &pos, fl, up->cur->idx);
+
+		/* 
+		 * Write:
+		 *   [file-block-count]
+		 *   [file-block-length]
+		 *   [file-block-cs-length]
+		 *   [file-block-rem]
+		 */
+
 		assert(sizeof(buf) == 16);
 		if (!io_lowbuffer_alloc(sess, wb, wbsz, wbmax, sizeof(buf))) {
 			ERRX1("io_lowbuffer_alloc");
@@ -1018,6 +1067,7 @@ bool
 rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
     char **argv)
 {
+	char		    buf[PATH_MAX]; /* temporary buffer */
 	struct role	    sender; /* sender role */
 	struct iobuf	    rbuf = { 0 }; /* read buffer */
 	struct pollfd	    pfd[3]; /* poll listeners */
@@ -1025,7 +1075,9 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 	struct send_up	    up; /* current file being updated */
 	struct stat	    st; /* temporary */
 	struct fl	    fl; /* array of flists */
-	const struct flist *f; /* current flist */
+	const struct flist *f, /* current flist */
+	      		   *nextfl; /* temporary flist */
+	const char	   *opath; /* nextfl path */
 	struct send_dl	   *dl, /* file being downloaded */
 			   *mdl = NULL; /* metadata being downloaded */
 	void		   *wbuf = NULL; /* working buffer */
@@ -1042,6 +1094,9 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 	ssize_t		    writesz; /* temporary: size written */
 	const size_t	    max_phase = 1; /* sess->protocol >= 29 ? 2 : 1; */
 	int		    c, /* temporary */
+			    dirfd, /* openat() first argument */
+			    nlinkflag, /* openat() argument */
+			    oflags, /* openat() argument */
 			    bret; /* temporary */
 	int32_t		    idx; /* current block index */
 	ssize_t		    ssz; /* temporary */
@@ -1111,6 +1166,7 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 	/*
 	 * Then the file list in any mode.
 	 * Finally, the IO error (always zero for us).
+	 * Write: [io-error-value].
 	 */
 
 	if (!flist_send(sess, fdin, fdout, fl.flp, fl.sz)) { /* FIXME: &fl */
@@ -1141,6 +1197,7 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 	 * If we're the server then arrange for log_vwritef() to append
 	 * all tagged log messages to the sender's output buffer.
 	 */
+
 	if (sess->opts->server) {
 		sess->wbufp = &wbuf;
 		sess->wbufszp = &wbufsz;
@@ -1162,7 +1219,8 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 
 	for (;;) {
 #define	READ_AVAIL(pfd, iobuf) \
-	(((pfd)[0].revents & POLLIN) != 0 || iobuf_get_readsz((iobuf)) != 0)
+	(((pfd)[0].revents & POLLIN) != 0 || \
+	 iobuf_get_readsz((iobuf)) != 0)
 		assert(pfd[0].fd != -1 || iobuf_seen_eof(&rbuf));
 
 		/*
@@ -1279,6 +1337,8 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 			} else if (avail < flinfosz)
 				goto check_other;
 
+			/* Read: [file-cont-index]. */
+
 			iobuf_read_int(&rbuf, &idx);
 
 			/*
@@ -1318,6 +1378,9 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 		}
 
 		if (READ_AVAIL(pfd, &rbuf) && mdl != NULL) {
+			/*
+			 * Read: [block-cont-index].
+			 */
 			if (mdl->dlstate == SDL_IFLAGS) {
 				bret = sender_get_iflags(&rbuf, fl.flp, mdl);
 				if (bret < 0) {
@@ -1333,6 +1396,16 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 				else
 					mdl->dlstate = SDL_META;
 			}
+
+			/*
+			 * Read:
+			 *   [block-cont-count]
+			 *   [block-cont-length]
+			 *   [block-cont-cs-length]
+			 *   [block-cont-rem]
+			 *   [block-cont-block-cs-short]
+			 *   [block-cont-block-cs-long]
+			 */
 
 			if (mdl->dlstate == SDL_BLOCKS ||
 			    mdl->dlstate == SDL_META) {
@@ -1465,10 +1538,6 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 		 */
 
 		if (up.cur == NULL) {
-			struct flist *f, *nextfl;
-			const char *opath;
-			int dirfd, nlinkflag, oflags;
-
 			assert(pfd[2].fd == -1);
 			assert(up.stat.fd == -1);
 			assert(up.stat.map == NULL);
@@ -1554,8 +1623,6 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 			up.stat.fd = openat(dirfd, opath, oflags, 0);
 
 			if (up.stat.fd == -1) {
-				char buf[PATH_MAX];
-
 				ERR("%s: open (2) in %s",
 				    fl.flp[up.cur->idx].path,
 				    getcwd(buf, sizeof(buf)));

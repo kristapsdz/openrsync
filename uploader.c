@@ -1742,6 +1742,8 @@ rsync_uploader(struct upload *u, struct sess *sess, int revents,
 		}
 
 		if (u->idx == u->flsz) {
+			/* Write: [file-cont-index]. */
+
 			if (!io_write_int(sess, u->fdout, -1)) {
 				ERRX1("io_write_int");
 				return -1;
@@ -1833,6 +1835,9 @@ rsync_uploader(struct upload *u, struct sess *sess, int revents,
 				*fileoutfd = u->fdout;
 				return 1;
 			}
+
+			/* Write: [file-cont-index]. */
+
 			if (!io_write_int(sess, u->fdout, -1)) {
 				ERRX1("io_write_int");
 				return -1;
@@ -1962,17 +1967,25 @@ skipmap:
 		u->bufmax = u->bufsz;
 	}
 
+	/*
+	 * Write: [block-cont-index]
+	 * Write: [block-cont-count]
+	 * Write: [block-cont-length]
+	 * Write: [block-cont-cs-length]
+	 * Write: [block-cont-rem]
+	 */
+
 	io_buffer_int(u->buf, &pos, u->bufsz, u->fl[u->idx].sendidx);
 	io_buffer_int(u->buf, &pos, u->bufsz, (int)blk.blksz);
 	io_buffer_int(u->buf, &pos, u->bufsz, (int)blk.len);
 	io_buffer_int(u->buf, &pos, u->bufsz, (int)blk.csum);
 	io_buffer_int(u->buf, &pos, u->bufsz, (int)blk.rem);
 
-	/*
-	 * Error cases above may leave us without a blk.blks.
-	 */
+	/* Error cases above may leave us without a blk.blks. */
 
 	if (!sess->role->append && blk.blks != NULL) {
+	 	/* Write: [block-cont-block-cs-short] */
+	 	/* Write: [block-cont-block-cs-long] */
 		for (i = 0; i < blk.blksz; i++) {
 			io_buffer_int(u->buf, &pos, u->bufsz,
 				      blk.blks[i].chksum_short);

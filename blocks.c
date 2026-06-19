@@ -560,7 +560,7 @@ out:
  * Symmetrise blk_recv_ack(), except w/o the leading identifier.
  * Return zero on failure, non-zero on success.
  */
-int
+bool
 blk_send_ack(struct sess *sess, int fd, struct blkset *p)
 {
 	char	 buf[16];
@@ -574,17 +574,9 @@ blk_send_ack(struct sess *sess, int fd, struct blkset *p)
 	    sizeof(int32_t); /* block remainder */
 	assert(sz <= sizeof(buf));
 
-	/*
-	 * At once, read:
-	 *   [file-block-count]
-	 *   [file-block-length]
-	 *   [file-block-cs-length]
-	 *   [file-block-rem]
-	 */
-
 	if (!io_read_buf(sess, fd, buf, sz)) {
 		ERRX1("io_read_buf");
-		return 0;
+		return false;
 	}
 
 	if (!io_unbuffer_size(buf, &pos, sz, &p->blksz))
@@ -600,60 +592,7 @@ blk_send_ack(struct sess *sess, int fd, struct blkset *p)
 	else if ((int)p->csum < 0 || p->csum > 16)
 		ERRX1("inappropriate checksum length");
 	else
-		return 1;
+		return true;
 
-	return 0;
-}
-
-/*
- * Transmit the metadata for set and blocks.
- * Return zero on failure, non-zero on success.
- */
-int
-blk_send(struct sess *sess, int fd, size_t idx,
-	const struct blkset *p, const char *path)
-{
-	char	*buf;
-	size_t	 i, pos = 0, sz;
-	int	 rc = 0;
-
-	/* Put the entire send routine into a buffer. */
-
-	sz = sizeof(int32_t) + /* block count */
-	    sizeof(int32_t) + /* block length */
-	    sizeof(int32_t) + /* checksum length */
-	    sizeof(int32_t) + /* block remainder */
-	    p->blksz *
-	    (sizeof(int32_t) + /* short checksum */
-		p->csum); /* long checksum */
-
-	if ((buf = malloc(sz)) == NULL) {
-		ERR("malloc");
-		return 0;
-	}
-
-	io_buffer_int(buf, &pos, sz, (int)p->blksz);
-	io_buffer_int(buf, &pos, sz, (int)p->len);
-	io_buffer_int(buf, &pos, sz, (int)p->csum);
-	io_buffer_int(buf, &pos, sz, (int)p->rem);
-
-	for (i = 0; i < p->blksz; i++) {
-		io_buffer_int(buf, &pos, sz, p->blks[i].chksum_short);
-		io_buffer_buf(buf, &pos, sz, p->blks[i].chksum_long, p->csum);
-	}
-
-	assert(pos == sz);
-
-	if (!io_write_buf(sess, fd, buf, sz)) {
-		ERRX1("io_write_buf");
-		goto out;
-	}
-
-	LOG3("%s: sent block prologue: %zu blocks of %zu B, "
-	    "%zu B remainder, %zu B checksum",
-	    path, p->blksz, p->len, p->rem, p->csum);
-	rc = 1;
-out:
-	free(buf);
-	return rc;
+	return false;
 }

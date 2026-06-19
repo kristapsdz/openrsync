@@ -1193,7 +1193,10 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 		 * Now get our block information.
 		 * This is all we'll need to reconstruct the file from
 		 * the map, as block sizes are regular.
-		 * Reads [file-xxxx].
+		 * Read [file-block-count].
+		 * Read [file-block-length].
+		 * Read [file-block-cs-length].
+		 * Read [file-block-rem].
 		 */
 
 		download_reinit(sess, p, idx);
