@@ -84,14 +84,6 @@ rules.h: extern.h
 
 REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test0_noslash.test \
-		  regress/functional/test10_perms.test \
-		  regress/functional/test11_middlediff.test \
-		  regress/functional/test11b_middlediff.test \
-		  regress/functional/test12_inex.test \
-		  regress/functional/test12b_inex.test \
-		  regress/functional/test12c_inex.test \
-		  regress/functional/test13_perms.test \
-		  regress/functional/test13b_perms.test \
 		  regress/functional/test1_minusa.test \
 		  regress/functional/test2_minusexclude.test \
 		  regress/functional/test3_minusexclude.test \
@@ -106,9 +98,19 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test7b_symlinks.test \
 		  regress/functional/test8_times.test \
 		  regress/functional/test8b_times.test \
-		  regress/functional/test9_norecurse.test
+		  regress/functional/test9_norecurse.test \
+		  regress/functional/test10_perms.test \
+		  regress/functional/test11_middlediff.test \
+		  regress/functional/test11b_middlediff.test \
+		  regress/functional/test12_inex.test \
+		  regress/functional/test12b_inex.test \
+		  regress/functional/test12c_inex.test \
+		  regress/functional/test13_perms.test \
+		  regress/functional/test13b_perms.test \
+		  regress/functional/test19_linkdest.test \
+		  regress/functional/test19b_linkdest-rel.test
 REGRESS_FAIL 	= regress/functional/test12d_inex.test
-REGRESS_MANUAL 	= 
+REGRESS_MANUAL 	=
 RSYNC_VERBOSE	= 
 
 regress_functional:: all

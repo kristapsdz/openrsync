@@ -28,6 +28,7 @@
 .Op Fl -block-size Ns = Ns Ar size , Fl B Ar size
 .Op Fl -compare-dest Ns = Ns Ar dir
 .Op Fl -contimeout Ns = Ns Ar seconds
+.Op Fl -copy-dest Ns = Ns Ar dir
 .Op Fl -cvs-exclude , Fl C
 .Op Fl -del , Fl -delete
 .Op Fl -devices
@@ -42,6 +43,7 @@
 .Op Fl -include Ns = Ns Ar pattern
 .Op Fl -ipv4 , Fl 4
 .Op Fl -ipv6 , Fl 6
+.Op Fl -link-dest Ns = Ns Ar dir
 .Op Fl -links , Fl l
 .Op Fl -max-size Ns = Ns Ar size
 .Op Fl -min-size Ns = Ns Ar size
@@ -121,21 +123,32 @@ Shorthand for
 Specify the block size to be used for file transfers.
 The upper bound is 512M.
 .It Fl -compare-dest Ns = Ns Ar directory
-Use directory as an alternate base directory to compare files against on the
-destination machine.
+Use directory as an alternate base directory to compare files against on
+the destination machine.
 If file in
 .Ar directory
-is found and identical to the sender's file, the file will not be transferred.
+is found and identical to the sender's file, the file will not be
+transferred.
 Multiple
 .Fl -compare-dest
 directories may be provided.
 If
 .Ar directory
 is a relative path, it is relative to the destination directory.
+Only one of
+.Fl -compare-dest ,
+.Fl -copy-dest ,
+or
+.Fl -link-dest
+may be specified.
 .It Fl -contimeout Ns = Ns Ar seconds
 Set the connection timeout in seconds.
 Exit if no connection established within the specified time.
 The default is 0, which means no timeout.
+.It Fl -copy-dest
+Like
+.Fl -compare-dest ,
+but if found and identical, the file will be locally copied.
 .It Fl -cvs-exclude , Fl C
 Exclude a common list of files as
 .Xr cvs 1
@@ -258,6 +271,10 @@ to it.
 Like
 .Fl 4 ,
 but for IPv6.
+.It Fl -link-dest
+Like
+.Fl -compare-dest ,
+but if found and identical, the file will be hardlinked.
 .It Fl -links , Fl l
 Also transfer symbolic links.
 The link is transferred as a standalone file: if the destination does

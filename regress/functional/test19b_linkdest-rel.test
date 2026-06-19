@@ -1,0 +1,30 @@
+#! /bin/sh
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3 dir4 dir5
+# make the copy-from-here tree
+mkdir dir1
+echo foo > dir1/file1
+echo bar > dir1/file2
+
+# create the dir for --link-dest
+mkdir -p dir3/two
+echo bar > dir3/two/file2
+
+# create the tree we compare to
+mkdir dir2
+echo foo > dir2/file1
+mkdir dir5
+echo bar > dir5/file2
+(cd dir2 && ln ../dir5/file2 file2)
+
+# sync the timestamps
+touch dir[1234]/file* dir[1234]/*/file*
+
+# create the target tree
+mkdir dir4
+
+rsync -a -vv --link-dest=../dir3/two -- dir1/. dir4/.
+compare_trees dir2 dir4

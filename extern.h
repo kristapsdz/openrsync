@@ -124,10 +124,6 @@ enum dryrun {
 	DRY_FULL,		/* full dry-run */
 };
 
-#define BASE_MODE_COMPARE	1
-#define BASE_MODE_COPY		2
-#define BASE_MODE_LINK		3
-
 /*
  * The sender and receiver use a two-phase synchronisation process.
  * The first uses two-byte hashes; the second, 16-byte.
@@ -285,6 +281,13 @@ enum	nidsmode {
 	NIDS_FULL,	/* numeric IDs, both sides know */
 };
 
+enum 	altbasemode {
+	BASE_MODE_OFF = 0,
+	BASE_MODE_COMPARE = 1,
+	BASE_MODE_COPY = 2,
+	BASE_MODE_LINK = 3,
+};
+
 /*
  * XXX: meaning?
  */
@@ -384,14 +387,14 @@ struct	opts {
 	bool		 omit_dir_times;	/* -O */
 	bool		 omit_link_times;	/* -J */
 	bool		 size_only;		/* --size-only */
-	int		 alt_base_mode;
+	enum altbasemode alt_base_mode;		/* --compare/copy/link-dest */
 	off_t		 max_size;		/* --max-size */
 	off_t		 min_size;		/* --min-size */
 	char		*rsync_path;		/* --rsync-path */
 	char		*ssh_prog;		/* --rsh or -e */
 	char		*port;			/* --port */
 	char		*address;		/* --address */
-	char		*basedir[MAX_BASEDIR];
+	char		*basedir[MAX_BASEDIR];	/* --compare/copy/link-dest */
 	bool		 compress;		/* -z */
 	int		 compression_level;	/* --compress-level */
 #if 0
@@ -640,7 +643,7 @@ void		 fmap_close(struct fmap *);
 bool		 fmap_trap(const struct fmap *);
 void		 fmap_untrap(const struct fmap *);
 
-const char	 *alt_base_mode(int);
+const char	 *alt_base_mode(enum altbasemode);
 char		**fargs_cmdline(struct sess *, const struct fargs *, size_t *);
 
 bool	io_read_buf(struct sess *, int, void *, size_t);

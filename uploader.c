@@ -1211,10 +1211,11 @@ check_file(int rootfd, struct flist *f, struct stat *st,
 static int
 pre_file_check_altdir(struct sess *sess, const struct upload *p,
     const char **matchdir, struct stat *st, const char *root,
-    struct flist *f, int rc, int *savedfd)
+    struct flist *f, int rc, enum altbasemode basemode, int *savedfd)
 {
-	int32_t saved_iflags = f->iflags;
-	int dfd, x;
+	int32_t	 saved_iflags = f->iflags; /* saved iflags */
+	int	 dfd, /* root directory fd */
+		 x; /* check_file() result */
 
 	dfd = openat(p->rootfd, root, O_RDONLY | O_DIRECTORY);
 	if (dfd == -1) {
@@ -1239,7 +1240,40 @@ pre_file_check_altdir(struct sess *sess, const struct upload *p,
 
 		f->iflags |= itemize_changes(sess, st, f);
 
-		LOG3("%s: skipping: up to date in %s", f->path, root);
+		switch (basemode) {
+		case BASE_MODE_COPY:
+			LOG3("%s: copying: up to date in %s", f->path,
+			    root);
+			copy_file(p->rootfd, root, f);
+			rsync_set_metadata_at(sess, true, p->rootfd, f,
+			    f->path);
+			f->iflags |= IFLAG_LOCAL_CHANGE;
+			break;
+		case BASE_MODE_LINK:
+			LOG3("%s: hardlinking: up to date in %s",
+			    f->path, root);
+			if (linkat(dfd, f->path, p->rootfd, f->path, 0) == -1) {
+				/*
+				 * GNU rsync falls back to copy here.  I
+				 * think it is more correct to fail
+				 * since the user requested
+				 * --link-dest and the manpage states
+				 *  that there will be hardlinking.
+				 */
+				ERR("hard link '%s/%s'", root, f->path);
+			}
+
+			f->iflags |= IFLAG_HLINK_FOLLOWS |
+			    IFLAG_LOCAL_CHANGE;
+			assert(f->link == NULL);
+			break;
+		case BASE_MODE_COMPARE:
+			/* FALLTHROUGH */
+		default:
+			LOG3("%s: skipping: up to date in %s", f->path,
+			    root);
+			break;
+		}
 		close(dfd);
 		return 0;
 	}
@@ -1423,7 +1457,8 @@ fixed:
 
 	for (i = 0; sess->opts->basedir[i] != NULL; i++) {
 		ret = pre_file_check_altdir(sess, p, &matchdir, &st,
-		    sess->opts->basedir[i], f, rc, NULL);
+		    sess->opts->basedir[i], f, rc,
+		    sess->opts->alt_base_mode, NULL);
 		if (ret <= 0)
 			return ret;
 	}

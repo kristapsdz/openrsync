@@ -30,8 +30,12 @@
 
 #define	RSYNC_PATH	"rsync"
 
+/*
+ * Get the command-line argument corresponding to the base mode.
+ * CALLS err() IF UNSET.
+ */
 const char *
-alt_base_mode(int mode)
+alt_base_mode(enum altbasemode mode)
 {
 	switch (mode) {
 	case BASE_MODE_COMPARE:
@@ -180,7 +184,8 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
         if (sess->opts->block_size > 0)
 		addargs(&args, "-B%ld", sess->opts->block_size);
 
-	/* extra options for the receiver (local is sender) */
+	/* Extra options for the receiver (local is sender). */
+
 	if (f->mode == FARGS_SENDER) {
 		if (sess->opts->omit_dir_times)
 			addargs(&args, "-O");
@@ -189,8 +194,9 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		if (sess->opts->size_only)
 			addargs(&args, "--size-only");
 
-		/* only add --compare-dest, etc if this is the sender */
-		if (sess->opts->alt_base_mode != 0) {
+		/* Only add --xxx-dest if this is the sender. */
+
+		if (sess->opts->alt_base_mode != BASE_MODE_OFF) {
 			for (j = 0; j < MAX_BASEDIR; j++) {
 				if (sess->opts->basedir[j] == NULL)
 					break;

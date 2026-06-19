@@ -406,15 +406,13 @@ enum {
 
 const char rsync_shopts[] = "468B:CDFade:f:ghIJlnOoprtVvxz";
 const struct option	 lopts[] = {
-#if 0
-    { "copy-dest",	required_argument, NULL,		OP_COPY_DEST },
-    { "link-dest",	required_argument, NULL,		OP_LINK_DEST },
-#endif
     { "8-bit-output",	no_argument,	NULL,			'8' },
     { "address",	required_argument, NULL,		OP_ADDRESS },
     { "archive",	no_argument,	NULL,			'a' },
     { "block-size",	required_argument, NULL,		'B' },
     { "compare-dest",	required_argument, NULL,		OP_COMP_DEST },
+    { "copy-dest",	required_argument, NULL,		OP_COPY_DEST },
+    { "link-dest",	required_argument, NULL,		OP_LINK_DEST },
     { "compress",	no_argument,	NULL,			'z' },
     { "contimeout",	required_argument, NULL,		OP_CONTIMEOUT },
     { "cvs-exclude",	no_argument,	NULL,			'C' },
@@ -535,6 +533,18 @@ usage(void)
 }
 
 /*
+ * Add a basedir to the list.
+ */
+static size_t
+rsync_getopt_xxxdest(const char *optarg, const char *name, size_t count)
+{
+	if (count >= MAX_BASEDIR)
+		errx(ERR_SYNTAX, "--%s: too many directories", name);
+	opts.basedir[count++] = optarg;
+	return count;
+}
+
+/*
  * Parse options out of argv.
  *
  * Returns NULL on error or the client options struct on success.  If
@@ -545,16 +555,16 @@ static struct opts *
 rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
     struct sess *sess, int *exitcode)
 {
+	const char	*errstr; /* temporary error string */
+	const char	*new_rule; /* filter rule */
 	long long	 tmpint; /* temporary */
-	int		 c, /* getopt return */
-			 rc, /* temporary */
-			 lidx; /* getopt long index */
 	size_t		 basedir_cnt = 0, /* number of base directories */
 			 opts_F = 0, /* -F calls */
 			 opts_no_dirs = 0; /* transitional */
-	const char	*errstr; /* temporary error string */
+	int		 c, /* getopt return */
+			 rc, /* temporary */
+			 lidx; /* getopt long index */
 	bool		 cvs_excl = false; /* exclude CVS */
-	const char	*new_rule; /* filter rule */
 
 	(void)filter; /* TODO: currently unused */
 
@@ -787,39 +797,37 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			parse_file_rule(optarg, RULE_INCLUDE, '\n');
 			break;
 		case OP_COMP_DEST:
-			if (opts.alt_base_mode != 0 &&
+			if (opts.alt_base_mode != BASE_MODE_OFF &&
 			    opts.alt_base_mode != BASE_MODE_COMPARE) {
 				errx(ERR_SYNTAX, "--%s: conflicts "
 				    "with %s", lopts[lidx].name,
 				    alt_base_mode(opts.alt_base_mode));
 			}
 			opts.alt_base_mode = BASE_MODE_COMPARE;
-#if 0
-			goto basedir;
+			basedir_cnt = rsync_getopt_xxxdest(optarg,
+			    lopts[lidx].name, basedir_cnt);
+			break;
 		case OP_COPY_DEST:
-			if (opts.alt_base_mode !=0 &&
+			if (opts.alt_base_mode != BASE_MODE_OFF &&
 			    opts.alt_base_mode != BASE_MODE_COPY) {
-				errx(1, "option --%s conflicts with %s",
+				errx(ERR_SYNTAX, "option --%s conflicts with %s",
 				    lopts[lidx].name,
 				    alt_base_mode(opts.alt_base_mode));
 			}
 			opts.alt_base_mode = BASE_MODE_COPY;
-			goto basedir;
+			basedir_cnt = rsync_getopt_xxxdest(optarg,
+			    lopts[lidx].name, basedir_cnt);
+			break;
 		case OP_LINK_DEST:
 			if (opts.alt_base_mode !=0 &&
 			    opts.alt_base_mode != BASE_MODE_LINK) {
-				errx(1, "option --%s conflicts with %s",
+				errx(ERR_SYNTAX, "option --%s conflicts with %s",
 				    lopts[lidx].name,
 				    alt_base_mode(opts.alt_base_mode));
 			}
 			opts.alt_base_mode = BASE_MODE_LINK;
-
-basedir:
-#endif
-			if (basedir_cnt >= MAX_BASEDIR)
-				errx(ERR_SYNTAX, "--%s: too many "
-				    "directories", lopts[lidx].name);
-			opts.basedir[basedir_cnt++] = optarg;
+			basedir_cnt = rsync_getopt_xxxdest(optarg,
+			    lopts[lidx].name, basedir_cnt);
 			break;
 		case OP_MAX_SIZE:
 			if (scan_scaled(optarg, &tmpint) == -1)
