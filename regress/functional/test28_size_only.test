@@ -41,9 +41,9 @@ compare_trees -t ref dst
 #
 $rsync -a --size-only -- src/ dst/
 compare_trees ref dst
-X=$(stat -f '%m' src/two)
-Y=$(stat -f '%m' dst/two)
-[ "$X" == "$Y" ]
+X=$(stat $STAT_FMT_FLAG \"$STAT_MTIME\" src/two)
+Y=$(stat $STAT_FMT_FLAG \"$STAT_MTIME\" dst/two)
+[ "$X" = "$Y" ]
 
 # A metadata update also should not cause dst/two's contents
 # to be updated:
@@ -52,9 +52,9 @@ for mode in 660 600 640 604 440 400 404 ; do
     chmod ${mode} src/two ref/two
     $rsync -a --size-only -- src/ dst/
     compare_trees ref dst
-    X=$(stat -f '%m' src/two)
-    Y=$(stat -f '%m' dst/two)
-    [ "$X" == "$Y" ]
+    X=$(stat $STAT_FMT_FLAG \"$STAT_MTIME\" src/two)
+    Y=$(stat $STAT_FMT_FLAG \"$STAT_MTIME\" dst/two)
+    [ "$X" = "$Y" ]
 done
 
 # Now that the mtime's match, a simple rsync should also not cause
@@ -62,9 +62,9 @@ done
 #
 $rsync -a -- src/ dst/
 compare_trees ref dst
-X=$(stat -f '%m' src/two)
-Y=$(stat -f '%m' dst/two)
-[ "$X" == "$Y" ]
+X=$(stat $STAT_FMT_FLAG \"$STAT_MTIME\" src/two)
+Y=$(stat $STAT_FMT_FLAG \"$STAT_MTIME\" dst/two)
+[ "$X" = "$Y" ]
 
 # Finally, a simple rsync (ignoring times) should cause dst/two
 # to become identical to src/two:
