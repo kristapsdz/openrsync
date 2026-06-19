@@ -107,6 +107,10 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 	    "negotiated protocol version %d, seed %d",
 	    sess.rver, sess.lver, sess.protocol, sess.seed);
 
+	if (verbose > 1 && !sess.opts->sender)
+		LOG0("Delta transmission %s for this transfer",
+		    sess.opts->whole_file ? "disabled" : "enabled");
+
 	for (i = 0; argv[i] != NULL; i++)
 		LOG3("exec[%zu] = %s", i, argv[i]);
 

@@ -58,6 +58,7 @@
 .Op Fl -no-recursive
 .Op Fl -no-specials
 .Op Fl -no-times
+.Op Fl -no-whole-file , Fl -no-W
 .Op Fl -numeric-ids
 .Op Fl -omit-dir-times , Fl O
 .Op Fl -omit-link-times , Fl J
@@ -75,6 +76,7 @@
 .Op Fl -times , Fl t
 .Op Fl -verbose , Fl v
 .Op Fl -version , Fl V
+.Op Fl -whole-file , Fl W
 .Ar source ...
 .Ar directory
 .Sh DESCRIPTION
@@ -396,6 +398,15 @@ thrice for per-file transfer information, and four times for per-file
 breakdowns.
 .It Fl -version , Fl V
 Print version and exit.
+.It Fl -whole-file , Fl W
+Copy the entire file rather than using the rsync incremental algorithm.
+This option may be faster, especially if the network link is faster than
+the disk.
+If unspecified, this is enabled by default for local transfers.
+Negate with
+.Fl -no-whole-file
+or
+.Fl -no-W .
 .El
 .Pp
 A remote

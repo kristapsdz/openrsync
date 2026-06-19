@@ -404,7 +404,7 @@ enum {
 	OP_SET_BOOL_TRUE,
 };
 
-const char rsync_shopts[] = "468B:CDFade:f:ghIJlnOoprtVvxz";
+const char rsync_shopts[] = "468B:CDFade:f:ghIJlnOoprtVvWxz";
 const struct option	 lopts[] = {
     { "8-bit-output",	no_argument,	NULL,			'8' },
     { "address",	required_argument, NULL,		OP_ADDRESS },
@@ -466,6 +466,9 @@ const struct option	 lopts[] = {
     { "times",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "verbose",	no_argument,	NULL,			'v' },
     { "version",	no_argument,	NULL,			'V' },
+    { "whole-file",	no_argument,	NULL,			'W' },
+    { "no-whole-file",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
+    { "no-W",		no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "dirs",		no_argument,	NULL,			'd' },
     { NULL,		0,		NULL,			0 }
 #if 0
@@ -536,7 +539,7 @@ usage(void)
  * Add a basedir to the list.
  */
 static size_t
-rsync_getopt_xxxdest(const char *optarg, const char *name, size_t count)
+rsync_getopt_xxxdest(char *optarg, const char *name, size_t count)
 {
 	if (count >= MAX_BASEDIR)
 		errx(ERR_SYNTAX, "--%s: too many directories", name);
@@ -553,7 +556,7 @@ rsync_getopt_xxxdest(const char *optarg, const char *name, size_t count)
  */
 static struct opts *
 rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
-    struct sess *sess, int *exitcode)
+    struct sess *sess, int *exitcode, int *whole_file)
 {
 	const char	*errstr; /* temporary error string */
 	const char	*new_rule; /* filter rule */
@@ -627,6 +630,10 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				opts.preserve_times = false;
 			else if (strcmp(lopts[lidx].name, "no-recursive") == 0)
 				opts.recursive = false;
+			else if (strcmp(lopts[lidx].name, "no-whole-file") == 0)
+				*whole_file = 0;
+			else if (strcmp(lopts[lidx].name, "no-W") == 0)
+				*whole_file = 0;
 			break;
 		case '4':
 			opts.ipf = 4;           
@@ -738,6 +745,9 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			fprintf(stderr, "openrsync: protocol version %u\n",
 			    RSYNC_PROTOCOL);
 			exit(0);
+		case 'W':
+			*whole_file = 1;
+			break;
 		case 'x':
 			opts.one_file_system++;
 			break;
@@ -903,7 +913,8 @@ main(int argc, char *argv[])
 			  i, /* temporary */
 			  rc, /* rsync_client/server() return */
 			  rc2, /* child process return */
-			  st; /* child process status */
+			  st, /* child process status */
+			  whole_file = -1; /* whole_file status */
 	struct sess	  sess;
 	struct fargs	 *fargs;
 	char		**args;
@@ -923,7 +934,7 @@ main(int argc, char *argv[])
 
 	opts.max_size = opts.min_size = -1;
 
-	if (rsync_getopt(argc, argv, NULL, NULL, &c) == NULL)
+	if (rsync_getopt(argc, argv, NULL, NULL, &c, &whole_file) == NULL)
 		exit(c);
 
 	argc -= optind;
@@ -933,6 +944,10 @@ main(int argc, char *argv[])
 		usage();
 		exit(ERR_SYNTAX);
 	}
+
+	/* Set whole-file only if explicitly specified. */
+
+	opts.whole_file = whole_file > 0;
 
 	/*
 	 * This is what happens when we're started with the "hidden"
@@ -957,6 +972,14 @@ main(int argc, char *argv[])
 
 	fargs = fargs_parse(argc, argv, &opts);
 	assert(fargs != NULL);
+
+	/*
+	 * For local transfers, enable whole_file by default if the user
+	 * did not specifically ask for --no-whole-file.
+	 */
+
+	if (fargs->host == NULL && !fargs->remote && whole_file < 0)
+		opts.whole_file = true;
 
 	/*
 	 * For implied --list-only mode, we set --dirs up early so that

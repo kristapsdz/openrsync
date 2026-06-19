@@ -367,43 +367,44 @@ struct flist	*fl_new(struct fl *);
  * See struct fargs.
  */
 struct	opts {
-	bool		 sender;		/* --sender */
-	bool		 server;		/* --server */
-	bool		 recursive;		/* -r */
-	enum dryrun	 dry_run;		/* -n */
-	bool		 preserve_times;	/* -t */
-	bool		 preserve_perms;	/* -p */
-	bool		 preserve_links;	/* -l */
-	bool		 preserve_gids;		/* -g */
-	bool		 preserve_uids;		/* -u */
-	enum delmode	 del;			/* --delete */
-	bool		 del_excl;		/* --delete-excluded */
-	bool		 devices;		/* --devices */
-	bool		 specials;		/* --specials */
-	bool		 no_motd;		/* --no-motd */
-	enum nidsmode	 numeric_ids;		/* --numeric-ids */
-	size_t		 one_file_system;	/* -x */
-	bool		 ignore_times;		/* -I */
-	bool		 omit_dir_times;	/* -O */
-	bool		 omit_link_times;	/* -J */
-	bool		 size_only;		/* --size-only */
-	enum altbasemode alt_base_mode;		/* --compare/copy/link-dest */
 	off_t		 max_size;		/* --max-size */
 	off_t		 min_size;		/* --min-size */
-	char		*rsync_path;		/* --rsync-path */
-	char		*ssh_prog;		/* --rsh or -e */
-	char		*port;			/* --port */
 	char		*address;		/* --address */
 	char		*basedir[MAX_BASEDIR];	/* --compare/copy/link-dest */
-	bool		 compress;		/* -z */
+	char		*port;			/* --port */
+	char		*rsync_path;		/* --rsync-path */
+	char		*ssh_prog;		/* --rsh or -e */
+	enum altbasemode alt_base_mode;		/* --compare/copy/link-dest */
+	enum delmode	 del;			/* --delete */
+	enum dirmode	 dirs;			/* -d --dirs */
+	enum dryrun	 dry_run;		/* -n */
+	enum nidsmode	 numeric_ids;		/* --numeric-ids */
 	int		 compression_level;	/* --compress-level */
+	long		 block_size;		/* -B */
+	size_t		 one_file_system;	/* -x */
+	char		 ipf;			/* 0 (unspec), 4 (IPV4), 6 (IPV6) */
+	bool		 bit8;			/* -8 */
+	bool		 compress;		/* -z */
+	bool		 del_excl;		/* --delete-excluded */
+	bool		 devices;		/* --devices */
+	bool		 ignore_times;		/* -I */
+	bool		 no_motd;		/* --no-motd */
+	bool		 omit_dir_times;	/* -O */
+	bool		 omit_link_times;	/* -J */
+	bool		 preserve_gids;		/* -g */
+	bool		 preserve_links;	/* -l */
+	bool		 preserve_perms;	/* -p */
+	bool		 preserve_times;	/* -t */
+	bool		 preserve_uids;		/* -u */
+	bool		 recursive;		/* -r */
+	bool		 sender;		/* --sender */
+	bool		 server;		/* --server */
+	bool		 size_only;		/* --size-only */
+	bool		 specials;		/* --specials */
+	bool		 whole_file;		/* --whole-file */
 #if 0
 	char		*syncfile;		/* --sync-file */
 #endif
-	char		 ipf;			/* 0 (unspec), 4 (IPV4), 6 (IPV6) */
-	enum dirmode	 dirs;			/* -d --dirs */
-	bool		 bit8;			/* -8 */
-	long		 block_size;		/* -B */
 };
 
 /*

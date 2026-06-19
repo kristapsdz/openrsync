@@ -136,6 +136,19 @@ itemize_changes(const struct sess *sess, const struct stat *st,
 		iflags |= IFLAG_GROUP;
 
 	return iflags;
+} 
+
+/*
+ * Create a blockset representing a full file.
+ */
+static void
+init_null_blkset(struct blkset *p, off_t sz)
+{
+	p->size = sz;
+	p->blksz = 0;
+	p->len = 0;
+	p->csum = 0;
+	p->rem = 0;
 }
 
 /*
@@ -1896,10 +1909,14 @@ rsync_uploader(struct upload *u, struct sess *sess, int revents,
 	blk.csum = u->csumlen;
 
 	if (*fileinfd != -1 && filesize > 0) {
-		init_blkset(&blk, filesize, sess->opts->block_size);
+		if (sess->opts->whole_file)
+			init_null_blkset(&blk, filesize);
+		else
+			init_blkset(&blk, filesize, sess->opts->block_size);
 		assert(blk.blksz);
 
-		if (u->phase == 0 && sess->role->append)
+		if (sess->opts->whole_file ||
+		    (u->phase == 0 && sess->role->append))
 			goto skipmap;
 
 		assert(blk.blksz);
@@ -2018,7 +2035,8 @@ skipmap:
 
 	/* Error cases above may leave us without a blk.blks. */
 
-	if (!sess->role->append && blk.blks != NULL) {
+	if (!sess->role->append && !sess->opts->whole_file &&
+	    blk.blks != NULL) {
 	 	/* Write: [block-cont-block-cs-short] */
 	 	/* Write: [block-cont-block-cs-long] */
 		for (i = 0; i < blk.blksz; i++) {

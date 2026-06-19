@@ -81,7 +81,8 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 	sess.mplex_reads = 1;
 
 	if (verbose > 1 && f->mode == FARGS_RECEIVER)
-		LOG0("Delta transmission disabled for this transfer");
+		LOG0("Delta transmission %s for this transfer",
+		    sess.opts->whole_file ? "disabled" : "enabled");
 
 	/*
 	 * Now we need to get our list of files.

@@ -304,7 +304,7 @@ protocol_line(struct sess *sess, __attribute__((unused)) const char *host,
 
 /*
  * Connect to a remote rsync://-enabled server sender.
- * Returns exit code 0 on success, 1 on failure.
+ * Returns exit code 0 on success, 1 on failure, 
  */
 int
 rsync_connect(const struct opts *opts, int *sd, const struct fargs *f)
@@ -386,8 +386,8 @@ out:
 
 /*
  * Talk to a remote rsync://-enabled server sender.
- * Returns exit code 0 on success, 1 on failure, 2 on failure with
- * incompatible protocols.
+ * Returns exit code 0 on success, ERR_SYNTAX on failure, ERR_PROTOCOL
+ * on failure with incompatible protocols, or ERR_IPC on other errors.
  */
 int
 rsync_socket(const struct opts *opts, int sd, const struct fargs *f)
@@ -511,11 +511,15 @@ rsync_socket(const struct opts *opts, int sd, const struct fargs *f)
 		goto out;
 	}
 
+	LOG2("socket detected client version %d, server version %d, "
+	    "negotiated protocol version %d, seed %d",
+	    sess.lver, sess.rver, sess.protocol, sess.seed);
+
+	LOG2("Delta transmission %s for this transfer",
+	    sess.opts->whole_file ? "disabled" : "enabled");
+
 	sess.mplex_reads = 1;
 	LOG2("read multiplexing enabled");
-
-	LOG2("socket detected client version %d, server version %d, seed %d",
-	    sess.lver, sess.rver, sess.seed);
 
 	assert(f->mode == FARGS_RECEIVER);
 
@@ -525,13 +529,18 @@ rsync_socket(const struct opts *opts, int sd, const struct fargs *f)
 		goto out;
 	}
 
-#if 0
-	/* Probably the EOF. */
-	if (io_read_check(&sess, sd))
-		WARNX("data remains in read pipe");
-#endif
+	/*
+	 * See the commentary in the client at the same point; the short
+	 * version is that we don't want to miss any log messages.
+	 */
 
 	rc = 0;
+	if (!io_read_close(&sess, sd)) {
+		if (sess.mplex_read_remain > 0)
+			WARNX("data remains in read pipe");
+		rc = ERR_IPC;
+	}
+
 out:
 	sess_cleanup(&sess);
 	free(args);
