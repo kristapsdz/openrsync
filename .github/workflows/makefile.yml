@@ -6,17 +6,17 @@ jobs:
     steps:
     - uses: actions/checkout@master
     - name: Install dependencies
-      run: sudo apt-get install -y bmake
+      run: sudo apt-get install -y bmake rsync
     - name: Configure
       run: ./configure
     - name: Build and test
-      run: bmake
+      run: bmake regress
   ubuntu_fsanitize:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@master
     - name: Install dependencies
-      run: sudo apt-get install -y bmake
+      run: sudo apt-get install -y bmake rsync
     - name: Configure
       run: |
         echo "HAVE_SECCOMP_FILTER=0" > configure.local
@@ -24,7 +24,7 @@ jobs:
         echo "CFLAGS += -fsanitize=undefined,address" > Makefile.local
         echo "LDFLAGS += -fsanitize=undefined,address" >> Makefile.local
     - name: Build and test
-      run: bmake
+      run: bmake regress
   macos_standard:
     runs-on: macos-latest
     steps:

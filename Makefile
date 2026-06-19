@@ -2,7 +2,7 @@
 
 include Makefile.configure
 
-RSYNC	    = /usr/local/bin/rsync
+RSYNC	    = rsync
 
 OBJS	    = blocks.o \
 	      client.o \
