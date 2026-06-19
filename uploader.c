@@ -80,7 +80,7 @@ static bool pre_dir_delete(struct upload *, struct sess *, enum delmode); /* FIX
 static bool check_path(int, const char *); /* FIXME: move into place */
 
 static bool
-force_delete_applicable(const struct upload *p __unused,
+force_delete_applicable(const struct upload *p,
     const struct sess *sess, mode_t mode)
 {
 	return sess->opts->del == DMODE_BEFORE;

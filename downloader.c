@@ -33,6 +33,13 @@
 #include "extern.h"
 
 /*
+ * Not defined on musl Linux.
+ */
+#ifndef ALLPERMS
+# define ALLPERMS (S_ISUID|S_ISGID|S_ISTXT|S_IRWXU|S_IRWXG|S_IRWXO)
+#endif
+
+/*
  * A small optimisation: have a 1 MB pre-write buffer.
  * Disable the pre-write buffer by having this be zero.
  * (It doesn't affect performance much.)
