@@ -134,6 +134,8 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 
 	if (sess->opts->del != DMODE_NONE)
 		addargs(&args, "--delete");
+	if (sess->opts->checksum)
+		addargs(&args, "-c");
 	if (sess->opts->numeric_ids == NIDS_FULL)
 		addargs(&args, "--numeric-ids");
 	if (sess->opts->preserve_gids)

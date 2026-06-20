@@ -315,7 +315,7 @@ flist_send(struct sess *sess, int fdin, int fdout, const struct flist *fl,
     size_t flsz)
 {
 	size_t			 i, sz, gidsz = 0, uidsz = 0, sendidsz;
-	uint8_t			 flag;
+	uint16_t		 flag;
 	const struct flist	*f;
 	const char		*fn;
 	struct ident		*gids = NULL, *uids = NULL;
@@ -323,7 +323,7 @@ flist_send(struct sess *sess, int fdin, int fdout, const struct flist *fl,
 
 	/* Double-check that we've no pending multiplexed data. */
 
-	LOG2("sending file metadata list: %zu", flsz);
+	LOG3("sending file metadata list: %zu", flsz);
 
 	/* Remember the flist size for keep-alive detection. */
 
@@ -446,8 +446,20 @@ flist_send(struct sess *sess, int fdin, int fdout, const struct flist *fl,
 			}
 		}
 
-		if (S_ISREG(f->st.mode))
+		if (S_ISREG(f->st.mode) || S_ISLNK(f->st.mode))
 			sess->total_size += f->st.size;
+
+		/*
+		 * In protocols 28 and newer, we don't send the checksum
+		 * if the item is not a regular file.
+		 */
+
+		if (sess->opts->checksum) {
+			if (!io_write_buf(sess, fdout, f->md, sizeof(f->md))) {
+				ERRX1("io_write_buf checksum");
+				goto out;
+			}
+		}
 	}
 
 	/* Signal end of file list. */
@@ -552,6 +564,11 @@ flist_recv_name(struct sess *sess, int fd, struct flist *f, uint8_t flags,
 
 	if ((len = pathlen + partial) == 0) {
 		ERRX("security violation: zero-length pathname");
+		return 0;
+	}
+
+	if (len >= PATH_MAX) {
+		ERRX("pathname too long");
 		return 0;
 	}
 
@@ -805,6 +822,13 @@ flist_append(struct sess *sess, const struct stat *st,
 		f->link = link;
 	}
 
+	if (sess->opts->checksum && S_ISREG(f->st.mode)) {
+		if (!hash_file_by_path(AT_FDCWD, f->path, f->st.size, f->md)) {
+			ERRX1("hash_file_by_path");
+			return false;
+		}
+	}
+
 	return true;
 }
 
@@ -812,10 +836,11 @@ flist_append(struct sess *sess, const struct stat *st,
 /*
  * Receive a file list from the wire, filling in length "sz" (which may
  * possibly be zero) and list "flp" on success.
- * Return zero on failure, non-zero on success.
+ * Return false on failure, true on success.
  */
-int
-flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
+bool
+flist_recv(struct sess *sess, int fdin, int fdout, struct flist **flp,
+    size_t *sz)
 {
 	struct flist	*fl = NULL;
 	struct flist	*ff;
@@ -832,7 +857,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 	last[0] = '\0';
 
 	for (;;) {
-		if (!io_read_byte(sess, fd, &bval)) {
+		if (!io_read_byte(sess, fdin, &bval)) {
 			ERRX1("io_read_byte");
 			goto out;
 		}
@@ -860,14 +885,14 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 
 		/* Filename first. */
 
-		if (!flist_recv_name(sess, fd, ff, flag, last)) {
+		if (!flist_recv_name(sess, fdin, ff, flag, last)) {
 			ERRX1("flist_recv_name");
 			goto out;
 		}
 
 		/* Read the file size. */
 
-		if (!io_read_long(sess, fd, &lval)) {
+		if (!io_read_long(sess, fdin, &lval)) {
 			ERRX1("io_read_long");
 			goto out;
 		}
@@ -876,7 +901,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 		/* Read the modification time. */
 
 		if (!(flag & FLIST_TIME_SAME)) {
-			if (!io_read_uint(sess, fd, &uival)) {
+			if (!io_read_uint(sess, fdin, &uival)) {
 				ERRX1("io_read_uint");
 				goto out;
 			}
@@ -892,7 +917,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 		/* Read the file mode. */
 
 		if (!(flag & FLIST_MODE_SAME)) {
-			if (!io_read_uint(sess, fd, &uival)) {
+			if (!io_read_uint(sess, fdin, &uival)) {
 				ERRX1("io_read_uint");
 				goto out;
 			}
@@ -911,7 +936,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 
 		if (sess->opts->preserve_uids) {
 			if (!(flag & FLIST_UID_SAME)) {
-				if (!io_read_uint(sess, fd, &uival)) {
+				if (!io_read_uint(sess, fdin, &uival)) {
 					ERRX1("io_read_int");
 					goto out;
 				}
@@ -937,7 +962,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 
 		if (sess->opts->preserve_gids) {
 			if (!(flag & FLIST_GID_SAME)) {
-				if (!io_read_uint(sess, fd, &uival)) {
+				if (!io_read_uint(sess, fdin, &uival)) {
 					ERRX1("io_read_uint");
 					goto out;
 				}
@@ -970,7 +995,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 			 * transmitted as a single int.
 			 */
 			if (!(flag & FLIST_RDEV_SAME)) {
-				if (!io_read_int(sess, fd, &ival)) {
+				if (!io_read_int(sess, fdin, &ival)) {
 					ERRX1("io_read_int");
 					goto out;
 				}
@@ -986,7 +1011,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 
 		if (S_ISLNK(ff->st.mode) &&
 		    sess->opts->preserve_links) {
-			if (!io_read_size(sess, fd, &lsz)) {
+			if (!io_read_size(sess, fdin, &lsz)) {
 				ERRX1("io_read_size");
 				goto out;
 			} else if (lsz == 0) {
@@ -998,7 +1023,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 				ERR("calloc");
 				goto out;
 			}
-			if (!io_read_buf(sess, fd, link, lsz)) {
+			if (!io_read_buf(sess, fdin, link, lsz)) {
 				free(link);
 				ERRX1("io_read_buf");
 				goto out;
@@ -1015,13 +1040,25 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 
 		if (S_ISREG(ff->st.mode))
 			sess->total_size += ff->st.size;
+
+		/*
+		 * In protocols 28 and newer, we don't get the checksum
+		 * if the item is not a regular file.
+		 */
+
+		if (sess->opts->checksum) {
+			if (!io_read_buf(sess, fdin, ff->md, sizeof(ff->md))) {
+				ERRX1("io_read_buf");
+				goto out;
+			}
+		}
 	}
 
 	/* Conditionally read the user/group list. */
 
 	if (sess->opts->preserve_uids &&
 	    sess->opts->numeric_ids != NIDS_FULL) {
-		if (!idents_recv(sess, fd, &uids, &uidsz)) {
+		if (!idents_recv(sess, fdin, &uids, &uidsz)) {
 			ERRX1("idents_recv");
 			goto out;
 		}
@@ -1030,7 +1067,7 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 
 	if (sess->opts->preserve_gids &&
 	    sess->opts->numeric_ids != NIDS_FULL) {
-		if (!idents_recv(sess, fd, &gids, &gidsz)) {
+		if (!idents_recv(sess, fdin, &gids, &gidsz)) {
 			ERRX1("idents_recv");
 			goto out;
 		}
@@ -1077,14 +1114,14 @@ flist_recv(struct sess *sess, int fd, struct flist **flp, size_t *sz)
 
 	idents_free(gids, gidsz);
 	idents_free(uids, uidsz);
-	return 1;
+	return true;
 out:
 	flist_free(fl, flsz);
 	idents_free(gids, gidsz);
 	idents_free(uids, uidsz);
 	*sz = 0;
 	*flp = NULL;
-	return 0;
+	return false;
 }
 
 static int

@@ -320,6 +320,7 @@ struct	flist {
 	const char	*wpath; /* "working" path for receiver */
 	struct flstat	 st; /* file information */
 	char		*link; /* symlink target or NULL */
+	unsigned char    md[MD4_DIGEST_LENGTH]; /* MD4 hash for --checksum */
 	int32_t		 iflags; /* itemise flags */
 	enum name_basis	 basis; /* name basis */
 	enum fmode	 fmode; /* sender/receiver */
@@ -386,6 +387,7 @@ struct	opts {
 	char		 ipf;			/* 0 (unspec), 4 (IPV4), 6 (IPV6) */
 	bool		 backup;		/* -b */
 	bool		 bit8;			/* -8 */
+	bool		 checksum;		/* -c */
 	bool		 compress;		/* -z */
 	bool		 del_excl;		/* --delete-excluded */
 	bool		 devices;		/* --devices */
@@ -634,7 +636,7 @@ void	flist_del(const struct sess *, int, const struct flist *, size_t);
 int	flist_dir_cmp(const void *, const void *);
 bool	flist_gen(struct sess *, size_t, char **, struct fl *);
 void	flist_free(struct flist *, size_t);
-int	flist_recv(struct sess *, int, struct flist **, size_t *);
+bool	flist_recv(struct sess *, int, int, struct flist **, size_t *);
 bool	flist_send(struct sess *, int, int, const struct flist *, size_t);
 bool	flist_gen_dels(struct sess *, const char *, struct flist **, size_t *,
 	    const struct flist *, size_t);
@@ -736,6 +738,7 @@ bool		 blk_send_ack(struct sess *, int, struct blkset *);
 uint32_t	 hash_fast(const void *, size_t);
 void		 hash_slow(const void *, size_t, unsigned char *,
 		    const struct sess *);
+bool		 hash_file_by_path(int, const char *, size_t, unsigned char *);
 
 void		 hash_file_start(MD4_CTX *, const struct sess *);
 void		 hash_file_buf(MD4_CTX *, const void *, size_t);

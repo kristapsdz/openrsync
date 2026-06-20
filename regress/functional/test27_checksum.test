@@ -1,0 +1,118 @@
+#! /bin/sh
+
+# Test that the --checksum option works correctly.
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf src dst
+rm -rf src-1 src-1.stat
+rm -rf src-2 src-2.stat
+
+# Create the source tree (one zero length file, one largish file, and
+# one sparse file whose size is not power-of-two aligned).
+#
+mkdir src
+touch src/zero
+jot 999999 1000000 > src/large
+echo "x" >> src/large
+dd if=/dev/zero of=src/sparse bs=1 count=1 seek=1048576
+touch -t 202308252015.01 src/large
+
+# First, use rsync to create the dest dir:
+#
+$rsync -a -c -- src/ dst/
+compare_trees -t src dst
+
+# Next, recreate dst/large such that it has the same size
+# and mtime as src/large, but differs by one byte at the end:
+#
+jot 999999 1000000 > dst/large
+echo "y" >> dst/large
+touch -t 202308252015.01 dst/large
+
+# Now check that rsync -a does not update dst/large:
+#
+$rsync -a -- src/ dst/
+cmp -s src/zero dst/zero
+X=$(cmp -s src/large dst/large || echo ok)
+[ "$X" = "ok" ]
+
+# Now check that rsync -c correctly updates dst/large:
+#
+$rsync -a -c -- src/ dst/
+compare_trees -t src dst
+
+$rsync -a --checksum -- src/ dst/
+compare_trees -t src dst
+
+rm -rf src dst
+
+# Next, create a few files in the top-level directory:
+#
+stat_fmt='%Sp %Su %Sg %z %m'
+
+date > src-1
+stat -f "${stat_fmt}" src-1 > src-1.stat
+
+mkfifo src-2
+stat -f "${stat_fmt}" src-2 > src-2.stat
+
+ln -sf src-1 src-3
+stat -f "${stat_fmt}" src-3 > src-3.stat
+
+
+1>&2 echo "-- Starting 0-byte file regression test --"
+echo "-- Starting 0-byte file regression test --"
+
+
+rm -rf 0src 0dst
+mkdir 0src
+touch 0src/zero
+
+$rsync -a -c -- 0src/ 0dst/
+compare_trees -t 0src 0dst
+
+#$rsync -a -c --stats --no-W -- 0src/ 0dst/ 2>&1 | tee -a log.txt
+#cat log.txt
+#MATCHED=$(grep "Number of files transferred" log.txt)
+#set -- ${MATCHED}
+#ls -al 0src/ 0dst/
+#[ "$5" -gt 0 ] && T=$5 sh -c 'echo "Transferred too many files: $T, checksum must have failed" 1>&2; false'
+#
+# For interop testing, this last part fails under smb rsync because it does not
+# like repeated remote sources, even if they're from the same host.  With
+# openrsync as a client-sender, they still fail for some reason due to a
+# permissions issue after `chmod 0`, which doesn't seem to happen on other
+# systems.
+#if [ -n "$RSYNC_CLIENT" ]; then
+#    case "$RSYNC_CLIENT$RSYNC_SERVER" in
+#    *samba*)
+#        exit 0
+#        ;;
+#    esac
+#fi
+#
+## Create the dest dir on first pass of the loop,
+## then run rsync -ac on the second pass:
+##
+#for opt in '-a' '-ac' ; do
+#    $rsync ${opt} -- src-1 src-2 src-3 dst/
+#    cmp -s src-1 dst/src-1
+#    cmp -s src-3 dst/src-3
+#    cmp -s dst/src-1 dst/src-3
+#
+#    stat -f "${stat_fmt}" dst/src-1 > dst-1.stat
+#    stat -f "${stat_fmt}" dst/src-2 > dst-2.stat
+#    stat -f "${stat_fmt}" dst/src-3 > dst-3.stat
+#
+#    cmp -s src-1.stat dst-1.stat
+#    cmp -s src-2.stat dst-2.stat
+#    cmp -s src-3.stat dst-3.stat
+#
+#    chmod 0 dst/src-1
+#    touch dst/src-2
+#done

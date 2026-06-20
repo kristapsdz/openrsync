@@ -20,8 +20,11 @@
 
 #include <assert.h>
 #include COMPAT_ENDIAN_H
+#include <errno.h>
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "extern.h"
 
@@ -140,4 +143,66 @@ hash_fmap(const char *path, const struct fmap *map, size_t mapsz,
 	fmap_untrap(map);
 	MD4_Final(md, &ctx);
 	return true;
+}
+
+/*
+ * Hash an entire file.
+ * This is similar to hash_slow() except the seed is hashed at the end
+ * of the sequence, not the beginning.
+ * Note that if sess is NULL then the seed is not included (this
+ * feature is used to compute seedless hashes for --checksum).
+ */
+static void
+hash_file(const void *buf, size_t len, unsigned char *md,
+    const struct sess *sess)
+{
+	MD4_CTX	 ctx;
+	int32_t	 seed;
+
+	MD4_Init(&ctx);
+	if (sess != NULL) {
+		seed = htole32(sess->seed);
+		MD4_Update(&ctx, &seed, sizeof(int32_t));
+	}
+	MD4_Update(&ctx, buf, len);
+	MD4_Final(md, &ctx);
+}
+
+/*
+ * This function is primarily used to compute whole-file seedless
+ * checksums for the --checksum option, for contexts in which the file
+ * is not already open nor mapped.
+ */
+bool
+hash_file_by_path(int rootfd, const char *path, size_t len,
+    unsigned char *md)
+{
+	int		 fd, rc, save;
+	struct fmap	*map;
+
+	if (len == 0) {
+		hash_file(NULL, len, md, NULL);
+		return true;
+	}
+
+	fd = openat(rootfd, path, O_RDONLY | O_NOFOLLOW);
+	if (fd == -1)
+		return false;
+
+	map = fmap_open(path, fd, len);
+	if (map == NULL) {
+		save = errno;
+		close(fd);
+		errno = save;
+		return false;
+	}
+
+	rc = hash_fmap(path, map, len, md, NULL);
+	save = errno;
+
+	fmap_close(map);
+	close(fd);
+
+	errno = save;
+	return rc;
 }

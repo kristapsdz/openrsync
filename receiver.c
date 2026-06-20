@@ -253,7 +253,7 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 	 * These we're going to be touching on our local system.
 	 */
 
-	if (!flist_recv(sess, fdin, &fl, &flsz)) {
+	if (!flist_recv(sess, fdin, fdout, &fl, &flsz)) {
 		ERRX1("flist_recv");
 		goto out;
 	}

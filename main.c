@@ -405,13 +405,14 @@ enum {
 	OP_TIMEOUT,
 };
 
-const char rsync_shopts[] = "468B:CDFabde:f:ghIJlnOoprtuVvWxz";
+const char rsync_shopts[] = "468B:CDFabcde:f:ghIJlnOoprtuVvWxz";
 const struct option	 lopts[] = {
     { "8-bit-output",	no_argument,	NULL,			'8' },
     { "address",	required_argument, NULL,		OP_ADDRESS },
     { "archive",	no_argument,	NULL,			'a' },
     { "backup",		no_argument,	NULL,			'b' },
     { "block-size",	required_argument, NULL,		'B' },
+    { "checksum",	no_argument,	NULL,			'c' },
     { "compare-dest",	required_argument, NULL,		OP_COMP_DEST },
     { "compress",	no_argument,	NULL,			'z' },
     { "contimeout",	required_argument, NULL,		OP_CONTIMEOUT },
@@ -472,6 +473,7 @@ const struct option	 lopts[] = {
     { "suffix",		required_argument, NULL,		OP_SUFFIX },
     { "timeout",	required_argument, NULL,		OP_TIMEOUT },
     { "times",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "update",		no_argument,	NULL,			'u' },
     { "verbose",	no_argument,	NULL,			'v' },
     { "version",	no_argument,	NULL,			'V' },
     { "whole-file",	no_argument,	NULL,			'W' },
@@ -490,6 +492,7 @@ usage(void)
 	    "\t[--archive, -a]\n"
 	    "\t[--backup, -b]\n"
 	    "\t[--block-size=size, -B size]\n"
+	    "\t[--checksum, -c]\n"
 	    "\t[--compare-dest=dir]\n"
 	    "\t[--contimeout=seconds]\n"
 	    "\t[--copy-dest=dir]\n"
@@ -714,6 +717,9 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 		case 'b':
 			opts.backup = true;
 			break;
+		case 'c':
+			opts.checksum = true;
+			break;
 		case 'd':
 			opts.dirs = DIRMODE_REQUESTED;
 			break;
@@ -760,6 +766,9 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			break;
 		case 't':
 			opts.preserve_times = true;
+			break;
+		case 'u':
+			opts.update = true;
 			break;
 		case 'v':
 			verbose++;

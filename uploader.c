@@ -1132,7 +1132,9 @@ static int
 check_file(int rootfd, struct flist *f, struct stat *st,
     struct sess *sess)
 {
+	unsigned char	 md[sizeof(f->md)];
 	const char	*path = f->path;
+	int		 rc = -1;
 
 	/* The root directory must exist. */
 
@@ -1202,6 +1204,15 @@ check_file(int rootfd, struct flist *f, struct stat *st,
 	if (st->st_size == f->st.size) {
 		if (sess->opts->size_only)
 			return 0;
+		if (sess->opts->checksum) {
+			if (rc == -1)
+				rc = hash_file_by_path(rootfd, path,
+				    st->st_size, md);
+			if (rc == 0 &&
+			    memcmp(md, f->md, sizeof(md)) == 0)
+				return 0;
+			return 2;
+		}
 		if (!sess->opts->ignore_times) {
 			if (labs(f->st.mtime - st->st_mtime) <= 0) {
 				if (f->st.mtime != st->st_mtime)

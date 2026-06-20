@@ -118,7 +118,8 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test28_size_only.test \
 		  regress/functional/test25_filter_basic.test \
 		  regress/functional/test25_filter_basic_clear.test \
-		  regress/functional/test84_archive.test
+		  regress/functional/test84_archive.test \
+		  regress/functional/test27_checksum.test
 
 # Doesn't work (protocol < 29): regress/functional/test25_filter_basic_cvs.test
 # Doesn't work (protocol < 29): regress/functional/test25_filter_clear.test
@@ -131,7 +132,7 @@ REGRESS_FAIL 	= regress/functional/test12d_inex.test \
 		  regress/functional/test25_filter_default.test \
 		  regress/functional/test25_filter_dir.test \
 		  regress/functional/test25_filter_merge_cvs.test
-REGRESS_MANUAL 	=
+REGRESS_MANUAL 	= 
 RSYNC_VERBOSE	= 
 
 #OPENRSYNC=/home/kristaps/checkedout/apple/rsync/openrsync/openrsync ; \
