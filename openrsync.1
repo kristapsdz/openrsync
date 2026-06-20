@@ -56,6 +56,7 @@
 .Op Fl -no-omit-dir-times
 .Op Fl -no-omit-link-times
 .Op Fl -no-owner
+.Op Fl -no-partial
 .Op Fl -no-perms
 .Op Fl -no-recursive
 .Op Fl -no-specials
@@ -66,6 +67,7 @@
 .Op Fl -omit-link-times , Fl J
 .Op Fl -one-file-system , Fl x
 .Op Fl -owner , Fl o
+.Op Fl -partial
 .Op Fl -perms , Fl p
 .Op Fl -port Ns = Ns Ar portnumber
 .Op Fl -protocol Ns = Ns Ar protocol
@@ -354,6 +356,13 @@ Set destination file or directory permissions to match the source when
 it is updated.
 Negate with
 .Fl -no-perms .
+.It Fl -partial
+Do not remove partially transferred files if
+.Nm
+is interrupted, which opens up the possibility for them to be easily
+resumed later.
+Negate with
+.Fl -no-partial .
 .It Fl -port Ns = Ns Ar service
 Specify an alternative TCP port number.
 The

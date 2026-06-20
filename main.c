@@ -446,6 +446,7 @@ const struct option	 lopts[] = {
     { "no-omit-dir-times", no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-omit-link-times", no_argument, NULL,			OP_SET_BOOL_FALSE },
     { "no-owner",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
+    { "no-partial",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-perms",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-recursive",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-specials",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
@@ -457,6 +458,7 @@ const struct option	 lopts[] = {
     { "omit-link-times", no_argument,	NULL,			'J' },
     { "one-file-system", no_argument,	NULL,			'x' },
     { "owner",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "partial",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "perms",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "port",		required_argument, NULL,		OP_PORT },
     { "protocol",	required_argument, NULL,		OP_PROTOCOL },
@@ -516,6 +518,7 @@ usage(void)
 	    "\t[--no-omit-dir-times]\n"
 	    "\t[--no-omit-link-times]\n"
 	    "\t[--no-owner]\n"
+	    "\t[--no-partial]\n"
 	    "\t[--no-perms]\n"
 	    "\t[--no-recursive]\n"
 	    "\t[--no-specials]\n"
@@ -526,6 +529,7 @@ usage(void)
 	    "\t[--omit-link-times, -J]\n"
 	    "\t[--one-file-system, -x]\n"
 	    "\t[--owner, -o]\n"
+	    "\t[--partial]\n"
 	    "\t[--perms, -p]\n"
 	    "\t[--port=portnumber]\n"
 	    "\t[--protocol]\n"
@@ -585,63 +589,67 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 	while ((c = getopt_long(argc, argv, rsync_shopts, lopts, &lidx)) != -1) {
 		switch (c) {
 		case OP_SET_BOOL_TRUE:
-			if (strcmp(lopts[lidx].name, "specials") == 0)
-				opts.specials = true;
-			else if (strcmp(lopts[lidx].name, "devices") == 0)
-				opts.devices = true;
+			if (strcmp(lopts[lidx].name, "del") == 0)
+				opts.del = DMODE_BEFORE;
 			else if (strcmp(lopts[lidx].name, "delete") == 0)
 				opts.del = DMODE_BEFORE;
-			else if (strcmp(lopts[lidx].name, "del") == 0)
-				opts.del = DMODE_BEFORE;
-			else if (strcmp(lopts[lidx].name, "size-only") == 0)
-				opts.size_only = true;
-			else if (strcmp(lopts[lidx].name, "numeric-ids") == 0)
-				opts.numeric_ids = NIDS_FULL;
-			else if (strcmp(lopts[lidx].name, "perms") == 0)
-				opts.preserve_perms = true;
-			else if (strcmp(lopts[lidx].name, "owner") == 0)
-				opts.preserve_uids = true;
+			else if (strcmp(lopts[lidx].name, "devices") == 0)
+				opts.devices = true;
 			else if (strcmp(lopts[lidx].name, "group") == 0)
 				opts.preserve_gids = true;
 			else if (strcmp(lopts[lidx].name, "links") == 0)
 				opts.preserve_links = true;
-			else if (strcmp(lopts[lidx].name, "times") == 0)
-				opts.preserve_times = true;
+			else if (strcmp(lopts[lidx].name, "numeric-ids") == 0)
+				opts.numeric_ids = NIDS_FULL;
+			else if (strcmp(lopts[lidx].name, "owner") == 0)
+				opts.preserve_uids = true;
+			else if (strcmp(lopts[lidx].name, "partial") == 0)
+				opts.partial = true;
+			else if (strcmp(lopts[lidx].name, "perms") == 0)
+				opts.preserve_perms = true;
 			else if (strcmp(lopts[lidx].name, "sender") == 0)
 				opts.sender = true;
 			else if (strcmp(lopts[lidx].name, "server") == 0)
 				opts.server = true;
+			else if (strcmp(lopts[lidx].name, "size-only") == 0)
+				opts.size_only = true;
+			else if (strcmp(lopts[lidx].name, "specials") == 0)
+				opts.specials = true;
+			else if (strcmp(lopts[lidx].name, "times") == 0)
+				opts.preserve_times = true;
 			break;
 		case OP_SET_BOOL_FALSE:
-			if (strcmp(lopts[lidx].name, "no-O") == 0)
-				opts.omit_dir_times = false;
-			else if (strcmp(lopts[lidx].name, "no-omit-dir-times") == 0)
-				opts.omit_dir_times = false;
-			else if (strcmp(lopts[lidx].name, "no-J") == 0)
+			if (strcmp(lopts[lidx].name, "no-J") == 0)
 				opts.omit_link_times = false;
-			else if (strcmp(lopts[lidx].name, "no-omit-link-times") == 0)
-				opts.omit_link_times = false;
-			else if (strcmp(lopts[lidx].name, "specials") == 0)
-				opts.specials = false;
-			else if (strcmp(lopts[lidx].name, "devices") == 0)
+			else if (strcmp(lopts[lidx].name, "no-O") == 0)
+				opts.omit_dir_times = false;
+			else if (strcmp(lopts[lidx].name, "no-W") == 0)
+				*whole_file = 0;
+			else if (strcmp(lopts[lidx].name, "no-devices") == 0)
 				opts.devices = false;
-			else if (strcmp(lopts[lidx].name, "no-motd") == 0)
-				opts.no_motd = false;
-			else if (strcmp(lopts[lidx].name, "no-perms") == 0)
-				opts.preserve_perms = false;
-			else if (strcmp(lopts[lidx].name, "no-owner") == 0)
-				opts.preserve_uids = false;
 			else if (strcmp(lopts[lidx].name, "no-group") == 0)
 				opts.preserve_gids = false;
 			else if (strcmp(lopts[lidx].name, "no-links") == 0)
 				opts.preserve_links = false;
-			else if (strcmp(lopts[lidx].name, "no-times") == 0)
-				opts.preserve_times = false;
+			else if (strcmp(lopts[lidx].name, "no-motd") == 0)
+				opts.no_motd = false;
+			else if (strcmp(lopts[lidx].name, "no-omit-dir-times") == 0)
+				opts.omit_dir_times = false;
+			else if (strcmp(lopts[lidx].name, "no-omit-link-times") == 0)
+				opts.omit_link_times = false;
+			else if (strcmp(lopts[lidx].name, "no-owner") == 0)
+				opts.preserve_uids = false;
+			else if (strcmp(lopts[lidx].name, "no-partial") == 0)
+				opts.partial = false;
+			else if (strcmp(lopts[lidx].name, "no-perms") == 0)
+				opts.preserve_perms = false;
 			else if (strcmp(lopts[lidx].name, "no-recursive") == 0)
 				opts.recursive = false;
+			else if (strcmp(lopts[lidx].name, "no-specials") == 0)
+				opts.specials = false;
+			else if (strcmp(lopts[lidx].name, "no-times") == 0)
+				opts.preserve_times = false;
 			else if (strcmp(lopts[lidx].name, "no-whole-file") == 0)
-				*whole_file = 0;
-			else if (strcmp(lopts[lidx].name, "no-W") == 0)
 				*whole_file = 0;
 			break;
 		case '4':

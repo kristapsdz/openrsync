@@ -163,6 +163,8 @@ static bool
 download_cleanup_partial(struct sess *sess, struct download *p)
 {
 	struct flist	*f;
+	char		*fname;
+	int		 pdfd;
 
 	if (p->fl == NULL)
 		return true;
@@ -180,7 +182,34 @@ download_cleanup_partial(struct sess *sess, struct download *p)
 	if (p->fname == NULL)
 		return true;
 
-	(void)unlinkat(p->rootfd, p->fname, 0);
+	if (sess->opts->partial) {
+		pdfd = p->rootfd;
+		fname = f->path;
+
+		/*
+		 * For partial transfers, we need to move the file into place if
+		 * we're operating on a temp file.  If the rename fails,
+		 * we do not try to remove it because partial files have
+		 * been explicitly requested.  Better to just warn about
+		 * the situation so that the user can manually recover
+		 * the partial file and make a decision on it.
+		 */
+
+		if (!move_file(p->rootfd, p->fname, pdfd, fname, false, false)) {
+			/*
+			 * Don't leave the partial file laying around if
+			 * --partial-dir was requested and we can't
+			 *  manage it.
+			 */
+			(void)unlinkat(p->rootfd, p->fname, 0);
+			close(pdfd);
+			return false;
+		}
+
+		close(pdfd);
+	} else
+		(void)unlinkat(p->rootfd, p->fname, 0);
+
 	return true;
 }
 

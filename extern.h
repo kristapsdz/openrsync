@@ -393,6 +393,7 @@ struct	opts {
 	bool		 no_motd;		/* --no-motd */
 	bool		 omit_dir_times;	/* -O */
 	bool		 omit_link_times;	/* -J */
+	bool		 partial;		/* --partial */
 	bool		 preserve_gids;		/* -g */
 	bool		 preserve_links;	/* -l */
 	bool		 preserve_perms;	/* -p */

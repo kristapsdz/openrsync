@@ -140,8 +140,10 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "-g");
 	if (sess->opts->preserve_links)
 		addargs(&args, "-l");
-	if (sess->opts->dry_run)
+	if (sess->opts->dry_run == DRY_FULL)
 		addargs(&args, "-n");
+	if (sess->opts->partial && f->mode == FARGS_SENDER)
+		addargs(&args, "--partial");
 	if (sess->opts->preserve_uids)
 		addargs(&args, "-o");
 	if (sess->opts->preserve_perms)
