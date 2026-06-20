@@ -1,9 +1,10 @@
-# Introduction
+# Read me first
 
-**This system has been merged into OpenBSD base.  If you'd like to
-contribute to openrsync, please mail your patches to tech@openbsd.org.
-This repository is simply the OpenBSD version plus some glue for
-portability.**
+The main branch of this repository is being **actively developed**.
+While issues are accepted, please make sure they're against the current
+code.  Pull requests are welcome.
+
+# Introduction
 
 This is an implementation of [rsync](https://rsync.samba.org/) with a
 BSD (ISC) license.  It's compatible with a modern rsync (3.1.3 is used
@@ -27,15 +28,24 @@ The [Architecture](#Architecture) and [Algorithm](#Algorithm) sections
 on this page serve to introduce developers to the source code.  They are
 non-canonical.
 
-## Project background
+## Acknowledgements
 
-openrsync is written as part of the
+openrsync was initially written as part of the
 [rpki-client(1)](https://medium.com/@jobsnijders/a-proposal-for-a-new-rpki-validator-openbsd-rpki-client-1-15b74e7a3f65)
 project, an
 [RPKI](https://en.wikipedia.org/wiki/Resource_Public_Key_Infrastructure)
-validator for OpenBSD.  openrsync was funded by
+validator for OpenBSD.  This was funded by
 [NetNod](https://www.netnod.se), [IIS.SE](https://www.iis.se),
 [SUNET](https://www.sunet.se) and [6connect](https://www.6connect.com).
+
+It's had significant commits from the [OpenBSD](https://openbsd.org)
+Project developers, especially Theo de Raadt, Florian Obser, and Claudio
+Jeker.
+
+[Apple](https://apple.com) put a huge amount of labour into a local fork
+of openrsync, which is available
+[here](https://github.com/apple-oss-distributions/rsync).
+Effort to merge this code into this repository is still underway.
 
 # Installation
 
