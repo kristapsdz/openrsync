@@ -405,7 +405,7 @@ enum {
 	OP_TIMEOUT,
 };
 
-const char rsync_shopts[] = "468B:CDFabde:f:ghIJlnOoprtVvWxz";
+const char rsync_shopts[] = "468B:CDFabde:f:ghIJlnOoprtuVvWxz";
 const struct option	 lopts[] = {
     { "8-bit-output",	no_argument,	NULL,			'8' },
     { "address",	required_argument, NULL,		OP_ADDRESS },
@@ -541,6 +541,7 @@ usage(void)
 	    "\t[--suffix=suffix]\n"
 	    "\t[--timeout=seconds]\n"
 	    "\t[--times, -t]\n"
+	    "\t[--update, -u]\n"
 	    "\t[--verbose, -v]\n"
 	    "\t[--version, -V]\n"
 	    "\t[--whole-file, -W]\n"

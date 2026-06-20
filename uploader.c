@@ -1177,6 +1177,11 @@ check_file(int rootfd, struct flist *f, struct stat *st,
 		}
 	}
 
+	if (sess->opts->update && st->st_mtime > f->st.mtime) {
+		LOG1("Skip newer '%s'", f->path);
+		return 4;
+	}
+
 	/* Non-regular file needs attention. */
 
 	if (!S_ISREG(st->st_mode))

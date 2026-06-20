@@ -404,6 +404,7 @@ struct	opts {
 	bool		 server;		/* --server */
 	bool		 size_only;		/* --size-only */
 	bool		 specials;		/* --specials */
+	bool		 update;		/* -u */
 	bool		 whole_file;		/* --whole-file */
 #if 0
 	char		*syncfile;		/* --sync-file */

@@ -79,6 +79,7 @@
 .Op Fl -suffix Ns = Ns Ar suffix
 .Op Fl -timeout Ns = Ns Ar seconds
 .Op Fl -times , Fl t
+.Op Fl -update , Fl u
 .Op Fl -verbose , Fl v
 .Op Fl -version , Fl V
 .Op Fl -whole-file , Fl W
@@ -422,6 +423,9 @@ Set destination file and directory modification time to match the source
 when it is updated or created.
 Negate with
 .Fl -no-times .
+.It Fl -update , Fl u
+Skip existing files on the destination that have a modification time
+newer than the source file.
 .It Fl -verbose , Fl v
 Increase verbosity.
 Specify once for files being transferred, twice for specific status,
