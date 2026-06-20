@@ -110,10 +110,11 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test13b_perms.test \
 		  regress/functional/test19_linkdest.test \
 		  regress/functional/test19b_linkdest-rel.test \
-		  regress/functional/test28_size_only.test
+		  regress/functional/test28_size_only.test \
+		  regress/functional/test40_backup.test
 REGRESS_FAIL 	= regress/functional/test12d_inex.test
 REGRESS_MANUAL 	= 
-RSYNC_VERBOSE	= 
+RSYNC_VERBOSE	=
 
 regress_functional:: all
 	@OPENRSYNC=`readlink -f openrsync`; \

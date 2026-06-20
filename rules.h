@@ -34,7 +34,7 @@ enum rule_type {
 	RULE_RISK,
 };
 
-int	parse_rule(const char *line, enum rule_type, char);
+bool	parse_rule(const char *line, enum rule_type, char);
 void	parse_file_rule(const char *, enum rule_type, char);
 void	send_rules(struct sess *, int);
 void	recv_rules(struct sess *, int);

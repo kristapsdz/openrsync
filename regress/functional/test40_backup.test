@@ -1,0 +1,148 @@
+#! /bin/sh
+
+# Test that the --backup option works as expected.  Note that
+# creating and deleting backup files will update the mtime on
+# the current directory so after calls to rsync we use touch(1)
+# to ensure they match before calling compare_trees().
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+# Number of regular files to create at each of the top-level
+# and one subdir of the source dir.
+#
+NUMFILES=17
+DIRTIME=$(date +%Y%m%d)0000.00
+
+# Clean up from prior run:
+#
+rm -rf src dst ref
+
+# Create the source tree:
+#
+mkdir src src/dir
+for i in $(seq ${NUMFILES}) ; do
+    jot 1 $i > src/file$i
+    jot 262144 $i > src/dir/file$i
+done
+
+# A full rsync --backup on a non-existing dest dir
+# should not create any backup files:
+#
+$rsync -a --backup -- src/ dst/
+touch -t ${DIRTIME} src/dir dst/dir src dst
+compare_trees -t src dst
+
+# A full rsync --backup on an existing dest dir that is identical
+# to the source dir should not create backup files:
+#
+for i in $(seq ${NUMFILES}) ; do
+    $rsync -a --backup -- src/ dst/
+    touch -t ${DIRTIME} src/dir dst/dir src dst
+    compare_trees -t src dst
+done
+
+# A full rsync --backup on an existing dest dir should create
+# backup files only for files that have changed on the source.
+# Existing backup files should be replaced each time:
+#
+for i in $(seq ${NUMFILES}) ; do
+    rm -rf ref
+    cp -a dst ref
+
+    cp -a ref/file1 ref/file1~
+    date >> src/file1
+    cp -a src/file1 ref/file1
+
+    cp -a ref/dir/file1 ref/dir/file1~
+    date >> src/dir/file1
+    cp -a src/dir/file1 ref/dir/file1
+
+    $rsync -a --backup -- src/ dst/
+    touch -t ${DIRTIME} ref/dir dst/dir ref dst
+    compare_trees -t ref dst
+done
+
+# Same as above except selecting a different file each iteration
+# and using -b rather than --backup:
+#
+for i in $(seq ${NUMFILES}) ; do
+    [ $# -le 0 ] && set -- $(id -G)
+    rm -rf ref
+    cp -a dst ref
+
+    cp -a ref/file$i ref/file$i~
+    date >> src/file$i
+    chmod 600 src/file$i
+    chgrp $1 src/file$i
+    cp -a src/file$i ref/
+
+    cp -a ref/dir/file$i ref/dir/file$i~
+    date >> src/dir/file$i
+    chmod 660 src/dir/file$i
+    chgrp $1 src/dir/file$i
+    cp -a src/dir/file$i ref/dir/
+
+    $rsync -a -b -- src/ dst/
+    touch -t ${DIRTIME} ref/dir dst/dir ref dst
+    compare_trees -t ref dst
+    shift
+done
+
+# Same as above except with --delete (default backup files
+# should be excluded/protected from --delete):
+#
+for i in $(seq ${NUMFILES}) ; do
+    rm -rf ref
+    cp -a dst ref
+
+    cp -a ref/file$i ref/file$i~
+    date >> src/file$i
+    cp -a src/file$i ref/
+
+    cp -a ref/dir/file$i ref/dir/file$i~
+    date >> src/dir/file$i
+    cp -a src/dir/file$i ref/dir/
+
+    $rsync -a --backup --delete -- src/ dst/
+    touch -t ${DIRTIME} ref/dir dst/dir ref dst
+    compare_trees -t ref dst
+done
+
+# At this point a full rsync --backup should make no changes:
+#
+$rsync -a --backup -- src/ dst/
+touch -t ${DIRTIME} ref/dir dst/dir ref dst
+compare_trees -t ref dst
+
+# Pure metadata changes on the source should not be reflected
+# in backup files:
+#
+for i in $(seq ${NUMFILES}) ; do
+    [ $# -le 0 ] && set -- $(id -G)
+    rm -rf ref
+    cp -a dst ref
+
+    chmod 600 src/file$i
+    chgrp $1 src/file$i
+    cp -a src/file$i ref/
+
+    chmod 660 src/dir/file$i
+    chgrp $1 src/dir/file$i
+    cp -a src/dir/file$i ref/dir/
+
+    $rsync -a --backup --delete -- src/ dst/
+    touch -t ${DIRTIME} ref/dir dst/dir ref dst
+    compare_trees -t ref dst
+    shift
+done
+
+
+# Now --delete without --backup should delete all the backup files:
+#
+$rsync -a --delete -- src/ dst/
+touch -t ${DIRTIME} src/dir dst/dir src dst
+compare_trees -t src dst

@@ -162,6 +162,14 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "-v");
 	if (verbose > 0)
 		addargs(&args, "-v");
+	if (sess->opts->whole_file)
+		addargs(&args, "-W");
+	if (sess->opts->backup)
+		addargs(&args, "--backup");
+	if (sess->opts->backup_suffix != NULL) {
+		addargs(&args, "--suffix");
+		addargs(&args, "%s", sess->opts->backup_suffix);
+	}
 	if (sess->opts->one_file_system > 1)
 		addargs(&args, "-x");
 	if (sess->opts->one_file_system > 0)

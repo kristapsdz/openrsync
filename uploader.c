@@ -1913,7 +1913,6 @@ rsync_uploader(struct upload *u, struct sess *sess, int revents,
 			init_null_blkset(&blk, filesize);
 		else
 			init_blkset(&blk, filesize, sess->opts->block_size);
-		assert(blk.blksz);
 
 		if (sess->opts->whole_file ||
 		    (u->phase == 0 && sess->role->append))

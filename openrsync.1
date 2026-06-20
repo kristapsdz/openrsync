@@ -1,5 +1,6 @@
 .\"
 .\" Copyright (c) Kristaps Dzonsons <kristaps@bsd.lv>
+.\" Copyright (c) 2024, Klara, Inc.
 .\"
 .\" Permission to use, copy, modify, and distribute this software for any
 .\" purpose with or without fee is hereby granted, provided that the above
@@ -25,6 +26,7 @@
 .Op Fl -8-bit-output , Fl 8
 .Op Fl -address Ns = Ns Ar sourceaddr
 .Op Fl -archive , Fl a
+.Op Fl -backup , Fl b
 .Op Fl -block-size Ns = Ns Ar size , Fl B Ar size
 .Op Fl -compare-dest Ns = Ns Ar dir
 .Op Fl -contimeout Ns = Ns Ar seconds
@@ -72,6 +74,7 @@
 .Op Fl -rsync-path Ns = Ns Ar program
 .Op Fl -size-only
 .Op Fl -specials
+.Op Fl -suffix Ns = Ns Ar suffix
 .Op Fl -timeout Ns = Ns Ar seconds
 .Op Fl -times , Fl t
 .Op Fl -verbose , Fl v
@@ -121,6 +124,11 @@ multiple interfaces.
 .It Fl -archive , Fl a
 Shorthand for
 .Fl Dgloprt .
+.It Fl -backup , Fl b
+Make a backup of changed files with a
+.Li ~
+suffix, if not overridden with
+.Fl -suffix .
 .It Fl -block-size Ns = Ns Ar size , Fl B Ar size
 Specify the block size to be used for file transfers.
 The upper bound is 512M.
@@ -382,6 +390,11 @@ Skip files based only on size, don't check timestamp.
 Also transfer fifo and unix domain socket files.
 Negate with
 .Fl -no-specials .
+.It Fl -suffix Ar suffix
+Sets the suffix to be appended to filenames when backing up with
+.Fl b .
+Defaults to
+.Li ~ .
 .It Fl -timeout Ns = Ns Ar seconds
 Set the I/O timeout in seconds.
 Exit if no data was transferred for the specified time.

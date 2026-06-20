@@ -1109,15 +1109,17 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 					 sendidx, /* sender index */
 					 iflags; /* sender flags */
 	struct flist			*f = NULL; /* file at index */
-	struct stat	 		 st; /* original file */
+	struct stat	 		 st, /* original file */
+					 st2; /* backup file */
 	unsigned char	 		 ourmd[MD4_DIGEST_LENGTH],
 			 		 md[MD4_DIGEST_LENGTH];
+	char				 buf2[PATH_MAX]; /* backup fname */
 	enum protocol_token_result	 tokres; 
 	const char			*path; /* path to open */
 	int				 rootfd, /* where path rooted */
 					 fromfd; /* temporary */
 	char            		*usethis = NULL;
-	bool				 newfile;
+	bool				 newfile; /* creating new */
 
 	/*
 	 * If we don't have a download already in session, then the next
@@ -1437,6 +1439,33 @@ again:
 
 	if (p->fd < 0 || sess->opts->dry_run)
 		goto done;
+
+	if (sess->opts->backup) {
+		if (fstatat(p->rootfd, f->path, &st2, 0) == -1) {
+			/*
+			 * As-of-now missing file is OK, however we take
+			 * no action for --backup.
+			 */
+			if (errno != ENOENT) {
+				ERR("%s: stat during --backup", f->path);
+				goto out;
+			}
+		} else if (!S_ISDIR(st2.st_mode)) {
+			LOG3("%s: doing backup", f->path);
+			if (snprintf(buf2, sizeof(buf2), "%s%s", f->path,
+			    sess->opts->backup_suffix) >=
+			    (int)sizeof(buf2)) {
+				ERR("%s: backup: compound backup path too "
+				    "long: %s%s >= %d", f->path, f->path,
+				    sess->opts->backup_suffix,
+				    (int)sizeof(buf2));
+				goto out;
+			}
+			if (!backup_file(p->rootfd, f->path,
+			    p->rootfd, buf2, 1, &f->dstat))
+				ERR("%s: backup_file: %s", f->path, buf2);
+		}
+	}
 
 	usethis = f->path;
 

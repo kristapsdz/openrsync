@@ -218,11 +218,12 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 			err(ERR_IPC, "%s: unveil", root);
 	}
 
+#if 0
 	if (unveil(root, "rwc") == -1)
 		err(ERR_IPC, "%s: unveil", root);
-
 	if (unveil(NULL, NULL) == -1)
 		err(ERR_IPC, "unveil");
+#endif
 
 	/* Client sends exclusions. */
 
@@ -355,6 +356,11 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 				    IFLAG_LOCAL_CHANGE;
 		}
 	}
+
+	if (unveil(root, "rwc") == -1)
+		err(ERR_IPC, "%s: unveil", root);
+	if (unveil(NULL, NULL) == -1)
+		err(ERR_IPC, "unveil");
 
 	/*
 	 * Disable umask() so we can set permissions fully.

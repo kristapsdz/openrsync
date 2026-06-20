@@ -118,7 +118,7 @@ static size_t rule_dir_depth;
 
 static void parse_file_impl(struct ruleset *, const char *, enum rule_type,
     unsigned int, bool, char);
-static int parse_rule_impl(struct ruleset *, const char *, enum rule_type,
+static bool parse_rule_impl(struct ruleset *, const char *, enum rule_type,
     unsigned int, char);
 
 /* up to protocol 29 filter rules only support - + ! and no modifiers */
@@ -471,12 +471,12 @@ rule_modified(enum rule_type rule, unsigned int *modifiers)
 	return rule;
 }
 
-static int
+static bool
 add_cvsignore_rules(void)
 {
 	char 		  home_cvsignore[PATH_MAX];
 	const char	 *cvsignore, *home;
-	int		  ret;
+	bool		  ret;
 	static const char builtin_cvsignore[] =
 		"RCS SCCS CVS CVS.adm RCSLOG cvslog.* tags "
 		"TAGS .make.state .nse_depinfo *~ #* .#* ,* "
@@ -487,28 +487,32 @@ add_cvsignore_rules(void)
 
 	/* XXX shouldn't transfer any of these? */
 	/* First we add the internal cvsignore rules. */
-	ret = parse_rule_impl(&global_ruleset, builtin_cvsignore, RULE_EXCLUDE,
-	    MOD_MERGE_WORDSPLIT, '\n');
-	if (ret == -1)
+
+	ret = parse_rule_impl(&global_ruleset, builtin_cvsignore,
+	    RULE_EXCLUDE, MOD_MERGE_WORDSPLIT, '\n');
+	if (!ret)
 		return ret;
 
 	/* Next we process ~/.cvsignore */
+
 	home = getenv("HOME");
+
 	if (home != NULL && *home != '\0') {
 		if (snprintf(home_cvsignore, sizeof(home_cvsignore),
-		    "%s/.cvsignore", home) < (int)sizeof(home_cvsignore)) {
+		    "%s/.cvsignore", home) < (int)sizeof(home_cvsignore))
 			parse_file_impl(&global_ruleset, home_cvsignore,
 			    RULE_EXCLUDE, MOD_MERGE_WORDSPLIT, false, '\n');
-		}
 	}
 
-	/* Finally, we process the CVSIGNORE environment var for more files. */
+	/*
+	 * Finally, we process the CVSIGNORE environment var for more
+	 * files.
+	 */
+
 	cvsignore = getenv("CVSIGNORE");
-	if (cvsignore != NULL && *cvsignore != '\0') {
-		ret = parse_rule_impl(&global_ruleset, cvsignore, RULE_EXCLUDE,
-		    MOD_MERGE_WORDSPLIT, '\n');
-	}
-
+	if (cvsignore != NULL && *cvsignore != '\0')
+		ret = parse_rule_impl(&global_ruleset, cvsignore,
+		    RULE_EXCLUDE, MOD_MERGE_WORDSPLIT, '\n');
 
 	return ret;
 }
@@ -582,18 +586,19 @@ ruleset_do_merge(struct ruleset *ruleset, const char *path,
 /*
  * Parses the line for a rule with consideration for the inherited
  * modifiers.
+ * Return true on success, false on failure.
  */
-static int
+static bool
 parse_rule_impl(struct ruleset *ruleset, const char *line,
     enum rule_type def, unsigned int imodifiers, char delim)
 {
-	enum rule_type type;
-	struct rule *r;
-	const char *pstart, *pend;
-	char *pattern;
-	size_t len;
-	unsigned int modifiers;
-	bool wsplit = (imodifiers & MOD_MERGE_WORDSPLIT) != 0;
+	struct rule	*r;
+	const char	*pstart, *pend;
+	char		*pattern;
+	enum rule_type	 type;
+	size_t		 len;
+	unsigned int	 modifiers;
+	const bool	 wsplit = (imodifiers & MOD_MERGE_WORDSPLIT);
 
 	imodifiers &= ~MOD_MERGE_MASK;
 	modifiers = 0;
@@ -609,12 +614,12 @@ parse_rule_impl(struct ruleset *ruleset, const char *line,
 		switch (*line) {
 		case '\0':
 			/* ignore empty lines */
-			return 0;
+			return true;
 		case '#':
 		case ';':
 			/* Comments, but they are disabled in word split mode */
 			if (!wsplit)
-				return 0;
+				return true;
 			/* FALLTHROUGH */
 		default:
 			modifiers = 0;
@@ -628,7 +633,7 @@ parse_rule_impl(struct ruleset *ruleset, const char *line,
 
 			if (type == RULE_NONE) {
 				if (def == RULE_NONE)
-					return -1;
+					return false;
 				type = def;
 				pstart = line;
 			} else {
@@ -653,7 +658,7 @@ parse_rule_impl(struct ruleset *ruleset, const char *line,
 				modifiers &= ~MOD_MERGE_CVSCOMPAT;
 
 			if (!modifiers_valid(type, &modifiers))
-				return -1;
+				return false;
 
 			/* Make a copy of the pattern */
 			pend = pstart;
@@ -677,7 +682,7 @@ parse_rule_impl(struct ruleset *ruleset, const char *line,
 
 			if (!pattern_valid(type, modifiers, pattern)) {
 				free(pattern);
-				return -1;
+				return false;
 			}
 
 			/*
@@ -721,30 +726,27 @@ parse_rule_impl(struct ruleset *ruleset, const char *line,
 		else
 			parse_pattern(r, pattern);
 
-		if (type == RULE_MERGE || type == RULE_DIR_MERGE) {
-			if ((modifiers & MOD_MERGE_EXCLUDE_FILE) != 0) {
-				if (parse_rule_impl(ruleset, r->pattern,
-				    RULE_EXCLUDE, 0, delim) == -1) {
-					return -1;
-				}
-			}
-		}
+		if (type == RULE_MERGE || type == RULE_DIR_MERGE)
+			if (modifiers & MOD_MERGE_EXCLUDE_FILE)
+				if (!parse_rule_impl(ruleset, r->pattern,
+				    RULE_EXCLUDE, 0, delim))
+					return false;
 
-		if (type == RULE_MERGE) {
-			ruleset_do_merge(ruleset, r->pattern, modifiers, delim);
-		} else if (type == RULE_DIR_MERGE) {
+		if (type == RULE_MERGE)
+			ruleset_do_merge(ruleset, r->pattern,
+			    modifiers, delim);
+		else if (type == RULE_DIR_MERGE)
 			ruleset_add_merge(ruleset);
-		} else if ((modifiers & MOD_CVSEXCLUDE) != 0) {
+		else if (modifiers & MOD_CVSEXCLUDE)
 			add_cvsignore_rules();
-		}
 
 		pattern = NULL;
 	}
 
-	return 0;
+	return true;
 }
 
-int
+bool
 parse_rule(const char *line, enum rule_type def, char delim)
 {
 	return parse_rule_impl(&global_ruleset, line, def, 0, delim);
@@ -770,7 +772,7 @@ parse_file_impl(struct ruleset *ruleset, const char *file, enum rule_type def,
 	while ((linelen = getdelim(&line, &linesize, delim, fp)) != -1) {
 		linenum++;
 		line[linelen - 1] = '\0';
-		if (parse_rule_impl(ruleset, line, def, imodifiers, delim) == -1)
+		if (!parse_rule_impl(ruleset, line, def, imodifiers, delim))
 			errx(ERR_SYNTAX, "syntax error in %s at entry %zu",
 			    file, linenum);
 	}
@@ -993,8 +995,8 @@ recv_rules(struct sess *sess, int fd)
 		rule = &line[0];
 		modifiers = 0;
 		type = rule_xfer_type((const char **)&rule, &modifiers);
-		if (parse_rule_impl(&global_ruleset, rule, type,
-		    modifiers, '\0') == -1)
+		if (!parse_rule_impl(&global_ruleset, rule, type,
+		    modifiers, '\0'))
 			errx(ERR_PROTOCOL, "syntax error in received rules");
 	} while (1);
 }

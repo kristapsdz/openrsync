@@ -87,6 +87,62 @@ copy_internal(int fromfd, int tofd)
 }
 
 /*
+ * Same arguments as move_file(), but matching the metadata of the given
+ * "dstat".  This is often used when backing up an existing file by
+ * moving it to another file of the same name and a suffix.
+ */
+bool
+backup_file(int fromdfd, const char *fname, int todfd,
+    const char *tname, bool replace, const struct fldstat *dstat)
+{
+	struct stat	 st; /* stat of new file */
+	int		 rc; /* temporary return code */
+
+	if (!move_file(fromdfd, fname, todfd, tname, replace, false))
+		return false;
+
+	if (fstatat(todfd, tname, &st, 0) == -1)
+		return false;
+
+	/*
+	 * Set metadata on the backup file to match the metadata from
+	 * the original destination file.
+	 */
+
+	if (st.st_mtim.tv_sec != dstat->mtime.tv_sec ||
+	    st.st_mtim.tv_nsec != dstat->mtime.tv_nsec) {
+		const struct timespec ts[] = {
+			dstat->atime, dstat->mtime,
+		};
+
+		rc = utimensat(todfd, tname, ts, AT_SYMLINK_NOFOLLOW);
+		if (rc != 0)
+			ERR("%s: utimensat", tname);
+	}
+
+	if (st.st_mode != dstat->mode) {
+		rc = fchmodat(todfd, tname, dstat->mode,
+		    AT_SYMLINK_NOFOLLOW);
+		if (rc != 0)
+			ERR("%s: fchmodat", tname);
+	}
+
+	if (st.st_uid != dstat->uid || st.st_gid != dstat->gid) {
+		const uid_t uid = dstat->uid;
+		const uid_t gid = dstat->gid;
+
+		if (uid != (uid_t)-1 || gid != (gid_t)-1) {
+			rc = fchownat(todfd, tname, uid, gid,
+			    AT_SYMLINK_NOFOLLOW);
+			if (rc != 0)
+				ERR("%s: fchownat", tname);
+		}
+	}
+
+	return true;
+}
+
+/*
  * Move the file in fromdfd named 'fname' to the path named by toodfd +
  * 'tname'.  "replace" is set to indicate that we aren't surprised if a
  * file does exist there already, but we won't complain if it doesn't.

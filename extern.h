@@ -369,6 +369,7 @@ struct flist	*fl_new(struct fl *);
 struct	opts {
 	off_t		 max_size;		/* --max-size */
 	off_t		 min_size;		/* --min-size */
+	char		*backup_suffix;		/* --suffix */
 	char		*address;		/* --address */
 	char		*basedir[MAX_BASEDIR];	/* --compare/copy/link-dest */
 	char		*port;			/* --port */
@@ -383,6 +384,7 @@ struct	opts {
 	long		 block_size;		/* -B */
 	size_t		 one_file_system;	/* -x */
 	char		 ipf;			/* 0 (unspec), 4 (IPV4), 6 (IPV6) */
+	bool		 backup;		/* -b */
 	bool		 bit8;			/* -8 */
 	bool		 compress;		/* -z */
 	bool		 del_excl;		/* --delete-excluded */
@@ -741,6 +743,8 @@ bool		 hash_fmap(const char *, const struct fmap *, size_t,
 
 void		 copy_file(int, const char *, const struct flist *);
 bool   	 	 move_file(int, const char *, int, const char *, bool, bool);
+bool		 backup_file(int, const char *, int, const char *, bool,
+		    const struct fldstat *);
 
 int		 mkpath(char *, mode_t);
 int		 mkpathat(int fd, char *, mode_t);

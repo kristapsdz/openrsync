@@ -2275,6 +2275,7 @@ void
 flist_del(const struct sess *sess, int root, const struct flist *fl,
     size_t flsz)
 {
+	char		 buf[PATH_MAX]; /* backup file buffer */
 	const char	*path, /* temporary fl path */
 	      		*fmt; /* log message format */
 	ssize_t		 inc; /* read forward (1) or backward (-1) */
@@ -2351,8 +2352,31 @@ flist_del(const struct sess *sess, int root, const struct flist *fl,
 			continue;
 
 		assert(root != -1);
-
 		flag = S_ISDIR(fl[i].st.mode) ? AT_REMOVEDIR : 0;
+
+		if (sess->opts->backup) {
+			if (!S_ISDIR(fl[i].st.mode)) {
+				LOG3("%s: doing backup", fl[i].wpath);
+				if (snprintf(buf, sizeof(buf), "%s%s",
+				    fl[i].wpath,
+				    sess->opts->backup_suffix) >=
+				    (int)sizeof(buf)) {
+					ERR("%s: backup: compound "
+					    "backup path too long: "
+					    "%s%s > %d", fl[i].wpath,
+					    fl[i].wpath,
+					    sess->opts->backup_suffix,
+					    (int)sizeof(buf));
+					continue;
+				}
+				if (!backup_file(root, fl[i].wpath,
+				    root, buf, 1, &fl[i].dstat)) {
+					ERR("%s: backup_file: %s",
+					    fl[i].wpath, buf);
+					continue;
+				}
+			}
+		}
 
 		if (unlinkat(root, fl[i].wpath, flag) == -1 &&
 		    errno != ENOENT) {

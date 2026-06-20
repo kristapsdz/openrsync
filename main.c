@@ -386,39 +386,41 @@ skipverify:
 
 enum {
 	OP_ADDRESS = CHAR_MAX + 1,
-	OP_PORT,
-	OP_RSYNCPATH,
-	OP_PROTOCOL,
-	OP_TIMEOUT,
-	OP_EXCLUDE,
-	OP_INCLUDE,
-	OP_EXCLUDE_FROM,
-	OP_INCLUDE_FROM,
 	OP_COMP_DEST,
+	OP_CONTIMEOUT,
 	OP_COPY_DEST,
+	OP_EXCLUDE,
+	OP_EXCLUDE_FROM,
+	OP_INCLUDE,
+	OP_INCLUDE_FROM,
 	OP_LINK_DEST,
 	OP_MAX_SIZE,
 	OP_MIN_SIZE,
-	OP_CONTIMEOUT,
+	OP_PORT,
+	OP_PROTOCOL,
+	OP_RSYNCPATH,
 	OP_SET_BOOL_FALSE,
 	OP_SET_BOOL_TRUE,
+	OP_SUFFIX,
+	OP_TIMEOUT,
 };
 
-const char rsync_shopts[] = "468B:CDFade:f:ghIJlnOoprtVvWxz";
+const char rsync_shopts[] = "468B:CDFabde:f:ghIJlnOoprtVvWxz";
 const struct option	 lopts[] = {
     { "8-bit-output",	no_argument,	NULL,			'8' },
     { "address",	required_argument, NULL,		OP_ADDRESS },
     { "archive",	no_argument,	NULL,			'a' },
+    { "backup",		no_argument,	NULL,			'b' },
     { "block-size",	required_argument, NULL,		'B' },
     { "compare-dest",	required_argument, NULL,		OP_COMP_DEST },
-    { "copy-dest",	required_argument, NULL,		OP_COPY_DEST },
-    { "link-dest",	required_argument, NULL,		OP_LINK_DEST },
     { "compress",	no_argument,	NULL,			'z' },
     { "contimeout",	required_argument, NULL,		OP_CONTIMEOUT },
+    { "copy-dest",	required_argument, NULL,		OP_COPY_DEST },
     { "cvs-exclude",	no_argument,	NULL,			'C' },
     { "del",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "delete",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "devices",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "dirs",		no_argument,	NULL,			'd' },
     { "dry-run",	no_argument,	NULL,			'n' },
     { "exclude",	required_argument, NULL,		OP_EXCLUDE },
     { "exclude-from",	required_argument, NULL,		OP_EXCLUDE_FROM },
@@ -430,11 +432,13 @@ const struct option	 lopts[] = {
     { "include-from",	required_argument, NULL,		OP_INCLUDE_FROM },
     { "ipv4",           no_argument,    NULL,                   '4' },
     { "ipv6",           no_argument,    NULL,                   '6' },
+    { "link-dest",	required_argument, NULL,		OP_LINK_DEST },
     { "links",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "max-size",	required_argument, NULL,		OP_MAX_SIZE },
     { "min-size",	required_argument, NULL,		OP_MIN_SIZE },
     { "no-J",		no_argument,	NULL, 			OP_SET_BOOL_FALSE }, /* XXX */
     { "no-O",		no_argument,	NULL,			OP_SET_BOOL_FALSE }, /* XXX */
+    { "no-W",		no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-devices",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-group",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-links",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
@@ -447,6 +451,7 @@ const struct option	 lopts[] = {
     { "no-specials",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-times",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-verbose",	no_argument,	&verbose,		0 },
+    { "no-whole-file",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "numeric-ids",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "omit-dir-times",	no_argument,	NULL,			'O' },
     { "omit-link-times", no_argument,	NULL,			'J' },
@@ -462,14 +467,12 @@ const struct option	 lopts[] = {
     { "server",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "size-only",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "specials",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "suffix",		required_argument, NULL,		OP_SUFFIX },
     { "timeout",	required_argument, NULL,		OP_TIMEOUT },
     { "times",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "verbose",	no_argument,	NULL,			'v' },
     { "version",	no_argument,	NULL,			'V' },
     { "whole-file",	no_argument,	NULL,			'W' },
-    { "no-whole-file",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
-    { "no-W",		no_argument,	NULL,			OP_SET_BOOL_FALSE },
-    { "dirs",		no_argument,	NULL,			'd' },
     { NULL,		0,		NULL,			0 }
 #if 0
     { "sync-file",	required_argument, NULL,		6 },
@@ -483,9 +486,11 @@ usage(void)
 	    "\t[--8-bit-output, -8]\n"
 	    "\t[--address=sourceaddr]\n"
 	    "\t[--archive, -a]\n"
+	    "\t[--backup, -b]\n"
 	    "\t[--block-size=size, -B size]\n"
 	    "\t[--compare-dest=dir]\n"
 	    "\t[--contimeout=seconds]\n"
+	    "\t[--copy-dest=dir]\n"
 	    "\t[--cvs-exclude, -C]\n"
 	    "\t[--del, --delete]\n"
 	    "\t[--devices]\n"
@@ -500,6 +505,7 @@ usage(void)
 	    "\t[--include]\n"
 	    "\t[--ipv4, -4]\n"
 	    "\t[--ipv6, -6]\n"
+	    "\t[--link-dest=dir]\n"
 	    "\t[--links, -l]\n"
 	    "\t[--max-size=size]\n"
 	    "\t[--min-size=size]\n"
@@ -514,6 +520,7 @@ usage(void)
 	    "\t[--no-recursive]\n"
 	    "\t[--no-specials]\n"
 	    "\t[--no-times]\n"
+	    "\t[--no-whole-file]\n"
 	    "\t[--numeric-ids]\n"
 	    "\t[--omit-dir-times, -O]\n"
 	    "\t[--omit-link-times, -J]\n"
@@ -527,10 +534,12 @@ usage(void)
 	    "\t[--rsync-path=program]\n"
 	    "\t[--size-only]\n"
 	    "\t[--specials]\n"
+	    "\t[--suffix=suffix]\n"
 	    "\t[--timeout=seconds]\n"
 	    "\t[--times, -t]\n"
 	    "\t[--verbose, -v]\n"
 	    "\t[--version, -V]\n"
+	    "\t[--whole-file, -W]\n"
 	    "\tsource ... directory\n",
 	    getprogname());
 }
@@ -558,6 +567,7 @@ static struct opts *
 rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
     struct sess *sess, int *exitcode, int *whole_file)
 {
+	char		 rbuf[PATH_MAX]; /* backup filename */
 	const char	*errstr; /* temporary error string */
 	const char	*new_rule; /* filter rule */
 	long long	 tmpint; /* temporary */
@@ -565,7 +575,6 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			 opts_F = 0, /* -F calls */
 			 opts_no_dirs = 0; /* transitional */
 	int		 c, /* getopt return */
-			 rc, /* temporary */
 			 lidx; /* getopt long index */
 	bool		 cvs_excl = false; /* exclude CVS */
 
@@ -681,8 +690,7 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			}
 			if (new_rule == NULL)
 				break;
-			rc = parse_rule(new_rule, RULE_NONE, '\n');
-			assert(rc == 0);
+			(void)parse_rule(new_rule, RULE_NONE, '\n');
 			break;
 		case 'a':
 			opts.recursive = true;
@@ -694,6 +702,9 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			opts.devices = true;
 			opts.specials = true;
 			break;
+		case 'b':
+			opts.backup = true;
+			break;
 		case 'd':
 			opts.dirs = DIRMODE_REQUESTED;
 			break;
@@ -701,13 +712,16 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			opts.ssh_prog = optarg;
 			break;
 		case 'f':
-			if (parse_rule(optarg, RULE_NONE, '\n') == -1)
+			if (!parse_rule(optarg, RULE_NONE, '\n'))
 				errx(ERR_SYNTAX, "--filter=%s: syntax "
 				    "error", optarg);
 			break;
 		case 'g':
 			opts.preserve_gids = true;
 			break;
+		case 'h':
+			usage();
+			return NULL;
 		case 'I':
 			opts.ignore_times = true;
 			break;
@@ -765,47 +779,6 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 		case OP_ADDRESS:
 			opts.address = optarg;
 			break;
-		case OP_CONTIMEOUT:
-			poll_contimeout = strtonum(optarg, 0, 60 * 60,
-			    &errstr);
-			if (errstr != NULL)
-				errx(ERR_SYNTAX, "--contimeout=%s: %s",
-				    optarg, errstr);
-			break;
-		case OP_PORT:
-			opts.port = optarg;
-			break;
-		case OP_RSYNCPATH:
-			opts.rsync_path = optarg;
-			break;
-		case OP_PROTOCOL:
-			if (strcmp(optarg, "27") != 0)
-				errx(ERR_SYNTAX, "--protocol=%s: only "
-				   "27 is currently supported", optarg);
-			break;
-		case OP_TIMEOUT:
-			poll_timeout = strtonum(optarg, 0, 60 * 60,
-			    &errstr);
-			if (errstr != NULL)
-				errx(ERR_SYNTAX, "--timeout=%s: %s",
-				    optarg, errstr);
-			break;
-		case OP_EXCLUDE:
-			if (parse_rule(optarg, RULE_EXCLUDE, '\0') == -1)
-				errx(ERR_SYNTAX, "--exclude=%s: syntax "
-				    "error", optarg);
-			break;
-		case OP_INCLUDE:
-			if (parse_rule(optarg, RULE_INCLUDE, '\0') == -1)
-				errx(ERR_SYNTAX, "--include=%s: syntax "
-				    "error in include", optarg);
-			break;
-		case OP_EXCLUDE_FROM:
-			parse_file_rule(optarg, RULE_EXCLUDE, '\n');
-			break;
-		case OP_INCLUDE_FROM:
-			parse_file_rule(optarg, RULE_INCLUDE, '\n');
-			break;
 		case OP_COMP_DEST:
 			if (opts.alt_base_mode != BASE_MODE_OFF &&
 			    opts.alt_base_mode != BASE_MODE_COMPARE) {
@@ -828,8 +801,31 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			basedir_cnt = rsync_getopt_xxxdest(optarg,
 			    lopts[lidx].name, basedir_cnt);
 			break;
+		case OP_CONTIMEOUT:
+			poll_contimeout = strtonum(optarg, 0, 60 * 60,
+			    &errstr);
+			if (errstr != NULL)
+				errx(ERR_SYNTAX, "--contimeout=%s: %s",
+				    optarg, errstr);
+			break;
+		case OP_EXCLUDE:
+			if (!parse_rule(optarg, RULE_EXCLUDE, '\0'))
+				errx(ERR_SYNTAX, "--exclude=%s: syntax "
+				    "error", optarg);
+			break;
+		case OP_EXCLUDE_FROM:
+			parse_file_rule(optarg, RULE_EXCLUDE, '\n');
+			break;
+		case OP_INCLUDE:
+			if (!parse_rule(optarg, RULE_INCLUDE, '\0'))
+				errx(ERR_SYNTAX, "--include=%s: syntax "
+				    "error in include", optarg);
+			break;
+		case OP_INCLUDE_FROM:
+			parse_file_rule(optarg, RULE_INCLUDE, '\n');
+			break;
 		case OP_LINK_DEST:
-			if (opts.alt_base_mode !=0 &&
+			if (opts.alt_base_mode != BASE_MODE_OFF &&
 			    opts.alt_base_mode != BASE_MODE_LINK) {
 				errx(ERR_SYNTAX, "option --%s conflicts with %s",
 				    lopts[lidx].name,
@@ -851,9 +847,33 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				    "invalid numeric value", optarg);
 			opts.min_size = tmpint;
 			break;
-		case 'h':
-			usage();
-			return NULL;
+		case OP_PORT:
+			opts.port = optarg;
+			break;
+		case OP_PROTOCOL:
+			if (strcmp(optarg, "27") != 0)
+				errx(ERR_SYNTAX, "--protocol=%s: only "
+				   "27 is currently supported", optarg);
+			break;
+		case OP_RSYNCPATH:
+			opts.rsync_path = optarg;
+			break;
+		case OP_SUFFIX:
+			if (strchr(optarg, '/') != NULL)
+				errx(1, "--suffix cannot contain slashes: "
+				    "%s\n", optarg);
+			free(opts.backup_suffix);
+			opts.backup_suffix = strdup(optarg);
+			if (opts.backup_suffix == NULL)
+				errx(ERR_NOMEM, NULL);
+			break;
+		case OP_TIMEOUT:
+			poll_timeout = strtonum(optarg, 0, 60 * 60,
+			    &errstr);
+			if (errstr != NULL)
+				errx(ERR_SYNTAX, "--timeout=%s: %s",
+				    optarg, errstr);
+			break;
 		default:
 			*exitcode = ERR_SYNTAX;
 			usage();
@@ -877,26 +897,38 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 	if (opts.port == NULL)
 		opts.port = (char *)"rsync";
 
-	/* by default and for --contimeout=0 disable poll_contimeout */
+	if (opts.backup_suffix == NULL)
+		if ((opts.backup_suffix = strdup("~")) == NULL)
+			err(ERR_NOMEM, NULL);
+
+	if (opts.backup && opts.del > DMODE_NONE) {
+		snprintf(rbuf, sizeof(rbuf), "P *%s",
+		    opts.backup_suffix);
+		if (!parse_rule(rbuf, RULE_NONE, 0))
+			errx(ERR_SYNTAX, "error adding protect "
+			    "rule: %s", rbuf);
+	}
+
+	if (opts.backup)
+		opts.omit_dir_times = true;
+
+	/* By default and for --contimeout=0 disable poll_contimeout. */
+
 	if (poll_contimeout == 0)
 		poll_contimeout = -1;
 	else
 		poll_contimeout *= 1000;
 
-	/* by default and for --timeout=0 disable poll_timeout */
+	/* By default and for --timeout=0 disable poll_timeout. */
+
 	if (poll_timeout == 0)
 		poll_timeout = -1;
 	else
 		poll_timeout *= 1000;
 
 	if (!opts.server && cvs_excl) {
-		rc = parse_rule("-C", RULE_NONE, '\n');
-		assert(rc == 0);
-		rc = parse_rule(":C", RULE_NONE, '\n');
-		assert(rc == 0);
-
-		/* Silence NDEBUG warnings. */
-		(void)rc;
+		(void)parse_rule("-C", RULE_NONE, '\n');
+		(void)parse_rule(":C", RULE_NONE, '\n');
 	}
 
 	return &opts;
