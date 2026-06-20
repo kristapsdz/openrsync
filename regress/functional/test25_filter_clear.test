@@ -1,0 +1,89 @@
+#! /bin/sh
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree
+mkdir -p dir1/a dir1/a/b
+touch dir1/root.o dir1/a/a.o dir1/a/b/b.o
+
+# make the tree we want to compare to
+mkdir -p dir2/a dir2/a/b
+touch dir2/root.o dir2/a/a.o dir2/a/b/b.o
+
+# Start off simple: clear in the global rules,
+$rsync -a --filter "- *.o" --filter "!" -- dir1/ dir3
+compare_trees dir2 dir3
+
+# Double-check that a normal merge clear rule has the same effect.
+cat <<EOF > filter-rules
+!
+EOF
+
+rm -rf dir3
+$rsync -a --filter "- *.o" --filter "!" -- dir1/ dir3
+compare_trees dir2 dir3
+
+# Slightly more complicated: dir-merge rules, globally we'll exclude *.o then
+# at the first dir-merge we'll attempt to clear the list.  Clear only operates
+# on the global list for a global clear rule, or on the current merge chain, so
+# this should have no effect.
+find dir2 -name '*.o' -delete
+cat <<EOF > dir1/.merge-rules
+!
+EOF
+
+cp dir1/.merge-rules dir2
+rm -rf dir3
+$rsync -a --filter "- *.o" --filter ": .merge-rules" -- dir1/ dir3
+compare_trees dir2 dir3
+
+# Check the behavior of clear in conjunction with a prior dir-merge.  These
+# *.o come back, because we don't process any of the rules.
+touch dir2/root.o dir2/a/a.o dir2/a/b/b.o
+cat <<EOF > dir1/.additional-rules
+- *.o
+EOF
+cat <<EOF > dir1/.merge-rules
+: .additional-rules
+!
+EOF
+cp dir1/.additional-rules dir1/.merge-rules dir2
+
+rm -rf dir3
+$rsync -a --filter ": .merge-rules" -- dir1/ dir3
+compare_trees dir2 dir3
+
+# Now let's look at a clear rule in the global chain after a dir-merge
+# directive.  smb rsync seems to avoid processing the dir-merge rule.
+rm dir1/.additional-rules dir2/.additional-rules
+cat <<EOF > dir1/.merge-rules
+- *.o
+EOF
+cp dir1/.merge-rules dir2
+
+rm -rf dir3
+$rsync -a --filter ": .merge-rules" --filter '!' -- dir1/ dir3
+compare_trees dir2 dir3
+
+# Now let's double-check clearing of inherited rules.  Only the root.o should be
+# cleared, every directory after that inherits the clear rule.
+rm dir2/root.o
+cat <<EOF > dir1/a/.merge-rules
+!
+EOF
+cp dir1/a/.merge-rules dir2/a
+
+rm -rf dir3
+$rsync -a --filter ":n .merge-rules" -- dir1/ dir3
+compare_trees dir2 dir3
+
+# Finally, clear the *.o in a separate dir-merge rule.  The one in .root-rules
+# still happens, and we're left with no .o
+find dir2 -name '*.o' -delete
+mv dir1/.merge-rules dir1/.root-rules
+mv dir2/.merge-rules dir2/.root-rules
+rm -rf dir3
+$rsync -a --filter ": .root-rules" --filter ": .merge-rules" -- dir1/ dir3
+compare_trees dir2 dir3

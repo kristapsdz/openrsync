@@ -1,0 +1,63 @@
+#! /bin/sh
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree
+mkdir -p dir1/a/x dir1/a/y dir1/b
+
+touch dir1/x.o
+touch dir1/a/x.o dir1/a/x/x.o
+touch dir1/a/binary dir1/a/x/binary dir1/a/y/binary
+touch dir1/a/y.o dir1/a/y/y.o
+touch dir1/a/y/libfoo
+
+touch dir1/b/x.o dir1/b/binary
+
+# The rules in a shouldn't effect b, and should effect a/x and a/y
+cat <<EOF > dir1/a/.merge-rules
+- *.o
+# libfoo will be specifically included in a/y
+- lib*
+EOF
+
+# Additional exclusions for a/y
+cat <<EOF > dir1/a/y/.merge-rules
+- binary
++ libfoo
+EOF
+
+# make the tree we want to compare to
+mkdir -p dir2/a/x dir2/a/y dir2/b
+touch dir2/x.o
+cp dir1/a/.merge-rules dir2/a
+cp dir1/a/y/.merge-rules dir2/a/y
+touch dir2/a/binary dir2/a/x/binary
+touch dir2/a/y/libfoo
+touch dir2/b/x.o dir2/b/binary
+
+$rsync -a --filter ": .merge-rules" -- dir1/ dir3
+compare_trees dir2 dir3
+
+# Test 'e', exclude the .merge-rules files from the transfer completely.
+rm -rf dir3
+find dir2 -name '.merge-rules' -delete
+$rsync -a --filter ":e .merge-rules" -- dir1/ dir3
+compare_trees dir2 dir3
+
+# Test 'n', do not inherit.  Objects in dir1/a/{x,y} come back because they do
+# not inherit dir1/a/.merge-rules.  The presence of objects in dir1/a/x
+# demonstrates that we drop .merge-rules in the next directory whether it has
+# its own .merge-rules or not.
+rm -rf dir3
+touch dir2/a/x/x.o dir2/a/y/y.o
+$rsync -a --filter ":ne .merge-rules" -- dir1/ dir3
+compare_trees dir2 dir3
+
+# Test dir-merge again, but use an anchored path
+rm -rf dir3
+rm dir2/x.o
+echo "/*.o" > dir1/.merge-rules
+$rsync -a --filter ":-ne .merge-rules" -- dir1/ dir3
+compare_trees dir2 dir3

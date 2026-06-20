@@ -1,0 +1,34 @@
+#! /bin/sh
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree
+mkdir dir1
+touch dir1/a dir1/b dir1/c
+touch dir1/a.o dir1/b.o dir1/c.o
+
+# make the tree we want to compare to
+mkdir dir2
+touch dir2/a dir2/b dir2/c
+touch dir2/a.o
+
+cat <<EOF > filter-rules
++ a.o
+- *.o
+EOF
+
+$rsync -a --filter ". $PWD/filter-rules" -- dir1/ dir3
+compare_trees dir2 dir3
+
+rm -rf dir3
+
+# Now check the order: the rules read in should be inserted at the point in the
+# filter chain that the merge rule appeared at.  If it's not, then in this case
+# we won't properly include a.o as the wildcarrd will exclude it first.
+cat <<EOF > filter-rules
++ a.o
+EOF
+$rsync -a --filter ". $PWD/filter-rules" --exclude '*.o' -- dir1/ dir3
+compare_trees dir2 dir3

@@ -1,0 +1,72 @@
+#! /bin/sh
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+# Create the source tree:
+#
+rm -rf src
+mkdir -p src/dir1/dir2
+
+for f in a b c ; do
+    jot -r 31 >> src/${f}
+    compress -c src/${f} >> src/${f}.o
+    jot -r 37 >> src/dir1/${f}
+    compress -c src/${f} >> src/dir1/${f}.o
+    jot -r 43 >> src/dir1/dir2/${f}
+    compress -c src/${f} >> src/dir1/dir2/${f}.o
+done
+
+# rsync -a -F with no filter file should replicate
+# the source to the non-existing destination:
+#
+for opt in "-F" "-FF" "-FFF" ; do
+    rm -rf dst
+    $rsync -a ${opt} -- src/ dst/
+    compare_trees -t src dst
+done
+
+
+# Create the reference tree that should reflect
+# the dest dir after the filter rules are applied:
+#
+rm -rf ref
+cp -a src ref
+find ref -name [bc].o -exec rm -f {} \;
+
+# Create the default filter rule file:
+#
+cat <<- EOF > src/.rsync-filter
++ a.o
+- *.o
+EOF
+
+# rsync -a -F with filter file should replicate the
+# source to the non-existing destination according
+# to the filter rules in src/.rsync-filter:
+#
+touch $(find src ref -type d)
+rm -rf dst
+
+for i in $(seq 3) ; do
+    $rsync -a -F -- src/ dst/
+    [ -f dst/.rsync-filter ]
+    rm dst/.rsync-filter
+    touch ref dst
+    compare_trees -t ref dst
+done
+
+
+# rsync -a -FF with filter file should replicate the
+# source to the non-existing destination according
+# to the filter rules in src/.rsync-filter (but not
+# replicate the filter file:
+#
+touch $(find src ref -type d)
+rm -rf dst
+
+for i in $(seq 3) ; do
+    $rsync -a -FF -- src/ dst/
+    [ ! -f dst/.rsync-filter ]
+    compare_trees -t ref dst
+done

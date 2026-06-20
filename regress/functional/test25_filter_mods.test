@@ -1,0 +1,51 @@
+#! /bin/sh
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree
+mkdir dir1
+touch dir1/a dir1/b dir1/c
+touch dir1/a.o dir1/b.o dir1/c.o
+
+# make the tree we want to compare to
+mkdir dir2
+touch dir2/a dir2/b dir2/c
+touch dir2/a.o
+
+# Absolute path match, '/'
+$rsync -a --filter '+/ dir1/a.o' --filter '-/ dir1/*.o' -- dir1/ dir3
+compare_trees dir2 dir3
+
+# Test it again with the wrong parent directories specified to make sure that
+# we're not just matching the basename.
+rm -rf dir3
+touch dir2/b.o dir2/c.o
+$rsync -a --filter '+/ dir/a.o' --filter '-/ dir/*.o' -- dir1/ dir3
+compare_trees dir2 dir3
+
+# Negate modifier, '!'
+rm -rf dir3
+rm dir2/c.o
+$rsync -a --filter '+! c.o' --filter '- *.o' -- dir1/ dir3
+compare_trees dir2 dir3
+
+# -C is tested in the cvs rules test
+# s and r are tested in the sender/receiver tests
+
+# Perishable, 'p'
+mkdir -p dir2/.svn dir3/.svn
+touch dir2/.svn/a.o dir3/.svn/a.o
+
+# First, double-check that we can't delete the .svn directory if we exclude
+# *.o files.
+$rsync -a --del --filter '- *.o' -- dir1/ dir3
+compare_trees dir2 dir3
+
+# Now if we make that exclude perishable, we should go ahead and delete the
+# remaining *.o in .svn and delete the directory itself.
+rm -rf dir2/.svn
+# XXX Does smb rsync just strip the modifier for, e.g., 'Pp *.o'?
+$rsync -a --del --filter '-p *.o' -- dir1/ dir3
+compare_trees dir2 dir3

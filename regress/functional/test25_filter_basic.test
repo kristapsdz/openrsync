@@ -1,0 +1,72 @@
+#! /bin/sh
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree
+mkdir dir1
+touch dir1/a dir1/b dir1/c
+touch dir1/a.o dir1/b.o dir1/c.o
+
+# make the tree we want to compare to
+mkdir dir2
+touch dir2/a dir2/b dir2/c
+touch dir2/a.o
+
+$rsync -a --filter '+ a.o' --filter '- *.o' -- dir1/ dir3
+compare_trees dir2 dir3
+
+# Start over, test triple-glob
+rm -rf dir1 dir2 dir3
+mkdir -p dir1/src/included_dir dir2/src/included_dir
+touch dir1/excluded
+touch dir1/src/included_1 dir1/src/included_dir/included_2
+touch dir2/src/included_1 dir2/src/included_dir/included_2
+
+$rsync -a --include='src/***' --exclude='*' dir1/ dir3
+if ! compare_trees dir2 dir3; then
+	1>&2 echo "Un-anchored triple-glob failed"
+	exit 1
+fi
+
+rm -rf dir3
+$rsync -a --include='/src/***' --exclude='*' dir1/ dir3
+if ! compare_trees dir2 dir3; then
+	1>&2 echo "Anchored triple-glob failed"
+	exit 1
+fi
+
+rm -rf dir3
+$rsync -a --include='*rc/***' --exclude='*' dir1/ dir3
+if ! compare_trees dir2 dir3; then
+	1>&2 echo "Unanchored pattern triple-glob failed"
+	exit 1
+fi
+
+rm -rf dir3
+$rsync -a --include='/*rc/***' --exclude='*' dir1/ dir3
+if ! compare_trees dir2 dir3; then
+	1>&2 echo "Anchored pattern triple-glob failed"
+	exit 1
+fi
+
+# Construct one last scenario: everything in the second level
+rm -rf dir1 dir2 dir3
+mkdir -p dir1/a/included dir2/a/included
+touch dir1/also_included dir2/also_included
+touch dir1/a/excluded
+touch dir1/a/included/file1 dir2/a/included/file1
+
+$rsync -a --include='included/***' --exclude='a/*' dir1/ dir3
+if ! compare_trees dir2 dir3; then
+	1>&2 echo "Second-level triple-glob failed"
+	exit 1
+fi
+
+rm -rf dir3
+$rsync -a --include='incl*/***' --exclude='a/*' dir1/ dir3
+if ! compare_trees dir2 dir3; then
+	1>&2 echo "Second-level wildcard triple-glob failed"
+	exit 1
+fi

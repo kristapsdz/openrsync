@@ -114,6 +114,8 @@ the first time it is seen, and
 .Dq - .rsync-filter
 the second time it is seen.
 Subsequent uses have no effect.
+See
+.Sx FILTER RULES .
 .It Fl -8-bit-output , Fl 8
 Do not escape high-bit characters in the output, which is the default.
 .It Fl -address Ns = Ns Ar sourceaddr
@@ -187,11 +189,13 @@ This also adds a
 CVS rule to include per-dir
 .Pa .cvsignore
 files.
-.\" All of these rules are appended to the end of the filter list with the
-.\" equivalent of specifying
-.\" .Fl f Dq Ar -C
-.\" .Fl f Dq Ar :C .
+All of these rules are appended to the end of the filter list with the
+equivalent of specifying
+.Fl f Dq Ar -C
+.Fl f Dq Ar :C .
 .It Fl -del , -delete
+See
+.Sx FILTER RULES .
 Delete files in
 .Ar directory
 not found in
@@ -223,9 +227,13 @@ and
 .Em rules
 from
 .Em file .
+See
+.Sx FILTER RULES .
 .It Fl -exclude Ar pattern
 Exclude files matching
 .Em pattern .
+See
+.Sx FILTER RULES .
 .It Fl -filter Ns = Ns Ar filter , Fl f Ar filter
 Process
 .Ar filter
@@ -236,11 +244,8 @@ may be a rule to include a filter file, or to include a per-directory
 filter file.
 Regular filter files are processed immediately, while per-directory
 filter files are processed as directories are encountered.
-.\" See
-.\" .Sx PATTERNS AND RULES
-.\" for more details about the syntax and capabilities of
-.\" .Nm
-.\" filters.
+See
+.Sx FILTER RULES .
 .It Fl -group , Fl g
 Set the group name to match the source.
 For example, group
@@ -263,9 +268,13 @@ and
 .Em rules
 from
 .Em file .
+See
+.Sx FILTER RULES .
 .It Fl -include Ns = Ns Ar pattern
 Include files matching
 .Em pattern .
+See
+.Sx FILTER RULES .
 .It Fl -ipv4 , Fl 4
 Use IPv4 when connecting to a remote host.
 If
@@ -468,7 +477,190 @@ or symbolic links
 The destination
 .Ar directory
 must be a directory and is created if not found.
-.\" .Sh PATTERNS AND RULES
+.Sh FILTER RULES
+Filter rules allow fine-grained control over file inclusion (or
+exclusion) in the transfer and delete protection.
+The
+.Fl f ,
+.Fl -include ,
+.Fl -include-from ,
+.Fl -exclude ,
+and
+.Fl -exclude-from
+options load a filter rule or a set of filter rules.
+.Pp
+A single filter rule consists of a
+.Ar type ,
+an optional set of
+.Ar modifiers ,
+and a
+.Ar pattern .
+Each
+.Ar type
+has a short name and a long name.
+.Pp
+A filter file is a set of rules, one per line.
+Comments are accepted, starting with a
+.Sq # .
+Empty lines are ignored.
+.Pp
+Each rule has the following syntax:
+.Bd -literal
+<TYPE>[[,_]<MODIFIERS>] <PATTERN>
+.Ed
+.Pp
+Rule types have both a short and long name.
+The delimiter preceding modifiers is optional for short name types.
+.Pp
+The following rule types are supported:
+.Bl -column -offset indent "LONG NAME" "SHORT NAME" "DESCRIPTION"
+.It LONG NAME Ta SHORT NAME Ta DESCRIPTION
+.It exclude   Ta - Ta Exclude a file from the transfer
+.It include   Ta + Ta Include a file from the transfer
+.It merge     Ta . Ta Merge rules in from a file
+.It dir-merge Ta : Ta Merge rules in from a per-directory file
+.It hide      Ta H Ta Hide a file from the transfer
+.It show      Ta S Ta \&Do not hide a file from the transfer
+.It protect   Ta P Ta Protect a file from deletion
+.It risk      Ta R Ta \&Do not protect a file from deletion
+.It clear     Ta ! Ta Clear the current filter list
+.El
+.Pp
+The
+.Sq \&:
+modifier is only available from protocol version 29.
+.Pp
+The following rule modifiers are supported for the
+.Dq exclude
+and
+.Dq include
+rule types:
+.Bl -column -offset indent "MODIFIER" "DESCRIPTION"
+.It MODIFIER Ta DESCRIPTION
+.It / Ta Match against the absolute pathname of the entry
+.It ! Ta Take effect if the pattern does not match the entry
+.It C Ta Insert the global CVS exclusions
+.It s Ta Marks a rule as sender-side only
+.It r Ta Marks a rule as receiver-side only
+.It p Ta Marks a rule as perishable (do not prevent removal of a directory)
+.El
+.Pp
+The above modifiers will be ignored if applied to other rule types, with the
+exception of
+.Dq merge
+and
+.Dq dir-merge
+rules.
+See the
+.Sx Merge Rules
+section for more details of the semantics.
+.Ss Include and Exclude Rules
+The six basic types of include and exclude rules are
+.Dq exclude ,
+.Dq include ,
+.Dq hide ,
+.Dq show ,
+.Dq protect ,
+.Dq risk .
+.Pp
+The
+.Dq hide
+and
+.Dq show
+types are sender-side versions of the
+.Dq exclude
+and
+.Dq include
+rules, while the
+.Dq protect
+and
+.Dq risk
+types are their receiver-side equivalents.
+.Pp
+Each of these rules take a pattern that is typically matched against the
+basename of a transfer candidate's name.
+A trailing
+.Sq /
+in the pattern indicates that the entry should only match a directory name,
+while a leading
+.Sq /
+indicates that the pattern is anchored to the beginning of the transfer path.
+The beginning of the transfer path is either the root of the transfer, or the
+directory containing a dir-merge file if the rule in question comes from a
+dir-merge file.
+A
+.Sq /
+at any other position, or a
+.Dq **
+in the pattern, will match against the full path to the transfer entry beginning
+at the root of the transfer.
+.Pp
+Patterns may contain any of the following wildcards.
+.Bl -column -offset indent "WILDCARD" "DESCRIPTION"
+.It WILDCARD Ta DESCRIPTION
+.It ?        Ta Matches any character, except Sq /
+.It *        Ta Matches zero or more characters, except Sq /
+.It **       Ta Matches zero or more characters
+.It [        Ta Character class, as in POSIX regular expressions
+.It /***     Ta Matches a directory and all of its contents
+.El
+.Pp
+Backslashes may be used to escape one of the above wildcard characters, but is
+ordinary when appearing before any other character.
+.Pp
+Exclude rules with the
+.Dq C
+modifier applied do not take a pattern.
+.Ss Merge Rules
+Merge rules are another way to insert a filter rule file.
+There are two types:
+.Dq merge
+rules, which are evaluated once as soon as they are processed, and the
+rules read are inserted at the same position as the merge file; and
+.Dq dir-merge
+rules, which are evaluated whilst processing the file list, and search
+each directory encountered for the file named in the rule's pattern.
+.Pp
+If a
+.Dq dir-merge
+rule appears before a
+.Dq clear
+rule, it will not be processed at all.
+.Pp
+.Dq dir-merge
+rules are inserted into their own chain of rules, rather than directly
+into the global ruleset.
+.Dq clear
+rules appearing in a dir-merged file do not affect the global ruleset.
+As we find dir-merged files in the transfer, their rules are prepended
+to their dir-merge chain so that a deeper directory's rules take
+precedence over its parent's rules.
+.Pp
+When one of the above exclude/include modifiers are applied to
+.Dq merge
+or
+.Dq dir-merge
+rule, those modifiers are applied to the exclude/include rules within the file.
+The following modifiers may additionally be specified for merge rules:
+.Bl -column -offset indent "MODIFIER" "DESCRIPTION"
+.It MODIFIER Ta DESCRIPTION
+.It -        Ta All rules within are exclude rules
+.It +        Ta All rules within are include rules
+.It C        Ta File processing should assume CVS-compatible parsing
+.It e        Ta Exclude the file's name from the transfer
+.It n        Ta Rules are not inherited by subdirectories
+.It w        Ta Rules are word-split instead of line-split
+.El
+.Pp
+The CVS-compatible modifier implies the
+.Sq - ,
+.Sq n
+and
+.Sq w
+modifiers.
+If a filename is not supplied with it, then
+.Dq .cvsignore
+is used.
 .\" .Sh ENVIRONMENT
 .\" .Sh FILES
 .Sh EXIT STATUS

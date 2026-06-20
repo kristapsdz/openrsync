@@ -1,0 +1,45 @@
+#! /bin/sh
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree
+mkdir dir1
+touch dir1/a dir1/b dir1/c
+touch dir1/a.o dir1/b.o
+
+# make the tree we want to compare to
+mkdir dir2
+touch dir2/a dir2/b dir2/c
+touch dir2/a.o
+
+# a.o won't get deleted because it's actually transferred
+# b.o will get deleted despite existing in the src, because it's hidden from the
+# transfer.
+# c.o gets deleted because it doesn't exist in the src.
+mkdir dir3
+touch dir3/a.o dir3/b.o dir3/c.o
+
+$rsync -a --del --filter 'S a.o' --filter 'H *.o' -- dir1/ dir3
+compare_trees dir2 dir3
+
+rm -rf dir3
+mkdir dir3
+touch dir3/a.o dir3/b.o dir3/c.o
+
+$rsync -a --del --filter '+s a.o' --filter '-s *.o' -- dir1/ dir3
+compare_trees dir2 dir3
+
+rm -rf dir3
+mkdir -p headers/include
+touch headers/include/foo.h headers/include/foo.sh
+
+$rsync -a --include="*.h" --filter="H! */" headers/ dir3
+if [ ! -e dir3/include/foo.h ]; then
+	1>&2 echo "foo.h was improperly excluded"
+	exit 1
+elif [ -e dir3/include/foo.sh ]; then
+	1>&2 echo "foo.sh should have been excluded"
+	exit 1
+fi

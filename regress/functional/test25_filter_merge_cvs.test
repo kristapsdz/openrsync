@@ -1,0 +1,25 @@
+#! /bin/sh
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree
+mkdir -p dir1/x
+touch dir1/x/a.o
+touch dir1/a.o dir1/b.o dir1/c.o
+touch dir1/binary
+
+# make the tree we want to compare to
+mkdir -p dir2/x
+# CVS-compatible dir-merge are not inherited by default
+touch dir2/x/a.o
+
+# They're also word-split exclude rules
+cat <<EOF > dir1/.cvsignore
+*.o binary
+EOF
+cp dir1/.cvsignore dir2/.cvsignore
+
+$rsync -a --filter ":C" -- dir1/ dir3
+compare_trees dir2 dir3

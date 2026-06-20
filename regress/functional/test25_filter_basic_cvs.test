@@ -1,0 +1,44 @@
+#! /bin/sh
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree
+mkdir dir1
+touch dir1/a.c dir1/b.c dir1/c.c
+
+for file in RCS SCCS CVS CVS.adm RCSLOG tags TAGS .make.state .nse_depinfo core; do
+	touch dir1/"$file"
+done
+
+for suffix in '~' $ .old .bak .BAK .orig .rej .a .olb .o .obj .so .exe .Z .elc .ln; do
+	touch dir1/deleted"$suffix"
+done
+
+for prefix in cvslog. '#' '.#' , _$ .del-; do
+	touch "dir1/${prefix}deleted"
+done
+
+mkdir dir1/.svn
+touch dir1/.svn/x
+
+# make the tree we want to compare to. Everything except the three C source files
+# should match CVS patterns.
+mkdir dir2
+touch dir2/a.c dir2/b.c dir2/c.c
+
+$rsync -a --filter '-C' -- dir1/ dir3
+compare_trees dir2 dir3
+
+# Now try again, but with the -C argument spelling.
+rm -rf dir3
+$rsync -a -C -- dir1/ dir3
+compare_trees dir2 dir3
+
+# Now one last time, but make sure the -C rules are actually being inserted
+# after everything else rather than as the argument is seen.
+touch dir2/RCS dir2/SCCS
+rm -rf dir3
+$rsync -a --filter '+ RCS' -C --filter '+ SCCS' -- dir1/ dir3
+compare_trees dir2 dir3

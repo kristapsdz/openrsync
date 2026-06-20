@@ -1,0 +1,31 @@
+#! /bin/sh
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree
+mkdir dir1
+touch dir1/a dir1/b dir1/c
+touch dir1/b.o
+
+# make the tree we want to compare to
+mkdir dir2
+touch dir2/a dir2/b dir2/c
+touch dir2/a.o dir2/b.o
+
+# a.o won't get deleted because it's protected.
+# b.o won't get deleted because it exists in the src, just to demonstrate that
+# the filter rule isn't affecting the sender-side.
+# c.o gets deleted because it doesn't exist in the src.
+mkdir dir3
+touch dir3/a.o dir3/b.o dir3/c.o
+
+$rsync -a --del --filter 'P a.o' --filter 'R *.o' -- dir1/ dir3
+compare_trees dir2 dir3
+
+rm -rf dir3
+mkdir dir3
+touch dir3/a.o dir3/b.o dir3/c.o
+$rsync -a --del --filter '-r a.o' --filter '+r *.o' -- dir1/ dir3
+compare_trees dir2 dir3

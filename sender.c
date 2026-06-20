@@ -1139,15 +1139,19 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 	up.stat.map = NULL;
 	up.stat.blktab = blkhash_alloc();
 
-	/* Client sends zero-length exclusions if deleting. */
-
-	if (!sess->opts->server && sess->opts->del != DMODE_NONE)
-		send_rules(sess, fdout);
-
 	/*
-	 * If we're the server, read our exclusion list.  This is always
-	 * 0 for now.
+	 * Client sends rules.  If in a position to send, check whether
+	 * the negotiated protocol is satisfied beforehand.
 	 */
+
+	if (!sess->opts->server) {
+		check_send_rules(sess);
+		/* Client sends zero-length exclusions if deleting. */
+		if (sess->opts->del && !sess->opts->del_excl)
+			send_rules(sess, fdout);
+	}
+
+	/* If we're the server, read our rules. */
 
 	if (sess->opts->server)
 		recv_rules(sess, fdin);

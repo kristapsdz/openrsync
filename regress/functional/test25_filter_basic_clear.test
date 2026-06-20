@@ -1,0 +1,18 @@
+#! /bin/sh
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree
+mkdir dir1
+touch dir1/a dir1/b dir1/c
+touch dir1/a.o dir1/b.o dir1/c.o
+
+# make the tree we want to compare to.  a.o goes away this time, because we
+# cleared out the filter rules in between our include and exclude rules.
+mkdir dir2
+touch dir2/a dir2/b dir2/c
+
+$rsync -a --filter '+ a.o' --filter '!' --filter '- *.o' -- dir1/ dir3
+compare_trees dir2 dir3

@@ -224,6 +224,7 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 	/*
 	 * This was moved to below because "root" may not exist yet.
 	 * FIXME: conditionally unveil if the root exists.
+	 * FIXME: allow for ~/.cvsignore
 	 */
 	if (unveil(root, "rwc") == -1)
 		err(ERR_IPC, "%s: unveil", root);
@@ -231,14 +232,20 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 		err(ERR_IPC, "unveil");
 #endif
 
-	/* Client sends exclusions. */
+	/*
+	 * Client sends rules.  If in a position to send, check whether
+	 * the negotiated protocol is satisfied beforehand.
+	 */
 
-	if (!sess->opts->server)
+	if (!sess->opts->server) {
+		check_send_rules(sess);
 		send_rules(sess, fdout);
+	}
 
-	/* Server receives exclusions if delete is on. */
+	/* Server receives rules if delete is on. */
 
-	if (sess->opts->server && sess->opts->del != DMODE_NONE)
+	if (sess->opts->server &&
+	    (sess->opts->del && !sess->opts->del_excl))
 		recv_rules(sess, fdin);
 
 	/*

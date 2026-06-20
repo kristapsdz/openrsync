@@ -80,9 +80,13 @@ flist.o main.o receiver.o rules.o sender.o uploader.o: rules.h
 
 rules.h: extern.h
 
-# Doesn't work: regress/functional/test10b_perms.test
-# Doesn't work: regress/functional/test84_archive.test
-# Doens't work openrsync -> rsync: regress/functional/test40_backup.test
+# Doesn't work: regress/functional/test10b_perms.test (???)
+# Doesn't work openrsync -> rsync: regress/functional/test40_backup.test
+# Doesn't work openrsync -> rsync: regress/functional/test25_filter_merge.test
+# Doesn't work openrsync -> rsync: regress/functional/test25_filter_merge_mods.test
+# Doesn't work openrsync -> rsync: regress/functional/test25_filter_receiver.test
+# Doesn't work openrsync -> rsync: regress/functional/test25_filter_mods.test
+# Doesn't work (protocol/filter rules issue): regress/functional/test25_filter_sender.test
 
 REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test0_noslash.test \
@@ -111,10 +115,26 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test13b_perms.test \
 		  regress/functional/test19_linkdest.test \
 		  regress/functional/test19b_linkdest-rel.test \
-		  regress/functional/test28_size_only.test
-REGRESS_FAIL 	= regress/functional/test12d_inex.test
+		  regress/functional/test28_size_only.test \
+		  regress/functional/test25_filter_basic.test \
+		  regress/functional/test25_filter_basic_clear.test \
+		  regress/functional/test84_archive.test
+
+# Doesn't work (protocol < 29): regress/functional/test25_filter_basic_cvs.test
+# Doesn't work (protocol < 29): regress/functional/test25_filter_clear.test
+# Doesn't work (protocol < 29): regress/functional/test25_filter_default.test
+# Doesn't work (protocol < 29): regress/functional/test25_filter_dir.test
+
+REGRESS_FAIL 	= regress/functional/test12d_inex.test \
+		  regress/functional/test25_filter_basic_cvs.test \
+		  regress/functional/test25_filter_clear.test \
+		  regress/functional/test25_filter_default.test \
+		  regress/functional/test25_filter_dir.test \
+		  regress/functional/test25_filter_merge_cvs.test
 REGRESS_MANUAL 	=
-RSYNC_VERBOSE	=
+RSYNC_VERBOSE	= 
+
+#OPENRSYNC=/home/kristaps/checkedout/apple/rsync/openrsync/openrsync ; \
 
 regress_functional:: all
 	@OPENRSYNC=`readlink -f openrsync`; \

@@ -752,14 +752,17 @@ parse_rule(const char *line, enum rule_type def, char delim)
 	return parse_rule_impl(&global_ruleset, line, def, 0, delim);
 }
 
+/*
+ * FIXME: this will not work because it happens after unveil.
+ */
 static void
 parse_file_impl(struct ruleset *ruleset, const char *file, enum rule_type def,
     unsigned int imodifiers, bool must_exist, char delim)
 {
-	FILE *fp;
-	char *line = NULL;
-	size_t linesize = 0, linenum = 0;
-	ssize_t linelen;
+	FILE	*fp; /* the file itself */
+	char	*line = NULL; /* current line */
+	size_t	 linesize = 0, linenum = 0; /* getdelim() params */
+	ssize_t	 linelen; /* getdelim() result */
 
 	if (strcmp(file, "-") == 0) {
 		fp = stdin;
@@ -791,12 +794,17 @@ parse_file_rule(const char *file, enum rule_type def, char delim)
 	parse_file_impl(&global_ruleset, file, def, 0, true, delim);
 }
 
+/*
+ * Translate the given rule "r" into a sendable rule.
+ * If the command cannot be translated due to protocol compatibility,
+ * this returns NULL; otherwise, it returns the translated rule.
+ */
 static const char *
-send_command(struct rule *r)
+send_command(const struct sess *sess, const struct rule *r)
 {
-	static char buf[16];
-	char *b = buf;
-	char *ep = buf + sizeof(buf);
+	static char	 buf[16]; /* send buffer */
+	char 		*b = buf; /* current position */
+	const char 	*ep = buf + sizeof(buf); /* end pointer */
 
 	switch (r->type) {
 	case RULE_EXCLUDE:
@@ -847,8 +855,12 @@ send_command(struct rule *r)
 	return buf;
 }
 
+/*
+ * If the rule is onlydir or leaderdir, append the correct directory
+ * specifier and return that.  Otherwise, return an empty string.
+ */
 static const char *
-postfix_command(struct rule *r)
+postfix_command(const struct rule *r)
 {
 	static char buf[8];
 
@@ -861,25 +873,29 @@ postfix_command(struct rule *r)
 	return buf;
 }
 
+/*
+ * Check if the rule should be sent.  This will filter out those rules
+ * only applicable to the receiver/sender.
+ */
 static bool
-rule_should_xfer(struct sess *sess, struct rule *r)
+rule_should_xfer(const struct sess *sess, const struct rule *r)
 {
-	bool res = true;
+	bool	 res = true;
 
 	/*
-	 * Merge files without the include/exclude modifiers get passed through
-	 * for compatibility.
+	 * Merge files without the include/exclude modifiers get passed
+	 * through for compatibility.
 	 */
-	if (r->type == RULE_MERGE) {
-		res = (r->modifiers &
-		    (MOD_MERGE_EXCLUDE | MOD_MERGE_INCLUDE)) == 0;
-	}
+
+	if (r->type == RULE_MERGE)
+		res = !(r->modifiers & (MOD_MERGE_EXCLUDE | MOD_MERGE_INCLUDE));
 
 	/*
-	 * If *we* are the sender, the other side is mostly interested in
-	 * exclusion rules for the purposes of --delete-excluded.
+	 * If *we* are the sender, the other side is mostly interested
+	 * in exclusion rules for the purposes of --delete-excluded.
 	 */
-	if (sess->mode == FARGS_SENDER) {
+
+	if (sess->mode == FARGS_SENDER)
 		switch (r->type) {
 		case RULE_INCLUDE:
 		case RULE_EXCLUDE:
@@ -892,24 +908,32 @@ rule_should_xfer(struct sess *sess, struct rule *r)
 			res = false;
 			break;
 		}
-	}
+
+	/* We don't send non-merge rules when del_excl is enabled. */
 
 	if (sess->opts->del_excl && sess->mode == FARGS_SENDER &&
-	    r->type != RULE_MERGE) {
-		/* We don't send non-merge rules when del_excl is enabled */
+	    r->type != RULE_MERGE)
 		res = false;
-	}
 
 	return res;
 }
 
+/*
+ * Send the list of global rules.  The list is narrowed to the rules
+ * that can be processed by the other side.  The check_send_rules()
+ * function should be called beforehand.
+ */
 void
 send_rules(struct sess *sess, int fd)
 {
-	const char *cmd;
-	const char *postfix;
-	struct rule *r;
-	size_t cmdlen, len, postlen, i;
+	const char	*cmd, /* string version of rule */
+			*postfix; /* string suffix */
+	struct rule 	*r; /* rule to send */
+	size_t		 cmdlen, /* length of cmd */
+			 len, /* length of rule pattern */
+			 postlen, /* length of postfix */
+			 i; /* temporary index */
+	int		 writelen; /* write length */
 
 	for (i = 0; i < global_ruleset.numrules; i++) {
 		r = &global_ruleset.rules[i];
@@ -917,16 +941,15 @@ send_rules(struct sess *sess, int fd)
 		if (!rule_should_xfer(sess, r))
 			continue;
 
-		cmd = send_command(r);
-		if (cmd == NULL)
-			err(ERR_PROTOCOL,
-			    "rules are incompatible with remote rsync");
+		cmd = send_command(sess, r);
+		assert(cmd != NULL);
 		postfix = postfix_command(r);
 		cmdlen = strlen(cmd);
 		len = strlen(r->pattern);
 		postlen = strlen(postfix);
 
-		if (!io_write_int(sess, fd, (int)(cmdlen + len + postlen)))
+		writelen = (int)(cmdlen + len + postlen);
+		if (!io_write_int(sess, fd, writelen))
 			err(ERR_SOCK_IO, "send rules");
 		if (!io_write_buf(sess, fd, cmd, cmdlen))
 			err(ERR_SOCK_IO, "send rules");
@@ -940,6 +963,20 @@ send_rules(struct sess *sess, int fd)
 
 	if (!io_write_int(sess, fd, 0))
 		err(ERR_SOCK_IO, "send rules");
+}
+
+void
+check_send_rules(const struct sess *sess)
+{
+	struct rule 	*r; /* rule to send */
+	size_t		 i; /* temporary */
+
+	for (i = 0; i < global_ruleset.numrules; i++) {
+		r = &global_ruleset.rules[i];
+		if (r->type == RULE_DIR_MERGE && sess->protocol < 29)
+			errx(ERR_PROTOCOL, "rules are incompatible with "
+			    "remote rsync");
+	}
 }
 
 /*

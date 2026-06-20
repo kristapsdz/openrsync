@@ -42,5 +42,6 @@ int  	rules_match(const char *, bool, enum fmode, bool);
 void	rules_base(const char *);
 void	rules_dir_push(const char *, size_t, int);
 void	rules_dir_pop(const char *, size_t);
+void	check_send_rules(const struct sess *);
 
 #endif /*!RULES_H*/

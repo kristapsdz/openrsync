@@ -1,0 +1,60 @@
+#! /bin/sh
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree
+mkdir dir1
+touch dir1/a dir1/b dir1/c
+touch dir1/a.o dir1/b.o dir1/c.o
+
+# make the tree we want to compare to
+mkdir dir2
+touch dir2/a dir2/b dir2/c
+touch dir2/a.o dir2/b.o
+
+# First we test the exclude (-) modifier
+cat <<EOF > filter-rules
+c.o
+EOF
+
+$rsync -a --filter ".- $PWD/filter-rules" -- dir1/ dir3
+compare_trees dir2 dir3
+
+# Then the include (+) modifier
+cat <<EOF > filter-rules
+a.o
+b.o
+EOF
+
+rm -rf dir3
+$rsync -a --filter ".+ $PWD/filter-rules" --exclude 'c.o' -- dir1/ dir3
+compare_trees dir2 dir3
+
+# 'C' is already tested as part of the cvs test
+# 'e' and 'n' will be tested as part of dir-merge rules
+
+# Now the word-split (w) modifier
+cat <<EOF > filter-rules
+a.o b.o
+EOF
+
+rm -rf dir3
+$rsync -a --filter ".+w $PWD/filter-rules" --exclude 'c.o' -- dir1/ dir3
+compare_trees dir2 dir3
+
+# Test that the non-merge modifiers basically work; we'll slap these with the
+# receiver ("r") modifier; these get transformed into, effectively,
+# "proect a.o risk *.o" and thus, we should end up with a.o preserved
+cat <<EOF > filter-rules
+- a.o
++ *.o
+EOF
+
+rm -rf dir3
+cp -R dir1 dir3
+rm dir1/a.o dir1/c.o
+
+$rsync -a --del --filter ".r $PWD/filter-rules" -- dir1/ dir3
+compare_trees dir2 dir3
