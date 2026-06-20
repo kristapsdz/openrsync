@@ -135,6 +135,22 @@ download_is_inplace(struct sess *sess, struct download *p,
 }
 
 /*
+ * Utility function returning final component of file path.
+ */
+const char *
+download_partial_filepath(const struct flist *f)
+{
+	const char *path;
+
+	path = strrchr(f->path, '/');
+	if (path != NULL)
+		path++;
+	else
+		path = f->path;
+	return path;
+}
+
+/*
  * Cleanup any partial bits of a transfer.  This may mean anything from
  * do nothing to moving the file into place if we've been instructed to.
  * It may be called from a signal context, so we should take care to
@@ -1534,20 +1550,4 @@ out:
 		f->flstate |= FLIST_FAILED;
 	download_cleanup(sess, p, 1);
 	return -1;
-}
-
-/*
- * Utility function returning final component of file path.
- */
-const char *
-download_partial_filepath(const struct flist *f)
-{
-	const char *path;
-
-	path = strrchr(f->path, '/');
-	if (path != NULL)
-		path++;
-	else
-		path = f->path;
-	return path;
 }

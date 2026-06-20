@@ -152,7 +152,7 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "-r");
 	if (sess->opts->preserve_times)
 		addargs(&args, "-t");
-	if (sess->opts->ignore_times)
+	if (f->mode == FARGS_SENDER && sess->opts->ignore_times)
 		addargs(&args, "-I");
 	if (verbose > 3)
 		addargs(&args, "-v");

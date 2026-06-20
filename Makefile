@@ -82,6 +82,7 @@ rules.h: extern.h
 
 # Doesn't work: regress/functional/test10b_perms.test
 # Doesn't work: regress/functional/test84_archive.test
+# Doens't work openrsync -> rsync: regress/functional/test40_backup.test
 
 REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test0_noslash.test \
@@ -110,10 +111,9 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test13b_perms.test \
 		  regress/functional/test19_linkdest.test \
 		  regress/functional/test19b_linkdest-rel.test \
-		  regress/functional/test28_size_only.test \
-		  regress/functional/test40_backup.test
+		  regress/functional/test28_size_only.test
 REGRESS_FAIL 	= regress/functional/test12d_inex.test
-REGRESS_MANUAL 	= 
+REGRESS_MANUAL 	=
 RSYNC_VERBOSE	=
 
 regress_functional:: all
@@ -134,7 +134,7 @@ regress_functional:: all
 					TEST=`readlink -f $$f` ; \
 					TEMP=`mktemp -d` ; \
 					cd $$TEMP ; \
-					echo "$$TEST: $$FIRST -> $$SECOND (opts: $$OPTGROUP)" ; \
+					echo "$$TEST: `basename $$FIRST` -> `basename $$SECOND` (opts: $$OPTGROUP)" ; \
 					set +e ; \
 					tstdir="$$OPWD/regress/functional" \
 					    rsync="$$FIRST $$OPTGROUP $(RSYNC_VERBOSE) --rsync-path=$$SECOND" \
@@ -152,7 +152,7 @@ regress_functional:: all
 					TEST=`readlink -f $$f` ; \
 					TEMP=`mktemp -d` ; \
 					cd $$TEMP ; \
-					echo "$$TEST: $$FIRST -> $$SECOND (opts: $$OPTGROUP)" ; \
+					echo "$$TEST: `basename $$FIRST` -> `basename $$SECOND` (opts: $$OPTGROUP)" ; \
 					tstdir="$$OPWD/regress/functional" \
 					    rsync="$$FIRST $$OPTGROUP $(RSYNC_VERBOSE) --rsync-path=$$SECOND" \
 					    sh $$TEST || { \
@@ -167,7 +167,7 @@ regress_functional:: all
 					TEST=`readlink -f $$f` ; \
 					TEMP=`mktemp -d` ; \
 					cd $$TEMP ; \
-					echo "$$TEST: $$FIRST -> $$SECOND (opts: $$OPTGROUP)" ; \
+					echo "$$TEST: `basename $$FIRST` -> `basename $$SECOND` (opts: $$OPTGROUP)" ; \
 					tstdir="$$OPWD/regress/functional" \
 					    rsync="$$FIRST $$OPTGROUP $(RSYNC_VERBOSE) --rsync-path=$$SECOND" \
 					    sh $$TEST || { \

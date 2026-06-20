@@ -52,7 +52,7 @@ enum	pfdt {
 
 bool
 rsync_set_metadata_at(const struct sess *sess, bool newfile, int rootfd,
-	const struct flist *f, const char *path)
+    const struct flist *f, const char *path)
 {
 	struct timespec	 ts[2];
 	uid_t		 uid = (uid_t)-1;
@@ -66,7 +66,7 @@ rsync_set_metadata_at(const struct sess *sess, bool newfile, int rootfd,
 	/* Conditionally adjust file modification time. */
 
 	if (sess->opts->preserve_times &&
-	    !(S_ISDIR(f->st.mode) && sess->opts->omit_dir_times)) {
+	    (!S_ISDIR(f->st.mode) || !sess->opts->omit_dir_times)) {
 		ts[0].tv_nsec = UTIME_NOW;
 		ts[1].tv_sec = f->st.mtime;
 		ts[1].tv_nsec = 0;
@@ -100,7 +100,7 @@ rsync_set_metadata_at(const struct sess *sess, bool newfile, int rootfd,
 				errno = serrno;
 				return false;
 			}
-			if (getuid() == 0)
+			if (geteuid() == 0)
 				WARNX("%s: identity unknown or not available "
 				    "to user.group: %u.%u", f->path, uid, gid);
 		} else
@@ -113,7 +113,9 @@ rsync_set_metadata_at(const struct sess *sess, bool newfile, int rootfd,
 		if (mode != 0) {
 			if (fchmodat(rootfd, path, mode, AT_SYMLINK_NOFOLLOW) == -1) {
 				if (!(S_ISLNK(f->st.mode) && errno == EOPNOTSUPP)) {
-					ERR("%s: fchmodat", path);
+					serrno = errno;
+					ERR("%s: fchmodat (1)", path);
+					errno = serrno;
 					return false;
 				}
 			}
@@ -219,6 +221,10 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 	}
 
 #if 0
+	/*
+	 * This was moved to below because "root" may not exist yet.
+	 * FIXME: conditionally unveil if the root exists.
+	 */
 	if (unveil(root, "rwc") == -1)
 		err(ERR_IPC, "%s: unveil", root);
 	if (unveil(NULL, NULL) == -1)
