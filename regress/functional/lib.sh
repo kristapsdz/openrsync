@@ -15,12 +15,14 @@ then
 	STAT_FMT_FLAG="-c"
 	STAT_MTIME="%Y"
 	STAT_SIZE="%s"
-	STAT_FILE="%A %U %G %N"
+	STAT_FILE_SHORT="%A %U %G"
+	STAT_FILE="$STAT_FILE_SHORT %N"
 else
 	STAT_FMT_FLAG="-f"
 	STAT_MTIME="%m"
 	STAT_SIZE="%z"
-	STAT_FILE="%Sp %Su %Sg %N"
+	STAT_FILE_SHORT="%Sp %Su %Sg"
+	STAT_FILE="$STAT_FILE_SHORT %N"
 fi
 
 genfile_stdout_16m()

@@ -53,16 +53,16 @@ rm -rf src dst
 
 # Next, create a few files in the top-level directory:
 #
-stat_fmt='%Sp %Su %Sg %z %m'
+stat_fmt="$STAT_FILE_SHORT $STAT_SIZE $STAT_MTIME"
 
 date > src-1
-stat -f "${stat_fmt}" src-1 > src-1.stat
+stat $STAT_FMT_FLAG "${stat_fmt}" src-1 > src-1.stat
 
 mkfifo src-2
-stat -f "${stat_fmt}" src-2 > src-2.stat
+stat $STAT_FMT_FLAG "${stat_fmt}" src-2 > src-2.stat
 
 ln -sf src-1 src-3
-stat -f "${stat_fmt}" src-3 > src-3.stat
+stat $STAT_FMT_FLAG "${stat_fmt}" src-3 > src-3.stat
 
 
 1>&2 echo "-- Starting 0-byte file regression test --"
