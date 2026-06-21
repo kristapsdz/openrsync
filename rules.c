@@ -922,6 +922,7 @@ rule_should_xfer(const struct sess *sess, const struct rule *r)
  * Send the list of global rules.  The list is narrowed to the rules
  * that can be processed by the other side.  The check_send_rules()
  * function should be called beforehand.
+ * FIXME: this should return a failure code and not just exit.
  */
 void
 send_rules(struct sess *sess, int fd)
@@ -948,9 +949,14 @@ send_rules(struct sess *sess, int fd)
 		len = strlen(r->pattern);
 		postlen = strlen(postfix);
 
+		/* Write: [flist-rule-len]. */
+
 		writelen = (int)(cmdlen + len + postlen);
 		if (!io_write_int(sess, fd, writelen))
 			err(ERR_SOCK_IO, "send rules");
+
+		/* Write: [flist-rule]. */
+
 		if (!io_write_buf(sess, fd, cmd, cmdlen))
 			err(ERR_SOCK_IO, "send rules");
 		if (!io_write_buf(sess, fd, r->pattern, len))
@@ -960,6 +966,8 @@ send_rules(struct sess *sess, int fd)
 			if (!io_write_buf(sess, fd, postfix, postlen))
 				err(ERR_SOCK_IO, "send rules");
 	}
+
+	/* Write: [flist-rule-len] (exit). */
 
 	if (!io_write_int(sess, fd, 0))
 		err(ERR_SOCK_IO, "send rules");
@@ -1008,23 +1016,31 @@ rule_xfer_type(const char **linep, unsigned int *modifiers)
 	return type;
 }
 
+/*
+ * Read the filter rules.
+ * FIXME: this should return a failure code and not just exit.
+ */
 void
 recv_rules(struct sess *sess, int fd)
 {
-	char line[8192];
-	char *rule;
-	size_t len;
-	enum rule_type type;
-	unsigned int modifiers;
+	char		 line[8192]; /* buffer of maximum filter size */
+	char		*rule; /* pointer to line */
+	size_t		 len; /* length of line */
+	enum rule_type	 type; /* parsed type */
+	unsigned int	 modifiers; /* parsed modifiers */
 
 	do {
+		/* Read: [flist-rule-len]. */
+
 		if (!io_read_size(sess, fd, &len))
 			err(ERR_SOCK_IO, "receive rules");
-
 		if (len == 0)
 			return;
 		if (len >= sizeof(line) - 1)
 			errx(ERR_SOCK_IO, "received rule too long");
+
+		/* Read: [flist-rule]. */
+
 		if (!io_read_buf(sess, fd, line, len))
 			err(ERR_SOCK_IO, "receive rules");
 		line[len] = '\0';

@@ -283,6 +283,7 @@ idents_recv(struct sess *sess, int fd, struct ident **ids, size_t *idsz)
 	void	*pp;
 
 	for (;;) {
+		/* Read: [flist-uidgid-id]. */
 		if (!io_read_uint(sess, fd, &id)) {
 			ERRX1("io_read_uint");
 			return false;
@@ -302,6 +303,7 @@ idents_recv(struct sess *sess, int fd, struct ident **ids, size_t *idsz)
 		 * When reading the size, warn if we get a size of zero.
 		 * The spec doesn't allow this, but we might have a
 		 * noncomformant or adversarial sender.
+		 * Read: [flist-uidgid-len].
 		 */
 
 		if (!io_read_byte(sess, fd, &sz)) {
@@ -316,6 +318,9 @@ idents_recv(struct sess *sess, int fd, struct ident **ids, size_t *idsz)
 			ERR("calloc");
 			return false;
 		}
+
+		/* Read: [flist-uidgid-name]. */
+
 		if (!io_read_buf(sess, fd, (*ids)[*idsz].name, sz)) {
 			ERRX1("io_read_buf");
 			return false;

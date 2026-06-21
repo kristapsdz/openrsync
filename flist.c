@@ -368,10 +368,20 @@ flist_send(struct sess *sess, int fdin, int fdout, const struct flist *fl,
 		/* Now write to the wire. */
 		/* FIXME: buffer this. */
 
+		/* Write: [flist-status]. */
+
 		if (!io_write_byte(sess, fdout, flag)) {
 			ERRX1("io_write_byte");
 			goto out;
 		}
+
+		/* Write: [flist-name-len-long] (FIXME: condition). */
+		/* Write: [flist-name]. */
+		/* Write: [flist-length]. */
+		/* Write: [flist-mtime]. */
+		/* Write: [flist-mode]. */
+
+		/* FIXME: compact uids/gids/etc. */
 
 		if (!io_write_int(sess, fdout, (int)sz)) {
 			ERRX1("io_write_int");
@@ -393,6 +403,7 @@ flist_send(struct sess *sess, int fdin, int fdout, const struct flist *fl,
 		/* Conditional part: uid. */
 
 		if (sess->opts->preserve_uids) {
+			/* Write: [flist-uid]. */
 			if (!io_write_uint(sess, fdout, f->st.uid)) {
 				ERRX1("io_write_uint");
 				goto out;
@@ -406,6 +417,7 @@ flist_send(struct sess *sess, int fdin, int fdout, const struct flist *fl,
 		/* Conditional part: gid. */
 
 		if (sess->opts->preserve_gids) {
+			/* Write: [flist-gid]. */
 			if (!io_write_uint(sess, fdout, f->st.gid)) {
 				ERRX1("io_write_uint");
 				goto out;
@@ -422,6 +434,7 @@ flist_send(struct sess *sess, int fdin, int fdout, const struct flist *fl,
 		    S_ISCHR(f->st.mode))) ||
 		    (sess->opts->specials && (S_ISFIFO(f->st.mode) ||
 		    S_ISSOCK(f->st.mode)))) {
+			/* Write: [flist-rdev]. */
 			if (!io_write_int(sess, fdout, f->st.rdev)) {
 				ERRX1("io_write_int");
 				goto out;
@@ -435,10 +448,12 @@ flist_send(struct sess *sess, int fdin, int fdout, const struct flist *fl,
 			fn = f->link;
 			sz = strlen(f->link);
 			assert(sz < INT32_MAX);
+			/* Write: [flist-link-len]. */
 			if (!io_write_int(sess, fdout, (int)sz)) {
 				ERRX1("io_write_int");
 				goto out;
 			}
+			/* Write: [flist-link]. */
 			if (!io_write_buf(sess, fdout, fn, sz)) {
 				ERRX1("io_write_buf");
 				goto out;
@@ -454,6 +469,7 @@ flist_send(struct sess *sess, int fdin, int fdout, const struct flist *fl,
 		 */
 
 		if (sess->opts->checksum) {
+			/* Write: [flist-checksum]. */
 			if (!io_write_buf(sess, fdout, f->md, sizeof(f->md))) {
 				ERRX1("io_write_buf checksum");
 				goto out;
@@ -462,6 +478,7 @@ flist_send(struct sess *sess, int fdin, int fdout, const struct flist *fl,
 	}
 
 	/* Signal end of file list. */
+	/* Write: [flist-status]. */
 
 	if (!io_write_byte(sess, fdout, 0)) {
 		ERRX1("io_write_byte");
@@ -536,6 +553,7 @@ flist_recv_name(struct sess *sess, int fd, struct flist *f, uint8_t flags,
 	 */
 
 	if (flags & FLIST_NAME_SAME) {
+		/* Read: [flist-name-offset]. */
 		if (!io_read_byte(sess, fd, &bval)) {
 			ERRX1("io_read_byte");
 			return 0;
@@ -546,11 +564,13 @@ flist_recv_name(struct sess *sess, int fd, struct flist *f, uint8_t flags,
 	/* Get the (possibly-remaining) filename length. */
 
 	if (flags & FLIST_NAME_LONG) {
+		/* Read: [flist-name-len-long]. */
 		if (!io_read_size(sess, fd, &pathlen)) {
 			ERRX1("io_read_size");
 			return 0;
 		}
 	} else {
+		/* Read: [flist-name-len-short]. */
 		if (!io_read_byte(sess, fd, &bval)) {
 			ERRX1("io_read_byte");
 			return 0;
@@ -579,6 +599,8 @@ flist_recv_name(struct sess *sess, int fd, struct flist *f, uint8_t flags,
 
 	if (flags & FLIST_NAME_SAME)
 		memcpy(f->path, last, partial);
+
+	/* Read: [flist-name]. */
 
 	if (!io_read_buf(sess, fd, f->path + partial, pathlen)) {
 		ERRX1("io_read_buf");
@@ -856,6 +878,11 @@ flist_recv(struct sess *sess, int fdin, int fdout, struct flist **flp,
 	last[0] = '\0';
 
 	for (;;) {
+		/* 
+		 * Read: [flist-status].
+		 * If zero, stop processing the flist.
+		 */
+
 		if (!io_read_byte(sess, fdin, &bval)) {
 			ERRX1("io_read_byte");
 			goto out;
@@ -882,14 +909,14 @@ flist_recv(struct sess *sess, int fdin, int fdout, struct flist **flp,
 		ff = &fl[flsz - 1];
 		fflast = flsz > 1 ? &fl[flsz - 2] : NULL;
 
-		/* Filename first. */
+		/* Filename first ([flist-name] et al.). */
 
 		if (!flist_recv_name(sess, fdin, ff, flag, last)) {
 			ERRX1("flist_recv_name");
 			goto out;
 		}
 
-		/* Read the file size. */
+		/* Read: [flist-length]. */
 
 		if (!io_read_long(sess, fdin, &lval)) {
 			ERRX1("io_read_long");
@@ -897,7 +924,7 @@ flist_recv(struct sess *sess, int fdin, int fdout, struct flist **flp,
 		}
 		ff->st.size = lval;
 
-		/* Read the modification time. */
+		/* Read: [flist-mtime]. */
 
 		if (!(flag & FLIST_TIME_SAME)) {
 			if (!io_read_uint(sess, fdin, &uival)) {
@@ -913,7 +940,7 @@ flist_recv(struct sess *sess, int fdin, int fdout, struct flist **flp,
 		ff->dstat.atime.tv_nsec = UTIME_NOW;
 		ff->dstat.mtime.tv_sec = ff->st.mtime;
 
-		/* Read the file mode. */
+		/* Read: [flist-mode]. */
 
 		if (!(flag & FLIST_MODE_SAME)) {
 			if (!io_read_uint(sess, fdin, &uival)) {
@@ -935,6 +962,7 @@ flist_recv(struct sess *sess, int fdin, int fdout, struct flist **flp,
 
 		if (sess->opts->preserve_uids) {
 			if (!(flag & FLIST_UID_SAME)) {
+				/* Read: [flist-uid]. */
 				if (!io_read_uint(sess, fdin, &uival)) {
 					ERRX1("io_read_int");
 					goto out;
@@ -961,6 +989,7 @@ flist_recv(struct sess *sess, int fdin, int fdout, struct flist **flp,
 
 		if (sess->opts->preserve_gids) {
 			if (!(flag & FLIST_GID_SAME)) {
+				/* Read: [flist-gid]. */
 				if (!io_read_uint(sess, fdin, &uival)) {
 					ERRX1("io_read_uint");
 					goto out;
@@ -992,6 +1021,7 @@ flist_recv(struct sess *sess, int fdin, int fdout, struct flist **flp,
 			/*
 			 * Protocols less than 28, the device number is
 			 * transmitted as a single int.
+			 * Read: [file-rdev]. 
 			 */
 			if (!(flag & FLIST_RDEV_SAME)) {
 				if (!io_read_int(sess, fdin, &ival)) {
@@ -1010,6 +1040,7 @@ flist_recv(struct sess *sess, int fdin, int fdout, struct flist **flp,
 
 		if (S_ISLNK(ff->st.mode) &&
 		    sess->opts->preserve_links) {
+			/* Read: [file-link-length]. */
 			if (!io_read_size(sess, fdin, &lsz)) {
 				ERRX1("io_read_size");
 				goto out;
@@ -1022,6 +1053,7 @@ flist_recv(struct sess *sess, int fdin, int fdout, struct flist **flp,
 				ERR("calloc");
 				goto out;
 			}
+			/* Read: [file-link]. */
 			if (!io_read_buf(sess, fdin, link, lsz)) {
 				free(link);
 				ERRX1("io_read_buf");
@@ -1046,6 +1078,7 @@ flist_recv(struct sess *sess, int fdin, int fdout, struct flist **flp,
 		 */
 
 		if (sess->opts->checksum) {
+			/* Read: [file-checksum]. */
 			if (!io_read_buf(sess, fdin, ff->md, sizeof(ff->md))) {
 				ERRX1("io_read_buf");
 				goto out;

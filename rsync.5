@@ -36,25 +36,12 @@ The
 is run either on the local or remote computer, depending upon the
 command-line given file locations.
 .Pp
-There are a number of options in the protocol that are dictated by command-line
-flags.
-These will be noted as
-.Fl D
-for devices,
-.Fl g
-for group ids,
-.Fl l
-for links,
-.Fl n
-for dry-run,
-.Fl o
-for user ids,
-.Fl r
-for recursion,
-.Fl v
-for verbose, and
-.Fl -delete
-for deletion (before).
+There are a number of options in the protocol that are dictated by
+command-line flags.
+These are shared by both
+.Xr openrsync 1
+and
+.Xr rsync 1 .
 .Ss Data types
 The binary protocol encodes all data in little-endian format.
 Integers are signed 32-bit, shorts are signed 16-bit, bytes are unsigned
@@ -130,7 +117,22 @@ Prior to be sent from sender to receiver, and upon being received, the
 file list must be lexicographically sorted such as with
 .Xr strcmp 3 .
 Subsequent references to the file are by index in the sorted list.
-.Ss Client process
+.Ss Asynchrony
+The sender and receiver need not work in lockstep.
+The receiver may send file update requests as quickly as it parses them,
+and respond to the sender's update notices on demand.
+Similarly, the sender may read as many update requests as it can, and
+service them in any order it wishes.
+.Pp
+The sender and receiver synchronise state only at the end of phase.
+.Pp
+The reference
+.Xr rsync 1
+takes advantage of this with a two-process receiver, one for sending
+update requests (the generator) and another for receiving.
+.Xr openrsync 1
+uses an event-loop model instead.
+.Sh PROTOCOL
 The client can operate in sender or receiver mode depending upon the
 command-line source and destination.
 .Pp
@@ -140,115 +142,58 @@ If the source file is remote, it is in receiver mode: the server pushes
 to the client.
 If neither are remote, the client operates in sender mode.
 These are all mutually exclusive.
-.Pp
+.Ss Handshake
 When the client starts, regardless its mode, it first handshakes the
 server.
 This exchange is
 .Em not
 multiplexed.
+The server performs the same operation, but writing instead of reading.
 .Pp
 .Bl -enum -compact
 .It
-send local version (integer)
+write local version (integer)
 .It
-receive remote version (integer)
+read remote version (integer)
 .It
-receive random seed (integer)
+read random seed (integer)
 .El
 .Pp
 Following this, the client multiplexes when reading from the server.
 Transmissions sent from client to server are not multiplexed.
 It then enters the
-.Sx Update exchange
+.Sx File exchange
 protocol.
-.Ss Server process
-The server can operate in sender or receiver mode depending upon how the
-client starts the server.
-This may be directly from the parent process (when invoked for local
-files) or indirectly via a remote shell.
-.Pp
-When in sender mode, the server pushes data to the client.
-(This is equivalent to receiver mode for the client.)
-In receiver, the opposite is true.
-.Pp
-When the server starts, regardless the mode, it first handshakes the
-client.
-This exchange is
-.Em not
-multiplexed.
+.Ss File exchange
+The receiver starts by reading the rule filter list if in server mode
+and
+.Fl -del
+is specified.
+If not in server mode, it writes the list.
+The sender performs the same actions, except reversed.
 .Pp
 .Bl -enum -compact
 .It
-send local version (integer)
+rule length or zero to stop reading rules (integer)
+.Bq Em flist-rule-len
 .It
-receive remote version (integer)
-.It
-send random seed (integer)
+rule string (variable of rule length)
+.Bq Em flist-rule
 .El
 .Pp
-Following this, the server multiplexes when writing to the client.
-(Transmissions received from the client are not multiplexed.)
-It then enters the
-.Sx Update exchange
-protocol.
-.Ss Update exchange
-When the client or server is in sender mode, it begins by conditionally
-sending the exclusion list.
-At this time, this is always empty.
+The receiver then reads the
+.Sx File list
+as follows.
+The sender performs the same actions, except writing.
+Prior to being sent, the sender must lexicographically sort the list.
 .Pp
 .Bl -enum -compact
 .It
-if
-.Fl -delete
-and the client, exclusion list zero (integer)
-.El
-.Pp
-It then sends the
-.Sx File list .
-Prior to being sent, the file list should be lexicographically sorted.
-.Pp
-.Bl -enum -compact
+read status byte (byte)
+.Bq Em flist-status
+.Bl -dash -compact
 .It
-status byte (integer)
-.It
-inherited filename length (optional, byte)
-.It
-filename length (integer or byte)
-.It
-file (byte array)
-.It
-file length (long)
-.It
-file modification time (optional, time_t, integer)
-.It
-file mode (optional, mode_t, integer)
-.It
-if
-.Fl o ,
-the user id (integer)
-.It
-if
-.Fl g ,
-the group id (integer)
-.It
-if a special file and
-.Fl D ,
-the device
-.Dq rdev
-type (integer)
-.It
-if a symbolic link and
-.Fl l ,
-the link target's length (integer)
-.It
-if a symbolic link and
-.Fl l ,
-the link target (byte array)
-.El
-.Pp
-The status byte may consist of the following bits and determines which
-of the optional fields are transmitted.
-.Pp
+this bit-field may consist of the following:
 .Bl -tag -compact -width Ds
 .It 0x01
 A top-level directory.
@@ -274,30 +219,100 @@ Otherwise, use only the byte length.
 Do not send the file modification time: it is a repeat of the last
 file's.
 .El
-.Pp
-If the status byte is zero, the file-list has terminated.
+.El
+.It
+if status has
+.Li 0x20 ,
+read inherited path length (byte)
+.Bq Em flist-name-offset
+.It
+if status has
+.Li 0x40 ,
+read long path length (integer)
+.Bq Em flist-name-len-long
+.It
+otherwise, if status doesn't have
+.Li 0x40 ,
+read short path length (byte)
+.Bq Em flist-name-len-short
+.It
+read path (variable: long or short length)
+.Bq Em flist-name
+.It
+file length (long)
+.Bq Em flist-length
+.It
+if status doesn't have
+.Li 0x80 ,
+read file modification time (time_t/integer)
+.Bq Em flist-mtime
+.It
+if status doesn't have
+.Li 0x2 ,
+read file mode (mode_t/integer)
+.Bq Em flist-mode
+.It
+if
+.Fl o
+and status doesn't have
+.Li 0x8 ,
+read the user id (integer)
+.Bq Em flist-uid
+.It
+if
+.Fl g
+and status doesn't have
+.Li 0x10 ,
+read the group id (integer)
+.Bq Em flist-gid
+.It
+if a special file,
+.Fl D ,
+and status doesn't have
+.Li 0x4 ,
+read the device
+.Dq rdev
+type (integer)
+.Bq Em flist-rdev
+.It
+if a symbolic link and
+.Fl l ,
+read the link target's length (integer)
+.Bq Em flist-link-len
+.It
+if a symbolic link and
+.Fl l ,
+read the link target (variable of link target length)
+.Bq Em flist-link
+.It
+if
+.Fl c ,
+read the MD4 checksum (16 B)
+.Bq Em flist-checksum
+.El
 .Pp
 If
 .Fl o
-has been specified, the sender sends the list of all users encountered
-in the file list.
-Identifier zero
-.Pq Qq root
-is never transmitted, as it would prematurely end the list.
-This list may be incomplete or empty: the server is not obligated to
-properly fill it in with all relevant users.
+and not
+.Fl -numeric-ids
+has been specified, read the identifier map.
 .Pp
 .Bl -enum -compact
 .It
-user identifier or zero to indicate end of set (integer)
+read identifier or zero to indicate end of set (integer)
+.Bq Em flist-uidgid-id
 .It
-non-zero length of user name (byte)
+read non-zero length of user name (byte)
+.Bq Em flist-uidgid-len
 .It
-user name (prior length)
+read user name (prior length)
+.Bq Em flist-uidgid-name
 .El
 .Pp
-The same sequence is then sent for groups if
+Repeat that sequence for groups if
 .Fl g
+and not
+.Fl -numeric-ids
 has been specified.
 .Pp
 The sender then sends any IO error values, which for
@@ -310,7 +325,7 @@ The receiver reads it.
 constant zero (integer)
 .Bq Em io-error-value
 .El
-.Pp
+.Ss Update exchange
 Following that, the sender receives data regarding the receiver's copy
 of the file list contents.
 This data is not ordered in any way.
@@ -564,21 +579,6 @@ Finally, the receiver must send the constant end-of-sequence marker.
 .It
 end-of-sequence -1 value (integer)
 .El
-.Ss Sender and receiver asynchrony
-The sender and receiver need not work in lockstep.
-The receiver may send file update requests as quickly as it parses them,
-and respond to the sender's update notices on demand.
-Similarly, the sender may read as many update requests as it can, and
-service them in any order it wishes.
-.Pp
-The sender and receiver synchronise state only at the end of phase.
-.Pp
-The reference
-.Xr rsync 1
-takes advantage of this with a two-process receiver, one for sending
-update requests (the generator) and another for receiving.
-.Xr openrsync 1
-uses an event-loop model instead.
 .\" .Sh CONTEXT
 .\" For section 9 functions only.
 .\" .Sh RETURN VALUES
