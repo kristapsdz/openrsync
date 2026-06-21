@@ -51,6 +51,7 @@
 .Op Fl -max-size Ns = Ns Ar size
 .Op Fl -min-size Ns = Ns Ar size
 .Op Fl -no-devices
+.Op Fl -no-dirs
 .Op Fl -no-group
 .Op Fl -no-links
 .Op Fl -no-motd
@@ -219,11 +220,16 @@ Negate with
 Copies directories, which are normally skipped unless
 .Fl -recursive
 is specified.
+If specified with
+.Fl -recursive ,
+the latter takes precedence.
 Directory contents are not copied, unless the path specified includes a
 trailing slash
 .Po Do dir/ Dc Pc
 or is the literal
 .Dq \&. .
+Negate with
+.Fl -no-dirs .
 .It Fl -dry-run , Fl n
 Do not actually modify the destination.
 Mainly useful in combination with

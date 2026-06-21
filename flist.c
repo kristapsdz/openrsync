@@ -174,8 +174,7 @@ flist_topdirs(struct sess *sess, struct flist *fl, size_t flsz)
 	      		*wpath; /* current file's wpath */
 	struct flist	*ltop; /* local top-level directory */
 
-	if (!(sess->opts->recursive ||
-	      sess->opts->dirs == DIRMODE_REQUESTED))
+	if (!(sess->opts->recursive || sess->opts->dirs))
 		return;
 
 	ltop = NULL;
@@ -1948,8 +1947,7 @@ flist_gen_dels(struct sess *sess, const char *root, struct flist **fl,
 
 	/* Only run this code when we're recursive or in dir mode. */
 
-	if (!(sess->opts->recursive ||
-	      sess->opts->dirs == DIRMODE_REQUESTED))
+	if (!(sess->opts->recursive || sess->opts->dirs))
 		return 1;
 
 	/*
@@ -2196,7 +2194,7 @@ flist_gen_dels(struct sess *sess, const char *root, struct flist **fl,
 			if (ent->fts_info == FTS_D &&
 			    !sess->opts->recursive &&
 			    strcmp(rpath, ".") != 0) { 
-				assert(sess->opts->dirs == DIRMODE_REQUESTED);
+				assert(sess->opts->dirs);
 				fts_set(fts, ent, FTS_SKIP);
 			}
 			continue;
@@ -2326,8 +2324,7 @@ flist_del(const struct sess *sess, int root, const struct flist *fl,
 		return;
 
 	assert(sess->opts->del != DMODE_NONE);
-	assert(sess->opts->recursive ||
-	    sess->opts->dirs == DIRMODE_REQUESTED);
+	assert(sess->opts->recursive || sess->opts->dirs);
 
 	begin = flsz - 1;
 	end = begin - del_limit;

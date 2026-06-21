@@ -43,12 +43,12 @@
 #include "extern.h"
 #include "rules.h"
 
-static struct opts opts;
+static struct opts opts; /* FIXME: no globals */
 typedef int (rsync_option_filter)(struct sess *, int, const struct option *);
 
 int verbose;
-int poll_contimeout;
-int poll_timeout;
+int poll_contimeout; /* FIXME: move to opts */
+int poll_timeout; /* FIXME: move to opts */
 
 /*
  * A remote host is has a colon before the first path separator.
@@ -441,6 +441,7 @@ const struct option	 lopts[] = {
     { "no-O",		no_argument,	NULL,			OP_SET_BOOL_FALSE }, /* XXX */
     { "no-W",		no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-devices",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
+    { "no-dirs",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-group",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-links",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-motd",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
@@ -515,6 +516,7 @@ usage(void)
 	    "\t[--max-size=size]\n"
 	    "\t[--min-size=size]\n"
 	    "\t[--no-devices]\n"
+	    "\t[--no-dirs]\n"
 	    "\t[--no-group]\n"
 	    "\t[--no-links]\n"
 	    "\t[--no-motd]\n"
@@ -580,8 +582,7 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 	const char	*new_rule; /* filter rule */
 	long long	 tmpint; /* temporary */
 	size_t		 basedir_cnt = 0, /* number of base directories */
-			 opts_F = 0, /* -F calls */
-			 opts_no_dirs = 0; /* transitional */
+			 opts_F = 0; /* -F calls */
 	int		 c, /* getopt return */
 			 lidx; /* getopt long index */
 	bool		 cvs_excl = false; /* exclude CVS */
@@ -623,7 +624,9 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				opts.preserve_times = true;
 			break;
 		case OP_SET_BOOL_FALSE:
-			if (strcmp(lopts[lidx].name, "no-J") == 0)
+			if (strcmp(lopts[lidx].name, "no-d") == 0)
+				opts.dirs = false;
+			else if (strcmp(lopts[lidx].name, "no-J") == 0)
 				opts.omit_link_times = false;
 			else if (strcmp(lopts[lidx].name, "no-O") == 0)
 				opts.omit_dir_times = false;
@@ -631,6 +634,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				*whole_file = 0;
 			else if (strcmp(lopts[lidx].name, "no-devices") == 0)
 				opts.devices = false;
+			else if (strcmp(lopts[lidx].name, "no-dirs") == 0)
+				opts.dirs = false;
 			else if (strcmp(lopts[lidx].name, "no-group") == 0)
 				opts.preserve_gids = false;
 			else if (strcmp(lopts[lidx].name, "no-links") == 0)
@@ -721,7 +726,7 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			opts.checksum = true;
 			break;
 		case 'd':
-			opts.dirs = DIRMODE_REQUESTED;
+			opts.dirs = true;
 			break;
 		case 'e':
 			opts.ssh_prog = optarg;
@@ -899,16 +904,14 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 		}
 	}
 
-	if (opts.del > DMODE_NONE &&
-	    !(opts.recursive || opts.dirs != DIRMODE_OFF))
+	if (opts.del > DMODE_NONE && !(opts.recursive || opts.dirs))
 		errx(ERR_SYNTAX, "--delete does not work without "
 		    "--recursive or --dirs");
 
-	if (opts.dirs && opts_no_dirs)
-		ERRX1("Cannot use --dirs and --no-dirs at the same time");
+	/* If --dirs and --recursive are given, --recursive wins. */
 
-	if (opts.recursive && opts.dirs == DIRMODE_OFF && !opts_no_dirs)
-		opts.dirs = DIRMODE_IMPLIED;
+	if (opts.recursive && opts.dirs)
+		opts.dirs = true;
 
         assert(opts.ipf == 0 || opts.ipf == 4 || opts.ipf == 6);
 
@@ -1040,7 +1043,7 @@ main(int argc, char *argv[])
 
 	if (fargs->sink == NULL) {
 		assert(fargs->mode == FARGS_RECEIVER);
-		opts.dirs = DIRMODE_REQUESTED;
+		opts.dirs = true;
 	}
 
 	/*

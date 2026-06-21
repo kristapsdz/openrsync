@@ -191,7 +191,7 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "--max-size=%lld", (long long)sess->opts->max_size);
 	if (sess->opts->min_size >= 0)
 		addargs(&args, "--min-size=%lld", (long long)sess->opts->min_size);
-	if (sess->opts->dirs > 0)
+	if (sess->opts->dirs)
 		addargs(&args, "--dirs");
 	if (sess->opts->bit8)
 		addargs(&args, "-8");

@@ -112,12 +112,6 @@
  */
 #define MAX_BASEDIR	20
 
-enum dirmode {
-	DIRMODE_OFF = 0,	/* No --dirs */
-	DIRMODE_IMPLIED,	/* Implied --dirs */
-	DIRMODE_REQUESTED,	/* --dirs */
-};
-
 enum dryrun {
 	DRY_DISABLED = 0,	/* full run */
 	DRY_XFER,		/* xfer only */
@@ -378,7 +372,6 @@ struct	opts {
 	char		*ssh_prog;		/* --rsh or -e */
 	enum altbasemode alt_base_mode;		/* --compare/copy/link-dest */
 	enum delmode	 del;			/* --delete */
-	enum dirmode	 dirs;			/* -d --dirs */
 	enum dryrun	 dry_run;		/* -n */
 	enum nidsmode	 numeric_ids;		/* --numeric-ids */
 	int		 compression_level;	/* --compress-level */
@@ -391,6 +384,7 @@ struct	opts {
 	bool		 compress;		/* -z */
 	bool		 del_excl;		/* --delete-excluded */
 	bool		 devices;		/* --devices */
+	bool		 dirs;			/* -d */
 	bool		 ignore_times;		/* -I */
 	bool		 no_motd;		/* --no-motd */
 	bool		 omit_dir_times;	/* -O */
