@@ -22,6 +22,7 @@
 #include <sys/wait.h>
 
 #include <assert.h>
+#include <ctype.h>
 #if HAVE_ERR
 # include <err.h>
 #endif
@@ -384,8 +385,35 @@ skipverify:
 	return f;
 }
 
+/*
+ * Like scan_scaled, but with a default for the case where no characterr
+ * is given.
+ * Return 0 on success, -1 and errno set on error.
+ */
+static int
+scan_scaled_def(char *maybe_scaled, long long *result, char def)
+{
+	char	*s = NULL;
+	size_t	 length;
+	int	 ret;
+
+	length = strlen(maybe_scaled);
+	if (length > 0) {
+		if (isascii((unsigned char)maybe_scaled[length - 1]) &&
+		    isdigit((unsigned char)maybe_scaled[length - 1])) {
+			ret = asprintf(&s, "%s%c", maybe_scaled, def);
+			if (ret < 0)
+				err(ERR_NOMEM, NULL);
+		}
+	}
+	ret = scan_scaled(s != NULL ? s : maybe_scaled, result);
+	free(s);
+	return ret;
+}
+
 enum {
 	OP_ADDRESS = CHAR_MAX + 1,
+	OP_BWLIMIT,
 	OP_COMP_DEST,
 	OP_CONTIMEOUT,
 	OP_COPY_DEST,
@@ -412,6 +440,7 @@ const struct option	 lopts[] = {
     { "archive",	no_argument,	NULL,			'a' },
     { "backup",		no_argument,	NULL,			'b' },
     { "block-size",	required_argument, NULL,		'B' },
+    { "bwlimit",	required_argument, NULL,		OP_BWLIMIT },
     { "checksum",	no_argument,	NULL,			'c' },
     { "compare-dest",	required_argument, NULL,		OP_COMP_DEST },
     { "compress",	no_argument,	NULL,			'z' },
@@ -493,6 +522,7 @@ usage(void)
 	    "\t[--archive, -a]\n"
 	    "\t[--backup, -b]\n"
 	    "\t[--block-size=size, -B size]\n"
+	    "\t[--bwlimit=limit]\n"
 	    "\t[--checksum, -c]\n"
 	    "\t[--compare-dest=dir]\n"
 	    "\t[--contimeout=seconds]\n"
@@ -802,6 +832,13 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 		case OP_ADDRESS:
 			opts.address = optarg;
 			break;
+		case OP_BWLIMIT:
+			if (scan_scaled_def(optarg, &tmpint, 'k') == -1 ||
+			    tmpint < 0)
+				errx(ERR_SYNTAX, "--bwlimit=%s: "
+				    "invalid numeric value", optarg);
+			opts.bwlimit = tmpint;
+			break;
 		case OP_COMP_DEST:
 			if (opts.alt_base_mode != BASE_MODE_OFF &&
 			    opts.alt_base_mode != BASE_MODE_COMPARE) {
@@ -859,13 +896,15 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			    lopts[lidx].name, basedir_cnt);
 			break;
 		case OP_MAX_SIZE:
-			if (scan_scaled(optarg, &tmpint) == -1)
+			if (scan_scaled(optarg, &tmpint) == -1 ||
+			    tmpint < 0)
 				errx(ERR_SYNTAX, "--max-size=%s: "
 				    "invalid numeric value", optarg);
 			opts.max_size = tmpint;
 			break;
 		case OP_MIN_SIZE:
-			if (scan_scaled(optarg, &tmpint) == -1)
+			if (scan_scaled(optarg, &tmpint) == -1 ||
+			    tmpint < 0)
 				errx(ERR_SYNTAX, "--min-size=%s: "
 				    "invalid numeric value", optarg);
 			opts.min_size = tmpint;

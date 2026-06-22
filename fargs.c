@@ -195,6 +195,9 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "--dirs");
 	if (sess->opts->bit8)
 		addargs(&args, "-8");
+	if (sess->opts->bwlimit >= 1024)
+		addargs(&args, "--bwlimit=%lld",
+		    (long long)(sess->opts->bwlimit / 1024));
         if (sess->opts->block_size > 0)
 		addargs(&args, "-B%ld", sess->opts->block_size);
 

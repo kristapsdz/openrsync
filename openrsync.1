@@ -28,6 +28,7 @@
 .Op Fl -archive , Fl a
 .Op Fl -backup , Fl b
 .Op Fl -block-size Ns = Ns Ar size , Fl B Ar size
+.Op Fl -bwlimit Ns = Ns Ar limit
 .Op Fl -checksum , Fl c
 .Op Fl -compare-dest Ns = Ns Ar dir
 .Op Fl -contimeout Ns = Ns Ar seconds
@@ -139,6 +140,17 @@ suffix, if not overridden with
 .It Fl -block-size Ns = Ns Ar size , Fl B Ar size
 Specify the block size to be used for file transfers.
 The upper bound is 512M.
+.It Fl -bwlimit Ar limit
+Limit transfer speed to
+.Ar limit
+kilobytes/sec.
+The
+.Ar limit
+may also contain any of the suffixes described in the
+.Fl -max-size
+definition of size.
+The transfer limit is checked against the current average over all
+transferred bytes after transmission, so it will not be precise.
 .It Fl -checksum , Fl c
 Use full-file checksums to determine which files have changed and should
 be transferred, rather than the usual file size and modification time

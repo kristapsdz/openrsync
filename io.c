@@ -311,6 +311,19 @@ io_writev_blocking(int fd, struct iovec *iov, int iovcnt,
 	return true;
 }
 
+/*
+ * Record data written to fdout outside of the io layer.  For example,
+ * file data may be sent out-of-band to avoid write multiplexing.
+ * Returns zero on failure, non-zero on success.  io_data_written() will
+ * only fail if we're writing a batch file and for some reason couldn't
+ * write to it.
+ */
+bool
+io_data_written(struct sess *sess, int fdout, const void *buf, size_t bsz)
+{
+	sess->total_write += bsz;
+	return true;
+}
 
 /*
  * Write "buf" of size "sz" to non-blocking descriptor.
@@ -403,35 +416,7 @@ io_write_buf_tagged_safe(struct sess *sess, int fd, const void *buf,
 bool
 io_write_buf(struct sess *sess, int fd, const void *buf, size_t sz)
 {
-	int32_t	 tag, /* wsz with tagging bits */
-		 tagbuf; /* nbo of tag */
-	size_t	 wsz; /* amount to write */
-	bool	 c; /* temporary return value */
-
-	if (!sess->mplex_writes) {
-		c = io_write_blocking(fd, buf, sz);
-		sess->total_write += sz;
-		return c;
-	}
-
-	while (sz > 0) {
-		wsz = (sz < 0xFFFFFF) ? sz : 0xFFFFFF;
-		tag = (7 << 24) + wsz;
-		tagbuf = htole32(tag);
-		if (!io_write_blocking(fd, &tagbuf, sizeof(tagbuf))) {
-			ERRX1("io_write_blocking");
-			return false;
-		}
-		if (!io_write_blocking(fd, buf, wsz)) {
-			ERRX1("io_write_blocking");
-			return false;
-		}
-		sess->total_write += wsz;
-		sz -= wsz;
-		buf += wsz;
-	}
-
-	return true;
+	return io_write_buf_tagged(sess, fd, buf, sz, IT_DATA);
 }
 
 /*

@@ -119,7 +119,8 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test25_filter_basic.test \
 		  regress/functional/test25_filter_basic_clear.test \
 		  regress/functional/test84_archive.test \
-		  regress/functional/test27_checksum.test
+		  regress/functional/test27_checksum.test \
+		  regress/functional/test65_bwlimits.test
 
 # Doesn't work (protocol < 29): regress/functional/test25_filter_basic_cvs.test
 # Doesn't work (protocol < 29): regress/functional/test25_filter_clear.test
@@ -150,6 +151,12 @@ regress_functional:: all
 				then \
 					continue ; \
 				fi ; \
+				if [ $$FIRST = $(RSYNC) ] ; \
+				then \
+					CLIENT_RSYNC=1 ; \
+				else \
+					CLIENT_RSYNC=0 ; \
+				fi ; \
 				for f in $(REGRESS_MANUAL); \
 				do \
 					TEST=`readlink -f $$f` ; \
@@ -157,12 +164,13 @@ regress_functional:: all
 					cd $$TEMP ; \
 					echo "$$TEST: `basename $$FIRST` -> `basename $$SECOND` (opts: $$OPTGROUP)" ; \
 					set +e ; \
-					tstdir="$$OPWD/regress/functional" \
+					CLIENT_RSYNC=$$CLIENT_RSYNC \
+					    tstdir="$$OPWD/regress/functional" \
 					    rsync="$$FIRST $$OPTGROUP $(RSYNC_VERBOSE) --rsync-path=$$SECOND" \
 					    sh $$TEST ; \
 					set -e ; \
 					cd $$OPWD ; \
-					echo $$TMP ; \
+					echo $$TEMP ; \
 				done ; \
 				if [ -n "$(REGRESS_MANUAL)" ] ; \
 				then \
@@ -174,10 +182,11 @@ regress_functional:: all
 					TEMP=`mktemp -d` ; \
 					cd $$TEMP ; \
 					echo "$$TEST: `basename $$FIRST` -> `basename $$SECOND` (opts: $$OPTGROUP)" ; \
-					tstdir="$$OPWD/regress/functional" \
+					CLIENT_RSYNC=$$CLIENT_RSYNC \
+				 	    tstdir="$$OPWD/regress/functional" \
 					    rsync="$$FIRST $$OPTGROUP $(RSYNC_VERBOSE) --rsync-path=$$SECOND" \
 					    sh $$TEST || { \
-						echo $$TMP ; \
+						echo $$TEMP ; \
 						exit 1 ; \
 					} ; \
 					cd $$OPWD ; \
@@ -189,14 +198,15 @@ regress_functional:: all
 					TEMP=`mktemp -d` ; \
 					cd $$TEMP ; \
 					echo "$$TEST: `basename $$FIRST` -> `basename $$SECOND` (opts: $$OPTGROUP)" ; \
-					tstdir="$$OPWD/regress/functional" \
+					CLIENT_RSYNC=$$CLIENT_RSYNC \
+					    tstdir="$$OPWD/regress/functional" \
 					    rsync="$$FIRST $$OPTGROUP $(RSYNC_VERBOSE) --rsync-path=$$SECOND" \
 					    sh $$TEST || { \
 						cd $$OPWD ; \
 						rm -rf $$TEMP ; \
 						continue ; \
 					} ; \
-					echo $$TMP ; \
+					echo $$TEMP ; \
 					exit 1 ; \
 				done ; \
 			done ; \

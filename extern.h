@@ -362,6 +362,7 @@ struct flist	*fl_new(struct fl *);
  * See struct fargs.
  */
 struct	opts {
+	off_t		 bwlimit;		/* --bwlimit (B/s) */
 	off_t		 max_size;		/* --max-size */
 	off_t		 min_size;		/* --min-size */
 	char		*backup_suffix;		/* --suffix */
@@ -382,7 +383,7 @@ struct	opts {
 	bool		 bit8;			/* -8 */
 	bool		 checksum;		/* -c */
 	bool		 compress;		/* -z */
-	bool		 del_excl;		/* --delete-excluded */
+	bool		 del_excl;		/* FIXME NOTYET --delete-excluded */
 	bool		 devices;		/* --devices */
 	bool		 dirs;			/* -d */
 	bool		 ignore_times;		/* -I */
@@ -503,30 +504,31 @@ struct	role {
  * Values required during a communication session.
  */
 struct	sess {
+	char		  *token_buf; /* used for protocol token processing */
+	char		  *token_cbuf; /* decompression buffer */
+	char		  *token_dbuf; /* decompression buffer */
 	const struct opts *opts; /* system options */
-	size_t		   sender_flsz; /* sender's flist size */
-	enum fmode	   mode; /* sender or receiver */
-	int32_t		   seed; /* checksum seed */
-	int32_t		   lver; /* local version */
-	bool		   lreceiver; /* Receiver is local */
-	int32_t		   protocol; /* negotiated protocol version */
-	int32_t		   rver; /* remote version */
+	size_t		  *wbufmaxp; /* senders's output buffer size */
+	size_t		  *wbufszp; /* senders's output buffer length */
+	struct role	  *role; /* role context */
+	void		 **wbufp; /* senders's output buffer ptr */
 	uint64_t	   total_read; /* non-logging wire/reads */
 	uint64_t	   total_size; /* total file size */
 	uint64_t	   total_write; /* non-logging wire/writes */
-	int		   mplex_reads; /* multiplexing reads? */
+	double             start_time; /* time of first transfer (epoch fractional seconds) */
 	size_t		   mplex_read_remain; /* remaining bytes */
-	int		   mplex_writes; /* multiplexing writes? */
-	struct role	  *role; /* role context */
-	char		  *token_buf; /* used for protocol token processing */
+	size_t		   sender_flsz; /* sender's flist size */
 	size_t		   token_bufsz; /* used for protocol token processing */
-	char		  *token_dbuf; /* decompression buffer */
-	size_t		   token_dbufsz; /* size of token_dbuf */
-	char		  *token_cbuf; /* decompression buffer */
 	size_t		   token_cbufsz; /* size of token_dbuf */
-	void		 **wbufp; /* senders's output buffer ptr */
-	size_t		  *wbufszp; /* senders's output buffer length */
-	size_t		  *wbufmaxp; /* senders's output buffer size */
+	size_t		   token_dbufsz; /* size of token_dbuf */
+	enum fmode	   mode; /* sender or receiver */
+	int		   mplex_reads; /* multiplexing reads? */
+	int		   mplex_writes; /* multiplexing writes? */
+	int32_t		   lver; /* local version */
+	int32_t		   protocol; /* negotiated protocol version */
+	int32_t		   rver; /* remote version */
+	int32_t		   seed; /* checksum seed */
+	bool		   lreceiver; /* Receiver is local */
 };
 
 #define TOKEN_END               0x00    /* end of sequence */
@@ -668,6 +670,7 @@ bool	io_write_int_tagged(struct sess *, int, int32_t, enum iotag);
 bool	io_write_line(struct sess *, int, const char *);
 bool	io_write_long(struct sess *, int, int64_t);
 bool	io_write_ulong(struct sess *, int, uint64_t);
+bool	io_data_written(struct sess *, int, const void *, size_t);
 
 bool	io_lowbuffer_alloc(struct sess *, void **, size_t *, size_t *, size_t);
 bool	io_lowbuffer_alloc_safe(struct sess *, void **, size_t *, size_t *, size_t);

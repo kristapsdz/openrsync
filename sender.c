@@ -1068,6 +1068,7 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
     char **argv)
 {
 	char		    buf[PATH_MAX]; /* temporary buffer */
+	struct timeval	    tv; /* temporary time calculations */
 	struct role	    sender; /* sender role */
 	struct iobuf	    rbuf = { 0 }; /* read buffer */
 	struct pollfd	    pfd[3]; /* poll listeners */
@@ -1075,6 +1076,7 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 	struct send_up	    up; /* current file being updated */
 	struct stat	    st; /* temporary */
 	struct fl	    fl; /* array of flists */
+	double		    now, rate, sleeptime, diff; /* FIXME: move to function */
 	const struct flist *f, /* current flist */
 	      		   *nextfl; /* temporary flist */
 	const char	   *opath; /* nextfl path */
@@ -1489,16 +1491,15 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 			assert(pfd[2].fd == -1);
 			assert(wbufsz - wbufpos);
 
-			/*
-			 * If we're writing a batch file, we just send
-			 * the file data straight to the batch.  We
-			 * still need to catch the end of phase marker
-			 * and send that over to the other side.
-			 */
-
 			ssz = write(fdout, wbuf + wbufpos, wbufsz - wbufpos);
 			if (ssz == -1) {
 				ERR("write");
+				goto out;
+			}
+
+			if (!io_data_written(sess, fdout,
+			    wbuf + wbufpos, ssz)) {
+				ERRX1("io_data_written");
 				goto out;
 			}
 
@@ -1506,6 +1507,32 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 			if (wbufpos == wbufsz)
 				wbufpos = wbufsz = 0;
 			pfd[1].revents &= ~POLLOUT;
+
+			/* 
+			 * Enforce that our average bandwidth not exceed
+			 * bwlimit by sleeping if we're up against the
+			 * limit.  FIXME: move to a function.
+			 */
+
+			if (sess->opts->bwlimit) {
+				gettimeofday(&tv, NULL);
+				now = (double)tv.tv_sec + (double)tv.tv_usec / 
+					1000000.0;
+				if (sess->start_time == 0.0) {
+					sess->start_time = now;
+					rate = (double)sess->total_write;
+					diff = 0.0;
+				} else {
+					diff = now - sess->start_time;
+					rate = (double)sess->total_write / diff;
+				}
+				if (rate > sess->opts->bwlimit) {
+					sleeptime = (double)sess->total_write /
+					    sess->opts->bwlimit - diff;
+					if (sleeptime > 0.0)
+						usleep(sleeptime * 1000 * 1000);
+				}
+			}
 		}
 
 		/*
