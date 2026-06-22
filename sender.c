@@ -20,6 +20,7 @@
 # include <sys/queue.h>
 #endif
 #include <sys/stat.h>
+#include <sys/time.h> /* gettimeofday */
 
 #include <assert.h>
 #include <errno.h>
