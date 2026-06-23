@@ -152,6 +152,25 @@ fargs_normalize_spec(const struct fargs *f, char *spec, size_t hostlen)
 }
 
 /*
+ * Free all parts of the fargs.
+ */
+static void
+fargs_free(struct fargs *f)
+{
+	size_t	 i;
+	if (f == NULL)
+		return;
+
+	for (i = 0; i < f->sourcesz; i++)
+		free(f->sources[i]);
+	free(f->sources);
+	free(f->user);
+	free(f->host);
+	free(f->sink);
+	free(f);
+}
+
+/*
  * Take the command-line filenames (e.g., rsync foo/ bar/ baz/) and
  * determine our operating mode.
  * For example, if the first argument is a remote file, this means that
@@ -1098,6 +1117,7 @@ main(int argc, char *argv[])
 			c = rsync_socket(&opts, sd, fargs);
 			close(sd);
 		}
+		fargs_free(fargs);
 		exit(c);
 	}
 
@@ -1200,5 +1220,6 @@ main(int argc, char *argv[])
 	else
 		rc2 = ERR_WAITPID;
 
+	fargs_free(fargs);
 	return MAX(rc, rc2);
 }
