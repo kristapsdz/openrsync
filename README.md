@@ -57,6 +57,11 @@ On an up-to-date UNIX system, simply download and run:
 # make install
 ```
 
+On some systems (Linux, mostly) this currently requires BSD make, which
+is usually installed as `bmake`.
+
+You'll currently require the `zlib` library to build.
+
 This will install the openrsync utility and manual pages.
 It's ok to have an installation of rsync at the same time: the two will
 not collide in any way.
@@ -81,6 +86,13 @@ command-line flags available on both.
 See
 [openrsync(1)](https://github.com/kristapsdz/openrsync/blob/master/openrsync.1)
 for a listing.
+
+# Testing
+
+The testing system is still in development.  It currently requires `jot`
+and `compress`.
+
+% make regress
 
 # Algorithm
 
