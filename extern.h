@@ -388,6 +388,7 @@ struct	opts {
 	bool		 dirs;			/* -d */
 	bool		 ignore_times;		/* -I */
 	bool		 no_motd;		/* --no-motd */
+	bool		 noimpdirs;		/* --no-implied-dirs */
 	bool		 omit_dir_times;	/* -O */
 	bool		 omit_link_times;	/* -J */
 	bool		 partial;		/* --partial */

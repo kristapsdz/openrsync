@@ -73,6 +73,7 @@ struct	upload {
 #define	PHASE_XFER	 0 /* FIXME: phase should be enum? */
 #define	PHASE_REDO	 1  		 
 #define	PHASE_DLUPDATES	 2 /* not supported: protocol 29 */
+	char            *lastimp; /* last implied dir (dir cache) */
 	bool		 pre_dir_delete_done; /* recursive guard */
 };
 
@@ -1643,6 +1644,7 @@ upload_free(struct upload *p)
 	free(p->root);
 	free(p->newdir);
 	free(p->buf);
+	free(p->lastimp);
 	free(p);
 }
 
@@ -1716,6 +1718,56 @@ rsync_uploader_ack_complete(struct upload *p, struct sess *sess,
 	}
 
 	p->nextack = idx;
+}
+
+/*
+ * Creates dirs in path with default permissions.  Used when
+ * --no-implied-dirs and --relative.  Returns true on success, false on
+ * failure.
+ */
+static bool
+createdirs(struct upload *u)
+{
+	struct flist	*f; /* the file being examined */
+	char		*s, *next;
+	bool		 retcode = true;
+
+	f = &u->fl[u->idx];
+	if ((s = strdup(f->path)) == NULL) {
+		ERR("strdup in implied dirs");
+		return false;
+	}
+	next = strrchr(s, '/');
+	if (next == NULL)
+		goto out;
+	*next = '\0';
+
+	/* 
+	 * We need to cache this, otherwise there would be a system call
+	 * flood.
+	 */
+
+	if (u->lastimp == NULL || strcmp(s, u->lastimp)) {
+		if (mkpathat(u->rootfd, s, 0755) == -1 &&
+		    errno != EEXIST) {
+			ERR("mkpathat '%s'", s);
+			retcode = false;
+			/* Invalidate cache */
+			free(u->lastimp);
+			u->lastimp = NULL;
+			goto out;
+		}
+	}
+
+	free(u->lastimp);
+	u->lastimp = strdup(s);
+	if (u->lastimp == NULL) {
+		ERR("strdup in implied dirs");
+		retcode = false;
+	}
+out:
+	free(s);
+	return retcode;
 }
 
 /*
@@ -1851,6 +1903,11 @@ rsync_uploader(struct upload *u, struct sess *sess, int revents,
 				continue;
 			else if (u->phase == PHASE_DLUPDATES)
 				continue;
+
+			/* FIXME: error from creatdirs() not used. */
+
+			if (sess->opts->relative && sess->opts->noimpdirs)
+				createdirs(u);
 
 			if (S_ISDIR(u->fl[u->idx].st.mode))
 				c = pre_dir(u, sess);

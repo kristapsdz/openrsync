@@ -88,6 +88,9 @@ rules.h: extern.h
 # Doesn't work openrsync -> rsync: regress/functional/test25_filter_mods.test
 # Doesn't work (protocol/filter rules issue): regress/functional/test25_filter_sender.test
 
+# Partially works (protocol version mismatches): regress/functional/test64_noimpdirs.test
+# Partially works (protocol version mismatches): regress/functional/test27_checksum.test
+
 REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test0_noslash.test \
 		  regress/functional/test1_minusa.test \
@@ -121,7 +124,8 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test84_archive.test \
 		  regress/functional/test27_checksum.test \
 		  regress/functional/test65_bwlimits.test \
-		  regress/functional/test30_file_update.test
+		  regress/functional/test30_file_update.test \
+		  regress/functional/test64_noimpdirs.test
 
 # Doesn't work (protocol < 29): regress/functional/test25_filter_basic_cvs.test
 # Doesn't work (protocol < 29): regress/functional/test25_filter_clear.test
@@ -158,6 +162,12 @@ regress_functional:: all
 				else \
 					CLIENT_RSYNC=0 ; \
 				fi ; \
+				if [ $$SECOND = $(RSYNC) ] ; \
+				then \
+					SERVER_RSYNC=1 ; \
+				else \
+					SERVER_RSYNC=0 ; \
+				fi ; \
 				for f in $(REGRESS_MANUAL); \
 				do \
 					TEST=`readlink -f $$f` ; \
@@ -166,6 +176,7 @@ regress_functional:: all
 					echo "$$TEST: `basename $$FIRST` -> `basename $$SECOND` (opts: $$OPTGROUP)" ; \
 					set +e ; \
 					CLIENT_RSYNC=$$CLIENT_RSYNC \
+					    SERVER_RSYNC=$$SERVER_RSYNC \
 					    tstdir="$$OPWD/regress/functional" \
 					    rsync="$$FIRST $$OPTGROUP $(RSYNC_VERBOSE) --rsync-path=$$SECOND" \
 					    sh $$TEST ; \
@@ -184,6 +195,7 @@ regress_functional:: all
 					cd $$TEMP ; \
 					echo "$$TEST: `basename $$FIRST` -> `basename $$SECOND` (opts: $$OPTGROUP)" ; \
 					CLIENT_RSYNC=$$CLIENT_RSYNC \
+					    SERVER_RSYNC=$$SERVER_RSYNC \
 				 	    tstdir="$$OPWD/regress/functional" \
 					    rsync="$$FIRST $$OPTGROUP $(RSYNC_VERBOSE) --rsync-path=$$SECOND" \
 					    sh $$TEST || { \
@@ -200,6 +212,7 @@ regress_functional:: all
 					cd $$TEMP ; \
 					echo "$$TEST: `basename $$FIRST` -> `basename $$SECOND` (opts: $$OPTGROUP)" ; \
 					CLIENT_RSYNC=$$CLIENT_RSYNC \
+					    SERVER_RSYNC=$$SERVER_RSYNC \
 					    tstdir="$$OPWD/regress/functional" \
 					    rsync="$$FIRST $$OPTGROUP $(RSYNC_VERBOSE) --rsync-path=$$SECOND" \
 					    sh $$TEST || { \

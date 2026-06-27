@@ -76,6 +76,7 @@ touch 0src/zero
 $rsync -a -c -- 0src/ 0dst/
 compare_trees -t 0src 0dst
 
+# TODO
 #$rsync -a -c --stats --no-W -- 0src/ 0dst/ 2>&1 | tee -a log.txt
 #cat log.txt
 #MATCHED=$(grep "Number of files transferred" log.txt)

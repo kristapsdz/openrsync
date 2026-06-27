@@ -195,6 +195,8 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "--relative");
 	if (sess->opts->bit8)
 		addargs(&args, "--dirs");
+	if (sess->opts->noimpdirs)
+		addargs(&args, "--no-implied-dirs");
 	if (sess->opts->bit8)
 		addargs(&args, "-8");
 	if (sess->opts->bwlimit >= 1024)

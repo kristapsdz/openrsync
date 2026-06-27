@@ -921,7 +921,8 @@ flist_append(struct sess *sess, const struct stat *st,
 		while (f->wpath[0] == '/')
 			f->wpath++;
 		flist_assert_wpath_len(f->wpath);
-		if (!flist_append_dirs(sess, f->path, fl))
+		if (!sess->opts->noimpdirs &&
+		    !flist_append_dirs(sess, f->path, fl))
 			return false;
 
 		/*
@@ -1776,7 +1777,8 @@ flist_gen_dirs(struct sess *sess, size_t argc, char **argv,
 
 		rules_base(dname);
 		if (sess->opts->relative) {
-			if (!flist_append_dirs(sess, dname, fl))
+			if (!sess->opts->noimpdirs &&
+			    !flist_append_dirs(sess, dname, fl))
 				return false;
 		}
 		if (!flist_gen_dirent(sess, dname, fl, -1, dname, froot))

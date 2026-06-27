@@ -7,6 +7,8 @@
 set -u
 set -e
 
+: ${RSYNC_PREFIX_SRC=""}
+: ${RSYNC_PREFIX_DEST=""}
 
 # Test which flag works on the current system.
 

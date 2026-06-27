@@ -53,6 +53,7 @@
 .Op Fl -min-size Ns = Ns Ar size
 .Op Fl -no-devices
 .Op Fl -no-dirs
+.Op Fl -no-implied-dirs
 .Op Fl -no-group
 .Op Fl -no-links
 .Op Fl -no-motd
@@ -343,6 +344,14 @@ bytes.
 See
 .Fl -max-size
 on the definition of size.
+.It Fl -no-implied-dirs
+Changes the default behaviour of
+.Fl -relative
+such that implied directories do not have their attributes modified, or
+are created with default attributes, rather than the source attributes,
+if they do not exist.
+This allows the implied directories to differ, including being a symlink
+on one side and a real directory on the other.
 .It Fl -no-motd
 Do not display the Message of the Day.
 .It Fl -numeric-ids
@@ -404,17 +413,24 @@ This currently may only be set to 27.
 Normally, pathnames on the command-line omit the directory components.
 This option will include those directory components.
 For example,
+.Pp
 .Dl rsync -av /foo/bar/baz.c remote:/tmp/
+.Pp
 creates a file
 .Pa baz.c
 in
 .Pa /tmp
 on the remote machine.
 Using
+.Pp
 .Dl rsync -avR /foo/bar/baz.c remote:/tmp/
+.Pp
 creates
 .Pa /tmp/foo/bar/baz.c
 on the remote machine, preserving its full path.
+See
+.Fl -no-implied-dirs
+for tuning this behaviour.
 Negate with
 .Fl -no-relative .
 .It Fl -recursive , Fl r

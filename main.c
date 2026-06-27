@@ -491,6 +491,7 @@ const struct option	 lopts[] = {
     { "no-W",		no_argument,	NULL,			OP_SET_BOOL_FALSE }, /* XXX */
     { "no-devices",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-dirs",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
+    { "no-implied-dirs", no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-group",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-links",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-motd",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
@@ -569,6 +570,7 @@ usage(void)
 	    "\t[--min-size=size]\n"
 	    "\t[--no-devices]\n"
 	    "\t[--no-dirs]\n"
+	    "\t[--no-implied-dirs]\n"
 	    "\t[--no-group]\n"
 	    "\t[--no-links]\n"
 	    "\t[--no-motd]\n"
@@ -694,6 +696,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				opts.dirs = false;
 			else if (strcmp(lopts[lidx].name, "no-group") == 0)
 				opts.preserve_gids = false;
+			else if (strcmp(lopts[lidx].name, "no-implied-dirs") == 0)
+				opts.noimpdirs = true;
 			else if (strcmp(lopts[lidx].name, "no-links") == 0)
 				opts.preserve_links = false;
 			else if (strcmp(lopts[lidx].name, "no-motd") == 0)

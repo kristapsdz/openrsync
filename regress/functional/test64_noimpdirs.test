@@ -1,0 +1,39 @@
+#! /bin/sh
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+# FIXME
+# A bug in smb rsync 2.x means that --relative --no-implied-dirs fails even
+# smb <-> smb. Rsync 3.x also fails if you degrade it to --protocol=29
+#if [ -n "$RSYNC_CLIENT" ]; then
+#    case "$RSYNC_CLIENT$RSYNC_SERVER" in
+#    *samba*)
+#        exit 0
+#        ;;
+#    esac
+#fi
+
+[ $CLIENT_RSYNC = "1" ] && { echo "ignoring client rsync" ; exit 0 ; }
+[ $SERVER_RSYNC = "1" ] && { echo "ignoring server rsync" ; exit 0 ; }
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree
+mkdir dir1
+cd dir1
+generate_tree_1
+# in the --no-implied-dirs case this dir should not be transmitted
+# with it mode, instead it gets created with umask
+chmod 777 foo
+# make the tree we want to compare to
+mkdir ../dir2
+cd ../dir2
+mkdirfile dir1/foo/five/one/two/five/blah.txt
+
+cd ..
+$rsync -a --relative --no-implied-dirs -- dir1/foo/five dir3
+if [ -z "$RSYNC_PREFIX_SRC" ]; then
+	compare_trees dir2 dir3
+else
+	compare_trees dir2 dir3/$PWD/
+fi
