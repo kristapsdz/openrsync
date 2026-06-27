@@ -1735,5 +1735,6 @@ out:
 	}
 
 	free(wbuf);
+	iobuf_free(&rbuf);
 	return rc;
 }

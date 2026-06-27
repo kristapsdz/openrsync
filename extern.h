@@ -687,6 +687,7 @@ bool	io_unbuffer_size(const void *, size_t *, size_t, size_t *);
 void	io_unbuffer_buf(const void *, size_t *, size_t, void *, size_t);
 
 bool	iobuf_alloc(const struct sess *, struct iobuf *, size_t);
+void	iobuf_free(struct iobuf *);
 size_t	iobuf_get_readsz(const struct iobuf *);
 bool	iobuf_seen_eof(const struct iobuf *);
 void	iobuf_eof(struct iobuf *);

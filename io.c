@@ -1174,6 +1174,23 @@ iobuf_alloc_common(const struct sess *sess, struct iobuf *buf,
 	return true;
 }
 
+/*
+ * Free an iobuf created with iobuf_alloc().
+ * It does not free the "buf" pointer itself.
+ * This does nothing with a NULL buf.
+ */
+void
+iobuf_free(struct iobuf *buf)
+{
+	if (buf == NULL)
+		return;
+	free(buf->buffer);
+}
+
+/*
+ * Allocate an iobuf in non-framed state, that is, without the framing
+ * required for multiplexing.  Returns NULL on allocation failure.
+ */
 bool
 iobuf_alloc(const struct sess *sess, struct iobuf *buf, size_t rsz)
 {
