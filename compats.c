@@ -3974,12 +3974,15 @@ restart:
 void *
 reallocarray(void *optr, size_t nmemb, size_t size)
 {
-	if ((nmemb >= MUL_NO_OVERFLOW || size >= MUL_NO_OVERFLOW) &&
-	    nmemb > 0 && SIZE_MAX / nmemb < size) {
+	size_t total;
+
+	if (nmemb > 0 && SIZE_MAX / nmemb < size) {
 		errno = ENOMEM;
 		return NULL;
 	}
-	return realloc(optr, size * nmemb);
+	total = nmemb * size;
+	return realloc(optr, total);
+
 }
 #endif /* !HAVE_REALLOCARRAY */
 #if !HAVE_RECALLOCARRAY
@@ -4022,15 +4025,13 @@ recallocarray(void *ptr, size_t oldnmemb, size_t newnmemb, size_t size)
 	if (ptr == NULL)
 		return calloc(newnmemb, size);
 
-	if ((newnmemb >= MUL_NO_OVERFLOW || size >= MUL_NO_OVERFLOW) &&
-	    newnmemb > 0 && SIZE_MAX / newnmemb < size) {
+	if (newnmemb > 0 && SIZE_MAX / newnmemb < size) {
 		errno = ENOMEM;
 		return NULL;
 	}
 	newsize = newnmemb * size;
 
-	if ((oldnmemb >= MUL_NO_OVERFLOW || size >= MUL_NO_OVERFLOW) &&
-	    oldnmemb > 0 && SIZE_MAX / oldnmemb < size) {
+	if (oldnmemb > 0 && SIZE_MAX / oldnmemb < size) {
 		errno = EINVAL;
 		return NULL;
 	}
@@ -4049,13 +4050,12 @@ recallocarray(void *ptr, size_t oldnmemb, size_t newnmemb, size_t size)
 		}
 	}
 
-	newptr = malloc(newsize);
+	newptr = calloc(newnmemb, size);
 	if (newptr == NULL)
 		return NULL;
 
 	if (newsize > oldsize) {
 		memcpy(newptr, ptr, oldsize);
-		memset((char *)newptr + oldsize, 0, newsize - oldsize);
 	} else
 		memcpy(newptr, ptr, newsize);
 
