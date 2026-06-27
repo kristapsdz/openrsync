@@ -120,7 +120,8 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test25_filter_basic_clear.test \
 		  regress/functional/test84_archive.test \
 		  regress/functional/test27_checksum.test \
-		  regress/functional/test65_bwlimits.test
+		  regress/functional/test65_bwlimits.test \
+		  regress/functional/test30_file_update.test
 
 # Doesn't work (protocol < 29): regress/functional/test25_filter_basic_cvs.test
 # Doesn't work (protocol < 29): regress/functional/test25_filter_clear.test

@@ -74,6 +74,7 @@
 .Op Fl -perms , Fl p
 .Op Fl -port Ns = Ns Ar portnumber
 .Op Fl -protocol Ns = Ns Ar protocol
+.Op Fl -relative , Fl R
 .Op Fl -recursive , Fl r
 .Op Fl -rsh Ns = Ns Ar program , Fl e program
 .Op Fl -rsync-path Ns = Ns Ar program
@@ -399,6 +400,23 @@ The default is
 .It Fl -protocol Ns = Ns Ar protocol
 The protocol to use.
 This currently may only be set to 27.
+.It Fl -relative , Fl R
+Normally, pathnames on the command-line omit the directory components.
+This option will include those directory components.
+For example,
+.Dl rsync -av /foo/bar/baz.c remote:/tmp/
+creates a file
+.Pa baz.c
+in
+.Pa /tmp
+on the remote machine.
+Using
+.Dl rsync -avR /foo/bar/baz.c remote:/tmp/
+creates
+.Pa /tmp/foo/bar/baz.c
+on the remote machine, preserving its full path.
+Negate with
+.Fl -no-relative .
 .It Fl -recursive , Fl r
 If
 .Ar source

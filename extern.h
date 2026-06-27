@@ -397,6 +397,7 @@ struct	opts {
 	bool		 preserve_times;	/* -t */
 	bool		 preserve_uids;		/* -u */
 	bool		 recursive;		/* -r */
+	bool		 relative;		/* -R */
 	bool		 sender;		/* --sender */
 	bool		 server;		/* --server */
 	bool		 size_only;		/* --size-only */

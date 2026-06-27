@@ -928,8 +928,10 @@ pre_dir(struct upload *p, struct sess *sess)
 	f = &p->fl[p->idx];
 	assert(S_ISDIR(f->st.mode));
 
-	if (!sess->opts->recursive && !sess->opts->dirs) {
-		WARNX("%s: ignoring directory", f->path);
+	if (!sess->opts->recursive && !sess->opts->relative &&
+	    !sess->opts->dirs) {
+		WARNX("%s: ignoring directory (relative=%d)", f->path,
+		    sess->opts->relative);
 		return 0;
 	}
 

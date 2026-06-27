@@ -774,6 +774,9 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 		if (sbuf != NULL) {
 			const char *path = fl->path;
 
+			if (sess->opts->relative)
+				path = fl->wpath;
+
 			while (*path == '/')
 				path++;
 

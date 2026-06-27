@@ -607,7 +607,7 @@ flist_recv_name(struct sess *sess, int fd, struct flist *f, uint8_t flags,
 		return 0;
 	}
 
-	if (f->path[0] == '/') {
+	if (f->path[0] == '/' && !sess->opts->relative) {
 		ERRX("security violation: absolute pathname: %s",
 		    f->path);
 		return 0;
@@ -625,6 +625,26 @@ flist_recv_name(struct sess *sess, int fd, struct flist *f, uint8_t flags,
 	/* Record our last path and construct our filename. */
 
 	strlcpy(last, f->path, PATH_MAX);
+
+	/* If relative, strip and append. */
+
+	if (sess->opts->relative && f->path[0] == '/') {
+		f->wpath = f->path;
+		while (f->wpath[0] == '/') {
+			f->wpath++;
+			len--;
+		}
+		flist_assert_wpath_len(f->wpath);
+
+		/*
+		 * f->path is allocated on the heap, so we just preserve
+		 * that as the beginning of the path instead of having
+		 * to add another pointer to retain the start of the
+		 * buffer.
+		 */
+
+		memmove(f->path, f->wpath, len + 1);
+	}
 	f->wpath = f->path;
 	return 1;
 }
@@ -765,6 +785,11 @@ fl_init(struct sess *sess, struct fl *fl)
 	fl->sess = sess;
 }
 
+/*
+ * FIXME: get the "fl" at index "idx" and check for a bad read.  Returns
+ * NULL on a bad read.  This should assert, as nobody checks to make
+ * sure that this returns NULL.
+ */
 static struct flist *
 fl_atindex(struct fl *fl, size_t idx)
 {
@@ -773,6 +798,68 @@ fl_atindex(struct fl *fl, size_t idx)
 		return NULL;
 	}
 	return &(fl->flp[idx]);
+}
+
+/*
+ * Copy all the elements of path that are directories.  We need those
+ * for --relative, because we need to restore their stat(2) values.
+ * (Unless --no-implied-dirs is given.)
+ */
+static bool
+flist_append_dirs(struct sess *sess, const char *path, struct fl *fl)
+{
+	struct stat	 st;
+	const char	*wbegin;
+	char		*pos, *begin;
+	struct flist	*f;
+
+	/* Skip past leading slashes. */
+
+	wbegin = path;
+	while (wbegin[0] == '/')
+		wbegin++;
+
+	/*
+	 * Iterate through the path to each path component, then add
+	 * that to the fl array.
+	 */
+
+	if ((pos = strrchr(wbegin, '/')) != NULL) {
+		if ((begin = strdup(path)) == NULL) {
+			ERR("strdup");
+			return false;
+		}
+
+		wbegin = begin + (wbegin - path);
+		pos = begin + (pos - path);
+		*pos = '\0';
+
+		if ((stat(begin, &st)) == -1) {
+			ERR("%s: stat", begin);
+			free(begin);
+			return false;
+		}
+
+		if ((f = fl_new(fl)) == NULL) {
+			ERRX1("flist_realloc");
+			free(begin);
+			return false;
+		}
+
+		f->path = begin;
+		f->wpath = wbegin;
+		flist_assert_wpath_len(f->wpath);
+		flist_copy_stat(f, &st);
+
+		if (strchr(wbegin, '/') != NULL) {
+			if (!flist_append_dirs(sess, begin, fl)) {
+				ERRX1("flist_append_dirs");
+				return false;
+			}
+		}
+	}
+
+	return true;
 }
 
 /*
@@ -809,20 +896,42 @@ flist_append(struct sess *sess, const struct stat *st,
 
 	f->froot = froot_acquire(froot);
 
-	/* Remove prefix from path, if it is not an exact match. */
-
-	prefixlen = strlen(prefix);
-	if (strcmp(f->path, prefix) == 0) {
-		if ((f->wpath = strrchr(f->path, '/')) == NULL)
+	if (!sess->opts->relative) {
+		/*
+		 * If absolute, remove prefix from path if it is not an
+		 * exact match.
+		 */
+		prefixlen = strlen(prefix);
+		if (strcmp(f->path, prefix) == 0) {
+			if ((f->wpath = strrchr(f->path, '/')) == NULL)
+				f->wpath = f->path;
+			else
+				f->wpath++;
+		} else if (strncmp(f->path, prefix, prefixlen) == 0) {
+			f->wpath = f->path + prefixlen;
+		} else
 			f->wpath = f->path;
-		else
-			f->wpath++;
-	} else if (strncmp(f->path, prefix, prefixlen) == 0) {
-		f->wpath = f->path + prefixlen;
+
+		flist_assert_wpath_len(f->wpath);
 	} else {
+		/*
+		 * ...otherwise, append to the relative directory.
+		 */
 		f->wpath = f->path;
+		while (f->wpath[0] == '/')
+			f->wpath++;
+		flist_assert_wpath_len(f->wpath);
+		if (!flist_append_dirs(sess, f->path, fl))
+			return false;
+
+		/*
+		 * flist_append_dirs() may re-allocate our flist out
+		 * from underneath us, reload the flist entry we're
+		 * working on as needed.
+		 */
+
+		f = fl_atindex(fl, oldidx);
 	}
-	flist_assert_wpath_len(f->wpath);
 
 	/*
 	 * On the receiving end, we'll strip out all bits on the
@@ -1342,11 +1451,20 @@ flist_path_normalize(const char *path, char *pathbuf, size_t pathbufsz)
 	return pathlen;
 }
 
+/*
+ * Return the length of "root" after stripping down to the directory
+ * portion of the path.
+ * XXX: this is a "ssize_t" to conform to the caller's conventions: this
+ * never returns a negative number.
+ */
 static ssize_t
 flist_dirent_strip(struct sess *sess, const char *root)
 {
 	char	 *cp;
 	ssize_t	 stripdir;
+
+	if (sess->opts->relative)
+		return 0;
 
 	/*
 	 * If we end with a slash, it means that we're not supposed to
@@ -1657,6 +1775,10 @@ flist_gen_dirs(struct sess *sess, size_t argc, char **argv,
 			strcpy(dname, ".");
 
 		rules_base(dname);
+		if (sess->opts->relative) {
+			if (!flist_append_dirs(sess, dname, fl))
+				return false;
+		}
 		if (!flist_gen_dirent(sess, dname, fl, -1, dname, froot))
 			errors++;
 	}

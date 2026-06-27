@@ -1,0 +1,60 @@
+#! /bin/sh
+
+# Test various versions of just copying a single file to another name.
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf *file *dir
+
+# Create the source tree:
+echo "Regular file" > afile
+
+cp afile afile.orig
+
+# Creating it should work
+$rsync -- afile bfile
+cmp -s afile bfile
+
+# Overwriting it should also work.
+echo "or is it?" >> afile
+cp afile afile.new
+$rsync -- afile bfile
+cmp -s afile bfile
+
+# Trailing / should force a directory
+cp afile.orig afile
+$rsync -- afile adir/
+cmp -s afile adir/afile
+
+# and update the same-name file within.
+cp afile.new afile
+$rsync -- afile adir/
+cmp -s afile adir/afile
+
+# The --relative tests don't include a -- separator because we can't do them
+# as-is over ssh; we would need to operating out of the user's home directory so
+# that we can avoid prefixing the remote side at all.
+
+# Now make sure we didn't break --relative
+mkdir bdir
+$rsync --relative adir/afile bdir/afile
+cmp -s bdir/afile/adir/afile adir/afile
+
+# But --relative update when it's a file should actually fail..
+rm -rf bdir/afile
+cp adir/afile bdir
+if $rsync --relative adir/afile bdir/afile 2>/dev/null; then
+	1>&2 echo "--relative with file destination should have failed."
+	exit 1
+fi
+
+# Finally, --relative with allowed file update
+rm adir/afile
+$rsync --relative afile adir/afile
+cmp -s afile adir/afile
+$rsync --relative afile adir/afile
+cmp -s afile adir/afile

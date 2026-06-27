@@ -452,7 +452,7 @@ enum {
 	OP_TIMEOUT,
 };
 
-const char rsync_shopts[] = "468B:CDFabcde:f:ghIJlnOoprtuVvWxz";
+const char rsync_shopts[] = "468B:CDFabcde:f:ghIJlnOopRrtuVvWxz";
 const struct option	 lopts[] = {
     { "8-bit-output",	no_argument,	NULL,			'8' },
     { "address",	required_argument, NULL,		OP_ADDRESS },
@@ -487,7 +487,8 @@ const struct option	 lopts[] = {
     { "min-size",	required_argument, NULL,		OP_MIN_SIZE },
     { "no-J",		no_argument,	NULL, 			OP_SET_BOOL_FALSE }, /* XXX */
     { "no-O",		no_argument,	NULL,			OP_SET_BOOL_FALSE }, /* XXX */
-    { "no-W",		no_argument,	NULL,			OP_SET_BOOL_FALSE },
+    { "no-R",		no_argument,	NULL,			OP_SET_BOOL_FALSE }, /* XXX */
+    { "no-W",		no_argument,	NULL,			OP_SET_BOOL_FALSE }, /* XXX */
     { "no-devices",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-dirs",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-group",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
@@ -498,6 +499,7 @@ const struct option	 lopts[] = {
     { "no-owner",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-partial",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-perms",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
+    { "no-relative",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-recursive",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-specials",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-times",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
@@ -513,6 +515,7 @@ const struct option	 lopts[] = {
     { "port",		required_argument, NULL,		OP_PORT },
     { "protocol",	required_argument, NULL,		OP_PROTOCOL },
     { "recursive",	no_argument,	NULL,			'r' },
+    { "relative",	no_argument,	NULL,			'R' },
     { "rsh",		required_argument, NULL,		'e' },
     { "rsync-path",	required_argument, NULL,		OP_RSYNCPATH },
     { "sender",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
@@ -575,6 +578,7 @@ usage(void)
 	    "\t[--no-partial]\n"
 	    "\t[--no-perms]\n"
 	    "\t[--no-recursive]\n"
+	    "\t[--no-relative]\n"
 	    "\t[--no-specials]\n"
 	    "\t[--no-times]\n"
 	    "\t[--no-whole-file]\n"
@@ -587,6 +591,7 @@ usage(void)
 	    "\t[--perms, -p]\n"
 	    "\t[--port=portnumber]\n"
 	    "\t[--protocol]\n"
+	    "\t[--relative, -R]\n"
 	    "\t[--recursive, -r]\n"
 	    "\t[--rsh=program, -e program]\n"
 	    "\t[--rsync-path=program]\n"
@@ -679,6 +684,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				opts.omit_link_times = false;
 			else if (strcmp(lopts[lidx].name, "no-O") == 0)
 				opts.omit_dir_times = false;
+			else if (strcmp(lopts[lidx].name, "no-R") == 0)
+				opts.relative = false;
 			else if (strcmp(lopts[lidx].name, "no-W") == 0)
 				*whole_file = 0;
 			else if (strcmp(lopts[lidx].name, "no-devices") == 0)
@@ -703,6 +710,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				opts.preserve_perms = false;
 			else if (strcmp(lopts[lidx].name, "no-recursive") == 0)
 				opts.recursive = false;
+			else if (strcmp(lopts[lidx].name, "no-relative") == 0)
+				opts.relative = false;
 			else if (strcmp(lopts[lidx].name, "no-specials") == 0)
 				opts.specials = false;
 			else if (strcmp(lopts[lidx].name, "no-times") == 0)
@@ -814,6 +823,9 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			break;
 		case 'p':
 			opts.preserve_perms = true;
+			break;
+		case 'R':
+			opts.relative = true;
 			break;
 		case 'r':
 			opts.recursive = true;

@@ -292,6 +292,8 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 			implied_dir = true;
 		else if (flsz > 1)
 			implied_dir = true;
+		else if (sess->opts->relative && strchr(fl[0].path, '/') != NULL)
+			implied_dir = true;
 		else if (root[strlen(root) - 1] == '/')
 			implied_dir = true;
 		else if (S_ISDIR(fl[0].st.mode))
