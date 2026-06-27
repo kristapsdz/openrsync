@@ -6,7 +6,7 @@ jobs:
     steps:
     - uses: actions/checkout@master
     - name: Install dependencies
-      run: sudo apt-get install -y bmake rsync athena-jot
+      run: sudo apt-get install -y bmake rsync athena-jot ncompress
     - name: Configure
       run: ./configure
     - name: Build and test
@@ -16,7 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@master
     - name: Install dependencies
-      run: sudo apt-get install -y bmake rsync athena-jot
+      run: sudo apt-get install -y bmake rsync athena-jot ncompress
     - name: Configure
       run: |
         echo "HAVE_SECCOMP_FILTER=0" > configure.local

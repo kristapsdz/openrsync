@@ -2292,7 +2292,8 @@ flist_gen_dels(struct sess *sess, const char *root, struct flist **fl,
 		goto out;
 	}
 
-	qsort(*fl, *sz, sizeof(struct flist), flist_cmp);
+	if (*fl != NULL)
+		qsort(*fl, *sz, sizeof(struct flist), flist_cmp);
 	rc = true;
 out:
 	if (fts != NULL)

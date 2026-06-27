@@ -164,7 +164,8 @@ hash_file(const void *buf, size_t len, unsigned char *md,
 		seed = htole32(sess->seed);
 		MD4_Update(&ctx, &seed, sizeof(int32_t));
 	}
-	MD4_Update(&ctx, buf, len);
+	if (len > 0)
+		MD4_Update(&ctx, buf, len);
 	MD4_Final(md, &ctx);
 }
 
@@ -177,8 +178,9 @@ bool
 hash_file_by_path(int rootfd, const char *path, size_t len,
     unsigned char *md)
 {
-	int		 fd, rc, save;
+	int		 fd, save;
 	struct fmap	*map;
+	bool		 rc;
 
 	if (len == 0) {
 		hash_file(NULL, len, md, NULL);
