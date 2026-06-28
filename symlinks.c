@@ -21,7 +21,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <limits.h>
+#include <limits.h> /* PATH_MAX */
 #include <unistd.h>
 
 #include "extern.h"

@@ -29,7 +29,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <fts.h>
-#include <limits.h>
+#include <limits.h> /* PATH_MAX */
 #include <inttypes.h>
 #include <search.h>
 #include <stddef.h> /* ptrdiff_t */

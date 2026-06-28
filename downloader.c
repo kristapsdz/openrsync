@@ -23,6 +23,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <limits.h> /* PATH_MAX */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>

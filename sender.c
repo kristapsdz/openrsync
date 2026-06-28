@@ -26,7 +26,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
-#include <limits.h>
+#include <limits.h> /* PATH_MAX */
 #include <poll.h>
 #include <stdlib.h>
 #include <string.h>
