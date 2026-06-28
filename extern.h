@@ -387,6 +387,7 @@ struct	opts {
 	bool		 devices;		/* --devices */
 	bool		 dirs;			/* -d */
 	bool		 ignore_times;		/* -I */
+	bool		 hard_links;		/* -H */
 	bool		 no_motd;		/* --no-motd */
 	bool		 noimpdirs;		/* --no-implied-dirs */
 	bool		 omit_dir_times;	/* -O */
@@ -701,6 +702,12 @@ bool	iobuf_read_size(struct iobuf *, size_t *);
 void	iobuf_read_byte(struct iobuf *, uint8_t *);
 int	iobuf_read_vstring(struct iobuf *, struct vstring *);
 
+struct hardlinks; /* forward decl */
+
+/* FIXME: move to hl.h */
+const struct flist *find_hl_impl(const struct flist *const, const struct hardlinks *const, int, struct stat *);
+const struct flist *find_hl(const struct flist *const, const struct hardlinks *const);
+
 bool	rsync_receiver(struct sess *, int, int, const char *);
 bool	rsync_sender(struct sess *, int, int, size_t, char **);
 int	rsync_client(const struct opts *, int, const struct fargs *);
@@ -712,7 +719,8 @@ bool	rsync_set_metadata_at(const struct sess *, bool, int,
 	    const struct flist *, const char *);
 void	rsync_uploader_next_phase(struct upload *, struct sess *, int);
 void	rsync_uploader_ack_complete(struct upload *, struct sess *, int);
-int	rsync_uploader(struct upload *, struct sess *, int, int *, int *);
+int	rsync_uploader(struct upload *, struct sess *, int, int *, int *,
+	    const struct hardlinks *const);
 bool	rsync_uploader_tail(struct upload *, struct sess *);
 
 bool		 download_needs_redo(const struct download *);
@@ -780,7 +788,7 @@ bool		 idents_recv(struct sess *, int, struct ident **, size_t *);
 void		 idents_remap(struct sess *, int, struct ident *, size_t);
 bool		 idents_send(struct sess *, int, const struct ident *, size_t);
 
-struct sbuf;
+struct sbuf; /* forward decl */
 
 void		 our_strmode(mode_t, char *);
 void		 rsync_set_logfile(FILE *, struct sess *);

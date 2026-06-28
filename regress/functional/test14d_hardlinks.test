@@ -1,0 +1,31 @@
+#! /bin/sh
+
+# This tests whether hardlinks that exist in the destination directory
+# can be undone by sending in two plain files.
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree
+mkdir dir1
+cd dir1
+mkdirfile foo
+mkdirfile bar
+# make the tree we want to compare to
+mkdir ../dir2
+cd ../dir2
+mkdirfile foo
+mkdirfile bar
+
+mkdir ../dir3
+cd ../dir3
+mkdirfile foo
+ln foo bar
+
+cd ..
+$rsync -a -H --delete --ignore-times -- dir1/ dir3
+compare_trees dir2 dir3

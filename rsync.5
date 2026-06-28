@@ -286,6 +286,18 @@ read the link target (variable of link target length)
 .Bq Em flist-link
 .It
 if
+.Fl H ,
+read the device (long)
+.Pq before protocol 26, this is an int
+.Bq Em flist-dev
+.It
+if
+.Fl H ,
+read the inode (long)
+.Pq before protocol 26, this is an int
+.Bq Em flist-inode
+.It
+if
 .Fl c ,
 read the MD4 checksum (16 B)
 .Bq Em flist-checksum

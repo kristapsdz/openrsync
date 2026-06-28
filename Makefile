@@ -91,6 +91,8 @@ rules.h: extern.h
 # Partially works (protocol version mismatches): regress/functional/test64_noimpdirs.test
 # Partially works (protocol version mismatches): regress/functional/test27_checksum.test
 
+# Doesn't work openrsync -> openrsync: regress/functional/test14c_hardlinks.test
+
 REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test0_noslash.test \
 		  regress/functional/test1_minusa.test \
@@ -125,7 +127,10 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test27_checksum.test \
 		  regress/functional/test65_bwlimits.test \
 		  regress/functional/test30_file_update.test \
-		  regress/functional/test64_noimpdirs.test
+		  regress/functional/test64_noimpdirs.test \
+		  regress/functional/test14b_hardlinks.test \
+		  regress/functional/test14d_hardlinks.test \
+		  regress/functional/test14e_hardlinks.test
 
 # Doesn't work (protocol < 29): regress/functional/test25_filter_basic_cvs.test
 # Doesn't work (protocol < 29): regress/functional/test25_filter_clear.test
@@ -139,12 +144,13 @@ REGRESS_FAIL 	= regress/functional/test12d_inex.test \
 		  regress/functional/test25_filter_dir.test \
 		  regress/functional/test25_filter_merge_cvs.test
 REGRESS_MANUAL 	= 
-RSYNC_VERBOSE	= 
+RSYNC_VERBOSE	=
 
 #OPENRSYNC=/home/kristaps/checkedout/apple/rsync/openrsync/openrsync ; \
 
 regress_functional:: all
 	@OPENRSYNC=`readlink -f openrsync`; \
+	umask 022 ; \
 	OPWD=`pwd` ; \
 	for OPTGROUP in "--protocol 27" "--protocol 27 -z" ; \
 	do \

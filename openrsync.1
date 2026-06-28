@@ -42,6 +42,7 @@
 .Op Fl -exclude Ns = Ns Ar pattern
 .Op Fl -filter Ns = Ns Ar filter , Fl f filter
 .Op Fl -group , Fl g
+.Op Fl -hard-links , Fl H
 .Op Fl -ignore-times , Fl I
 .Op Fl -include-from Ns = Ns Ar file
 .Op Fl -include Ns = Ns Ar pattern
@@ -283,10 +284,12 @@ with ID 1000 on a remote server is matched to group
 on the local machine with ID 2000.
 If
 .Fl -numeric-ids
-is also given or if the remote group name is unknown on the local machine,
-set the numeric group ID to match the source instead.
+is also given or if the remote group name is unknown on the local
+machine, set the numeric group ID to match the source instead.
 Negate with
 .Fl -no-group .
+.It Fl H , -hard-links
+Attempt to preserve hard links within the list of files transferred.
 .It Fl -ignore-times , Fl I
 Do not skip based on file size and modification time.
 .It Fl -include-from Ns = Ns Ar file

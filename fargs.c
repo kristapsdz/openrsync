@@ -77,9 +77,11 @@ fargs_is_ssh(const char *prog)
 char **
 fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 {
-	arglist		 args;
-	size_t		 j;
-	char		*rsync_path, *ap, *arg;
+	arglist		 args; /* argument list */
+	size_t		 j; /* temporary */
+	char		*rsync_path, /* rsync path */
+			*ap, /* temporary */
+			*arg; /* temporary */
 
 	memset(&args, 0, sizeof args);
 
@@ -123,8 +125,6 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		if (skip)
 			*skip = args.num;
 		addargs(&args, "--server");
-		if (f->mode == FARGS_RECEIVER)
-			addargs(&args, "--sender");
 	} else {
 		addargs(&args, "%s", rsync_path);
 		addargs(&args, "--server");
@@ -132,8 +132,21 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 
 	/* Shared arguments. */
 
-	if (sess->opts->del != DMODE_NONE)
+	if (f->mode == FARGS_RECEIVER)
+		addargs(&args, "--sender");
+
+	switch (sess->opts->del) {
+	case DMODE_BEFORE:
 		addargs(&args, "--delete");
+		break;
+	case DMODE_DURING:
+		/* FALLTHROUGH */
+	case DMODE_DELAY:
+		/* FALLTHROUGH */
+	default:
+		break;
+	}
+
 	if (sess->opts->checksum)
 		addargs(&args, "-c");
 	if (sess->opts->numeric_ids == NIDS_FULL)
@@ -144,8 +157,10 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "-l");
 	if (sess->opts->dry_run == DRY_FULL)
 		addargs(&args, "-n");
+
 	if (sess->opts->partial && f->mode == FARGS_SENDER)
 		addargs(&args, "--partial");
+
 	if (sess->opts->preserve_uids)
 		addargs(&args, "-o");
 	if (sess->opts->preserve_perms)
@@ -156,8 +171,10 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "-r");
 	if (sess->opts->preserve_times)
 		addargs(&args, "-t");
-	if (f->mode == FARGS_SENDER && sess->opts->ignore_times)
-		addargs(&args, "-I");
+	if (sess->opts->omit_dir_times)
+		addargs(&args, "-O");
+	if (sess->opts->hard_links)
+		addargs(&args, "-H");
 	if (sess->opts->update)
 		addargs(&args, "-u");
 	if (verbose > 3)
@@ -197,6 +214,9 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "--dirs");
 	if (sess->opts->noimpdirs)
 		addargs(&args, "--no-implied-dirs");
+	if (f->mode == FARGS_SENDER && sess->opts->ignore_times)
+		addargs(&args, "--ignore-times");
+
 	if (sess->opts->bit8)
 		addargs(&args, "-8");
 	if (sess->opts->bwlimit >= 1024)
@@ -208,8 +228,6 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 	/* Extra options for the receiver (local is sender). */
 
 	if (f->mode == FARGS_SENDER) {
-		if (sess->opts->omit_dir_times)
-			addargs(&args, "-O");
 		if (sess->opts->omit_link_times)
 			addargs(&args, "-J");
 		if (sess->opts->size_only)
@@ -234,9 +252,16 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 
 	if (f->mode == FARGS_RECEIVER) {
 		for (j = 0; j < f->sourcesz; j++)
-			addargs(&args, "%s", f->sources[j]);
-	} else
-		addargs(&args, "%s", f->sink);
+			if (f->sources[j][0] == '\0')
+				addargs(&args, ".");
+			else
+				addargs(&args, "%s", f->sources[j]);
+	} else if (f->sink != NULL) {
+		if (f->sink[0] == '\0')
+			addargs(&args, ".");
+		else
+			addargs(&args, "%s", f->sink);
+	}
 
 	return args.list;
 }

@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 
 #include <assert.h>
+#include <dirent.h> /* IFTODT */
 #if HAVE_ERR
 # include <err.h>
 #endif
@@ -1133,20 +1134,54 @@ check_path(int rootfd, const char *path)
  */
 static int
 check_file(int rootfd, struct flist *f, struct stat *st,
-    struct sess *sess)
+    struct sess *sess, const struct hardlinks *const hl)
 {
-	unsigned char	 md[sizeof(f->md)];
-	const char	*path = f->path;
-	int		 rc = -1;
+	unsigned char		 md[sizeof(f->md)]; /* file hash */
+	const char		*path = f->path; /* path examined */
+	int			 rc = -1; /* return code */
+	const struct flist	*leader; /* hardlink lead */
+	struct stat		 lst; /* hardlink stat */
 
 	/* The root directory must exist. */
 
-	if (rootfd == -1) {
+	if (rootfd == -1)
 		return 3;
-	}
 
-	if (fstatat(rootfd, f->path, st, AT_SYMLINK_NOFOLLOW) == -1) {
+	if (fstatat(rootfd, path, st, AT_SYMLINK_NOFOLLOW) == -1) {
 		if (errno == ENOENT) {
+			if (sess->opts->hard_links) {
+				/*
+				 * We don't need the leader's stat info,
+				 * but we need the semantics of
+				 * find_hl_impl() caused by requesting
+				 * the leader's stat info (primarily to
+				 * generate correct itemization flags).
+				 */
+				leader = find_hl_impl(f, hl, rootfd,
+				    &lst);
+
+				/*
+				 * If we are not the "leading" hardlink,
+				 * we don't need to be transferred,
+				 * since we can just be created with
+				 * linkat() later.
+				 */
+
+				if (leader != NULL) {
+					f->flstate |= FLIST_NEED_HLINK;
+					f->iflags = IFLAG_NEW |
+						IFLAG_LOCAL_CHANGE |
+						IFLAG_HLINK_FOLLOWS;
+					assert(f->link == NULL);
+					f->link = strdup(leader->path);
+					if (f->link == NULL) {
+						ERR("strdup");
+						return -1;
+					}
+					return 0;
+				}
+			}
+
 			f->iflags = IFLAG_NEW | IFLAG_TRANSFER;
 			return 3;
 		}
@@ -1185,6 +1220,56 @@ check_file(int rootfd, struct flist *f, struct stat *st,
 	if (sess->opts->update && st->st_mtime > f->st.mtime) {
 		LOG1("Skip newer '%s'", f->path);
 		return 4;
+	}
+
+	if (sess->opts->hard_links) {
+		leader = find_hl_impl(f, hl, rootfd, &lst);
+
+		/*
+		 * If leader is NULL then f is the first in a group of
+		 * files to be hard linked together so we just handle it
+		 * like any other regular file.
+		 */
+
+		if (leader != NULL) {
+			if (st->st_ino == lst.st_ino &&
+			    st->st_dev == lst.st_dev &&
+			    !(leader->iflags & IFLAG_TRANSFER))
+				return 0;
+
+			f->flstate |= FLIST_NEED_HLINK;
+			f->iflags = IFLAG_LOCAL_CHANGE |
+			    IFLAG_HLINK_FOLLOWS;
+
+			assert(f->link == NULL);
+			f->link = strdup(leader->path);
+			if (f->link == NULL) {
+				ERR("strdup");
+				return -1;
+			}
+
+			if (st->st_ino == lst.st_ino &&
+			    st->st_dev == lst.st_dev) {
+				assert(f->sendidx > leader->sendidx);
+				f->iflags |= leader->iflags &
+				    ~(IFLAG_NEW | IFLAG_TRANSFER);
+				return 0;
+			}
+
+			if (IFTODT(st->st_mode) !=
+			    IFTODT(leader->st.mode)) {
+				if (f->sendidx < leader->sendidx) {
+					f->iflags |= IFLAG_NEW;
+				} else {
+					f->iflags |= itemize_changes
+					    (sess, st, leader);
+					if (st->st_size != leader->st.size)
+						f->iflags |= IFLAG_SIZE;
+				}
+			}
+
+			return 0;
+		}
 	}
 
 	/* Non-regular file needs attention. */
@@ -1243,7 +1328,8 @@ check_file(int rootfd, struct flist *f, struct stat *st,
 static int
 pre_file_check_altdir(struct sess *sess, const struct upload *p,
     const char **matchdir, struct stat *st, const char *root,
-    struct flist *f, int rc, enum altbasemode basemode, int *savedfd)
+    struct flist *f, const struct hardlinks *const hl, int rc,
+    enum altbasemode basemode, int *savedfd)
 {
 	int32_t	 saved_iflags = f->iflags; /* saved iflags */
 	int	 dfd, /* root directory fd */
@@ -1257,7 +1343,7 @@ pre_file_check_altdir(struct sess *sess, const struct upload *p,
 	}
 
 	f->iflags = 0;
-	x = check_file(dfd, f, st, sess);
+	x = check_file(dfd, f, st, sess, hl);
 	if (x == 0) {
 		/* found a match */
 		if (rc >= 0) {
@@ -1341,7 +1427,8 @@ pre_file_check_altdir(struct sess *sess, const struct upload *p,
  * success and the file needs attention.
  */
 static int
-pre_file(struct upload *p, int *filefd, off_t *size, struct sess *sess)
+pre_file(struct upload *p, int *filefd, off_t *size, struct sess *sess,
+    const struct hardlinks *hl)
 {
 	struct flist	*f; /* file being examined */
 	struct stat	 st; /* stat of file being examined */
@@ -1382,7 +1469,7 @@ pre_file(struct upload *p, int *filefd, off_t *size, struct sess *sess)
 
 	/* FIXME: switch statement */
 
-	rc = check_file(p->rootfd, f, &st, sess);
+	rc = check_file(p->rootfd, f, &st, sess, hl);
 
 	if (rc == -1)
 		return 0;
@@ -1489,7 +1576,7 @@ fixed:
 
 	for (i = 0; sess->opts->basedir[i] != NULL; i++) {
 		ret = pre_file_check_altdir(sess, p, &matchdir, &st,
-		    sess->opts->basedir[i], f, rc,
+		    sess->opts->basedir[i], f, hl, rc,
 		    sess->opts->alt_base_mode, NULL);
 		if (ret <= 0)
 			return ret;
@@ -1780,7 +1867,7 @@ out:
  */
 int
 rsync_uploader(struct upload *u, struct sess *sess, int revents,
-    int *fileinfd, int *fileoutfd)
+    int *fileinfd, int *fileoutfd, const struct hardlinks *const hl)
 {
 	struct blkset	    blk;
 	void		   *mbuf, *bufp;
@@ -1914,7 +2001,8 @@ rsync_uploader(struct upload *u, struct sess *sess, int revents,
 			else if (S_ISLNK(u->fl[u->idx].st.mode))
 				c = pre_symlink(u, sess);
 			else if (S_ISREG(u->fl[u->idx].st.mode))
-				c = pre_file(u, fileinfd, &filesize, sess);
+				c = pre_file(u, fileinfd, &filesize,
+				    sess, hl);
 			else if (S_ISBLK(u->fl[u->idx].st.mode) ||
 			    S_ISCHR(u->fl[u->idx].st.mode))
 				c = pre_dev(u, sess);

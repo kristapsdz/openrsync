@@ -64,6 +64,12 @@
 #define FLIST_TIME_SAME  0x0080 /* time is repeat */
 
 /*
+ * The following are not sent with the flist, as the bits exceed what
+ * can be stuffed in a byte, and the flag is a single byte.
+ */
+#define	FLIST_HARDLINKED 0x0200 /* hard-linked file */
+
+/*
  * Assert that path is non-NULL and non-empty.
  */
 static inline void
@@ -357,8 +363,18 @@ flist_send(struct sess *sess, int fdin, int fdout, const struct flist *fl,
 		 */
 
 		flag = FLIST_NAME_LONG;
-		if ((FLSTAT_TOP_DIR & f->st.flags))
+		if (f->st.flags & FLSTAT_TOP_DIR)
 			flag |= FLIST_TOP_LEVEL;
+
+		/*
+		 * When we need to send the extra hardlinks data: For
+		 * protocol 28+: Only non-directories that have nlink >
+		 * 1 For protocols less than 28: All regular files
+		 */
+
+		if (sess->opts->hard_links && !S_ISDIR(f->st.mode))
+			if (S_ISREG(f->st.mode))
+				flag |= FLIST_HARDLINKED;
 
 		LOG3("%s: sending file metadata: "
 			"size %jd, mtime %jd, mode %o, flag %o",
@@ -459,6 +475,34 @@ flist_send(struct sess *sess, int fdin, int fdout, const struct flist *fl,
 				goto out;
 			}
 		}
+
+		/*
+		 * Conditional part: hard link. 
+		 */
+
+		if (flag & FLIST_HARDLINKED) {
+			/*
+			 * FIXME: older versions of the protocol send
+			 * this as an int.  Disregard this for now and
+			 * send 64 bits.
+			 * Write: [flist-device]
+			 */
+			if (!io_write_long(sess, fdout, f->st.device)) {
+				ERRX1("io_write_long");
+				goto out;
+			}
+
+			/* 
+			 * Same caveat here.
+			 * Write: [flist-inode]
+			 */
+
+			if (!io_write_long(sess, fdout, f->st.inode)) {
+				ERRX1("io_write_long");
+				goto out;
+			}
+		}
+
 
 		if (S_ISREG(f->st.mode) || S_ISLNK(f->st.mode))
 			sess->total_size += f->st.size;
@@ -973,17 +1017,23 @@ bool
 flist_recv(struct sess *sess, int fdin, int fdout, struct flist **flp,
     size_t *sz)
 {
-	struct flist	*fl = NULL;
-	struct flist	*ff;
-	char 		*link;
-	const struct flist *fflast = NULL;
-	size_t		 i, flsz = 0, flmax = 0, lsz, gidsz = 0, uidsz = 0;
-	uint8_t		 flag, bval;
-	char		 last[PATH_MAX];
-	int64_t		 lval; /* temporary values... */
-	int32_t		 ival;
-	uint32_t	 uival;
-	struct ident	*gids = NULL, *uids = NULL;
+	struct flist	*fl = NULL; /* full flist */
+	struct flist	*ff; /* current file being examind */
+	char 		*link; /* link name */
+	const struct flist *fflast = NULL; /* last file examined */
+	struct ident	*gids = NULL, *uids = NULL; /* gid/uid map */
+	int64_t		 lval; /* temporary  */
+	size_t		 i, /* temporary */
+			 flsz = 0, /* size of fl */
+			 flmax = 0, /* allocate size of fl */
+			 linksz, /* length of link */
+			 gidsz = 0, /* size of gids */
+			 uidsz = 0; /* size of uids */
+	uint32_t	 uival; /* temporary */
+	int32_t		 ival; /* temporary */
+	uint16_t	 flag; /* flag (2B, not 1B, for local bits) */
+	uint8_t		 bval; /* read flag */
+	char		 last[PATH_MAX]; /* last path */
 
 	last[0] = '\0';
 
@@ -1043,6 +1093,7 @@ flist_recv(struct sess *sess, int fdin, int fdout, struct flist **flp,
 			}
 			ff->st.mtime = uival;	/* beyond 2038 */
 		} else if (fflast == NULL) {
+			WARNX1("same time without last entry");
 			ff->st.mtime = 0;
 		}  else
 			ff->st.mtime = fflast->st.mtime;
@@ -1146,25 +1197,25 @@ flist_recv(struct sess *sess, int fdin, int fdout, struct flist **flp,
 				ff->st.rdev = fflast->st.rdev;
 		}
 
-		/* Conditional part: link. */
+		/* Conditional part: symbolic link. */
 
 		if (S_ISLNK(ff->st.mode) &&
 		    sess->opts->preserve_links) {
-			/* Read: [file-link-length]. */
-			if (!io_read_size(sess, fdin, &lsz)) {
+			/* Read: [flist-link-length]. */
+			if (!io_read_size(sess, fdin, &linksz)) {
 				ERRX1("io_read_size");
 				goto out;
-			} else if (lsz == 0) {
+			} else if (linksz == 0) {
 				ERRX("empty link name");
 				goto out;
 			}
-			link = calloc(lsz + 1, 1);
+			link = calloc(linksz + 1, 1);
 			if (link == NULL) {
 				ERR("calloc");
 				goto out;
 			}
-			/* Read: [file-link]. */
-			if (!io_read_buf(sess, fdin, link, lsz)) {
+			/* Read: [flist-link]. */
+			if (!io_read_buf(sess, fdin, link, linksz)) {
 				free(link);
 				ERRX1("io_read_buf");
 				goto out;
@@ -1173,11 +1224,42 @@ flist_recv(struct sess *sess, int fdin, int fdout, struct flist **flp,
 			ff->link = link;
 		}
 
+		/*
+		 * Conditional part: hard link. 
+		 * All plain files send this info.
+		 */
+
+		if (sess->opts->hard_links && S_ISREG(ff->st.mode))
+			flag |= FLIST_HARDLINKED;
+
+		if (flag & FLIST_HARDLINKED) {
+			/*
+			 * See caveat above in sender about 32 vs 64
+			 * bits.
+			 * Read: [flist-device].
+			 */
+			if (!io_read_long(sess, fdin, &lval)) {
+				ERRX1("io_read_int");
+				goto out;
+			}
+			ff->st.device = lval;
+
+			/* Read: [flist-inode]. */
+
+			if (!io_read_long(sess, fdin, &lval)) {
+				ERRX1("io_read_int");
+				goto out;
+			}
+			ff->st.inode = lval;
+		}
+
 		LOG3("%s: received file metadata: "
-			"size %jd, mtime %jd, mode %o, rdev (%d, %d)",
+			"size %jd, mtime %jd, mode %o, rdev (%d, %d), "
+			"flag 0x%x",
 			ff->path, (intmax_t)ff->st.size,
 			(intmax_t)ff->st.mtime, ff->st.mode,
-			major(ff->st.rdev), minor(ff->st.rdev));
+			major(ff->st.rdev), minor(ff->st.rdev),
+			flag);
 
 		if (S_ISREG(ff->st.mode))
 			sess->total_size += ff->st.size;

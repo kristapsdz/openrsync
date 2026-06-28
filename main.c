@@ -452,7 +452,7 @@ enum {
 	OP_TIMEOUT,
 };
 
-const char rsync_shopts[] = "468B:CDFabcde:f:ghIJlnOopRrtuVvWxz";
+const char rsync_shopts[] = "468B:CDFHIJORVWabcde:f:ghlnoprtuvxz";
 const struct option	 lopts[] = {
     { "8-bit-output",	no_argument,	NULL,			'8' },
     { "address",	required_argument, NULL,		OP_ADDRESS },
@@ -475,6 +475,7 @@ const struct option	 lopts[] = {
     { "exclude-from",	required_argument, NULL,		OP_EXCLUDE_FROM },
     { "filter",		required_argument, NULL,		'f' },
     { "group",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "hard-links",	no_argument,	NULL,			'H' },
     { "help",		no_argument,	NULL,			'h' },
     { "ignore-times",	no_argument,	NULL,			'I' },
     { "include",	required_argument, NULL,		OP_INCLUDE },
@@ -559,6 +560,7 @@ usage(void)
 	    "\t[--exclude=pattern]\n"
 	    "\t[--filter=filter, -f filter]\n"
 	    "\t[--group, -g]\n"
+	    "\t[--hard-links, -H]\n"
 	    "\t[--ignore-times, -I]\n"
 	    "\t[--include-from=file]\n"
 	    "\t[--include]\n"
@@ -771,6 +773,28 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				break;
 			(void)parse_rule(new_rule, RULE_NONE, '\n');
 			break;
+		case 'H':
+			opts.hard_links = true;
+			break;
+		case 'I':
+			opts.ignore_times = true;
+			break;
+		case 'J':
+			opts.omit_link_times = true;
+			break;
+		case 'O':
+			opts.omit_dir_times = true;
+			break;
+		case 'R':
+			opts.relative = true;
+			break;
+		case 'V':
+			fprintf(stderr, "openrsync: protocol version %u\n",
+			    RSYNC_PROTOCOL);
+			exit(0);
+		case 'W':
+			*whole_file = 1;
+			break;
 		case 'a':
 			opts.recursive = true;
 			opts.preserve_links = true;
@@ -804,12 +828,6 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 		case 'h':
 			usage();
 			return NULL;
-		case 'I':
-			opts.ignore_times = true;
-			break;
-		case 'J':
-			opts.omit_link_times = true;
-			break;
 		case 'l':
 			opts.preserve_links = true;
 			break;
@@ -819,17 +837,11 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			else if (opts.dry_run == DRY_XFER)
 				opts.dry_run = DRY_FULL;
 			break;
-		case 'O':
-			opts.omit_dir_times = true;
-			break;
 		case 'o':
 			opts.preserve_uids = true;
 			break;
 		case 'p':
 			opts.preserve_perms = true;
-			break;
-		case 'R':
-			opts.relative = true;
 			break;
 		case 'r':
 			opts.recursive = true;
@@ -842,13 +854,6 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			break;
 		case 'v':
 			verbose++;
-			break;
-		case 'V':
-			fprintf(stderr, "openrsync: protocol version %u\n",
-			    RSYNC_PROTOCOL);
-			exit(0);
-		case 'W':
-			*whole_file = 1;
 			break;
 		case 'x':
 			opts.one_file_system++;
