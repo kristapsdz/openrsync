@@ -93,8 +93,8 @@ for a listing.
 
 # Testing
 
-The testing system is still in development.  It currently requires `jot`
-and `compress`.
+The testing system is still in development.  It currently requires `jot`,
+`compress`, and `truncate`.
 
 % make regress
 

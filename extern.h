@@ -399,6 +399,7 @@ struct	opts {
 	bool		 preserve_perms;	/* -p */
 	bool		 preserve_times;	/* -t */
 	bool		 preserve_uids;		/* -u */
+	bool		 progress;		/* --progress */
 	bool		 recursive;		/* -r */
 	bool		 relative;		/* -R */
 	bool		 sender;		/* --sender */
@@ -818,6 +819,9 @@ bool		 print_7_or_8_bit(const struct sess *, const char *,
 		    __attribute__((format(printf, 2, 0)));
 
 bool		 rsync_humanize(const struct sess *, char *, size_t, int64_t);
+void		 rsync_progress(struct sess *, uint64_t, uint64_t, bool,
+		    size_t, size_t);
+enum log_type	 xfer_log_level(const struct sess *);
 
 
 #endif /*!EXTERN_H*/

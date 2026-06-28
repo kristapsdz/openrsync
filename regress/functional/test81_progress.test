@@ -1,0 +1,36 @@
+#!/bin/sh
+
+# Test that --progress works
+
+set -e
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf src dst
+mkdir -p src dst
+
+truncate -s 32M src/file1
+truncate -s 32M src/file2
+
+# We don't have a good way of testing both sender and receiver roles in
+# a single test, so we're currently relying on interop testing to
+# exercise both paths.
+
+# Note that old rsync used the full "to-check" and "xfer", but new rsync
+# has these down to just "to-chk" and "xfer".
+
+$rsync -aP -- src/ dst/ > rsync.out
+if ! grep -q -- '100%' rsync.out; then
+	1>&2 echo "Missing progess output in progress report"
+	exit 1
+elif ! grep -q -E -- 'xfe?r#' rsync.out; then
+	1>&2 echo "Missing xfer# output in progress report"
+	exit 1
+elif ! grep -q -E -- 'to-ch(ec)?k' rsync.out; then
+	1>&2 echo "Missing to-check output in progress report"
+	exit 1
+elif ! grep -q -- 'file1' rsync.out; then
+	1>&2 echo "Missing filename output in progress report"
+	exit 1
+fi

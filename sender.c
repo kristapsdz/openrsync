@@ -41,7 +41,7 @@
  * A request from the receiver to download updated file data.
  */
 struct	send_dl {
-	int32_t			 idx; /* index in our file list */
+	ssize_t			 idx; /* index in our file list */
 	struct blkset		*blks; /* the sender's block information */
 	size_t			 blkidx; /* last block index read */
 	enum send_dl_state	 dlstate; /* current blk recv state */
@@ -556,7 +556,7 @@ send_up_fsm_compressed(struct sess *sess, size_t *phase,
 			    100.0 * up->stat.dirty / up->stat.total);
 		sess->total_files_xfer++;
 		sess->total_xfer_size += fl[up->cur->idx].st.size;
-		log_item_impl(LT_LOG, sess, &fl[up->cur->idx]);
+		log_item_impl(xfer_log_level(sess), sess, &fl[up->cur->idx]);
 		send_up_reset(up);
 		return true;
 	case BLKSTAT_PHASE:
@@ -778,7 +778,7 @@ send_up_fsm(struct sess *sess, size_t *phase, struct send_up *up,
 			    100.0 * up->stat.dirty / up->stat.total);
 		sess->total_files_xfer++;
 		sess->total_xfer_size += fl[up->cur->idx].st.size;
-		log_item_impl(LT_LOG, sess, &fl[up->cur->idx]);
+		log_item_impl(xfer_log_level(sess), sess, &fl[up->cur->idx]);
 		send_up_reset(up);
 		return true;
 	case BLKSTAT_PHASE:
@@ -1086,7 +1086,8 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 			    fb_before, fb_after, /* timing for flist_build */
 			    fx_before, fx_after; /* timing for flist_xfer */
 	const struct flist *f, /* current flist */
-	      		   *nextfl; /* temporary flist */
+	      		   *nextfl, /* temporary flist */
+			   *curfl; /* temporary */
 	const char	   *opath; /* nextfl path */
 	struct send_dl	   *dl, /* file being downloaded */
 			   *mdl = NULL; /* metadata being downloaded */
@@ -1102,7 +1103,8 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 			    pos, /* temporary */
 			    markers = 0,
 			    metadata_phase = 0;
-	ssize_t		    writesz; /* temporary: size written */
+	ssize_t		    writesz, /* temporary: size written */
+			    curidx; /* temporary */
 	const size_t	    max_phase = 1; /* sess->protocol >= 29 ? 2 : 1; */
 	int		    c, /* temporary */
 			    dirfd, /* openat() first argument */
@@ -1572,12 +1574,21 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 		    (pfd[1].revents & POLLOUT)) && up.cur != NULL) {
 			assert(pfd[2].fd == -1);
 			assert(wbufpos == 0 && wbufsz == 0);
+			curidx = up.cur->idx;
 			if (sess->opts->compress)
 				ret = send_up_fsm_compressed(sess, &phase, &up,
 				    &wbuf, &wbufsz, &wbufmax, fl.flp);
 			else
 				ret = send_up_fsm(sess, &phase, &up,
 				    &wbuf, &wbufsz, &wbufmax, fl.flp);
+
+			if (curidx != -1) {
+				curfl = &fl.flp[curidx];
+				rsync_progress(sess, curfl->st.size,
+				    up.stat.curpos,
+				    up.stat.curst == BLKSTAT_DONE, curidx,
+				    fl.sz);
+			}
 
 			if (!ret) {
 				ERRX1("send_up_fsm");
@@ -1644,6 +1655,7 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 				pos = wbufsz;
 				send_iflags(sess, &wbuf, &wbufsz,
 				    &wbufmax, &pos, fl.flp, up.cur->idx);
+				log_item(sess, f);
 				send_up_reset(&up);
 				pfd[1].fd = fdout;
 				continue;
@@ -1688,6 +1700,7 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 				continue;
 			}
 			pfd[2].fd = up.stat.fd;
+			log_item_impl(LT_CLIENT, sess, f);
 		}
 	}
 

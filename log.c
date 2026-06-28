@@ -1138,13 +1138,17 @@ bool
 log_item_impl(enum log_type type, const struct sess *sess,
     const struct flist *f)
 {
-	const char	*outformat = NULL;
+	const char	*outformat = NULL,
+			*logformat = NULL;
 	bool		 ok = true;
 
-	if (outformat == NULL && verbose > 0)
+	if (outformat == NULL && (verbose > 0 || sess->opts->progress))
 		outformat = "%n";
 	if (type != LT_LOG && outformat != NULL && !sess->opts->server &&
 	    !log_format_type(LT_CLIENT, sess, outformat, f))
+		ok = false;
+	if (type != LT_CLIENT && logformat != NULL &&
+	    !log_format_type(LT_LOG, sess, logformat, f))
 		ok = false;
 
 	return ok;
@@ -1210,4 +1214,13 @@ log_item(const struct sess *sess, const struct flist *f)
 	}
 
 	return log_item_impl(type, sess, f);
+}
+
+/*
+ * FIXME: this was in extern.h as an inline, but is now here.
+ */
+enum log_type
+xfer_log_level(const struct sess *sess)
+{
+	return LT_LOG;
 }

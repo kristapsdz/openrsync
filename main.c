@@ -452,7 +452,7 @@ enum {
 	OP_TIMEOUT,
 };
 
-const char rsync_shopts[] = "468B:CDFHIJORVWabcde:f:ghlnoprtuvxz";
+const char rsync_shopts[] = "468B:CDFHIJOPRVWabcde:f:ghlnoprtuvxz";
 const struct option	 lopts[] = {
     { "8-bit-output",	no_argument,	NULL,			'8' },
     { "address",	required_argument, NULL,		OP_ADDRESS },
@@ -515,6 +515,7 @@ const struct option	 lopts[] = {
     { "partial",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "perms",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "port",		required_argument, NULL,		OP_PORT },
+    { "progress",	no_argument, 	NULL,			OP_SET_BOOL_TRUE },
     { "protocol",	required_argument, NULL,		OP_PROTOCOL },
     { "recursive",	no_argument,	NULL,			'r' },
     { "relative",	no_argument,	NULL,			'R' },
@@ -541,7 +542,7 @@ const struct option	 lopts[] = {
 static void
 usage(void)
 {
-	fprintf(stderr, "usage: %s [-DF]\n"
+	fprintf(stderr, "usage: %s [-DFP]\n"
 	    "\t[--8-bit-output, -8]\n"
 	    "\t[--address=sourceaddr]\n"
 	    "\t[--archive, -a]\n"
@@ -595,6 +596,7 @@ usage(void)
 	    "\t[--partial]\n"
 	    "\t[--perms, -p]\n"
 	    "\t[--port=portnumber]\n"
+	    "\t[--progress]\n"
 	    "\t[--protocol]\n"
 	    "\t[--relative, -R]\n"
 	    "\t[--recursive, -r]\n"
@@ -672,6 +674,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				opts.partial = true;
 			else if (strcmp(lopts[lidx].name, "perms") == 0)
 				opts.preserve_perms = true;
+			else if (strcmp(lopts[lidx].name, "progress") == 0)
+				opts.progress = true;
 			else if (strcmp(lopts[lidx].name, "sender") == 0)
 				opts.sender = true;
 			else if (strcmp(lopts[lidx].name, "server") == 0)
@@ -788,6 +792,10 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			break;
 		case 'O':
 			opts.omit_dir_times = true;
+			break;
+		case 'P':
+			opts.partial = true;
+			opts.progress = true;
 			break;
 		case 'R':
 			opts.relative = true;

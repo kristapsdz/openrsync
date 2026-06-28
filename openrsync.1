@@ -22,7 +22,7 @@
 .Nd synchronise local and remote files
 .Sh SYNOPSIS
 .Nm openrsync
-.Op Fl DF
+.Op Fl DFP
 .Op Fl -8-bit-output , Fl 8
 .Op Fl -address Ns = Ns Ar sourceaddr
 .Op Fl -archive , Fl a
@@ -75,6 +75,7 @@
 .Op Fl -partial
 .Op Fl -perms , Fl p
 .Op Fl -port Ns = Ns Ar portnumber
+.Op Fl -progress
 .Op Fl -protocol Ns = Ns Ar protocol
 .Op Fl -relative , Fl R
 .Op Fl -recursive , Fl r
@@ -389,6 +390,9 @@ set the numeric user ID to match the source instead.
 Only works if run as root.
 Negate with
 .Fl -no-owner .
+.It Fl P
+Equivalent to
+.Fl -partial -progress .
 .It Fl -perms , Fl p
 Set destination file or directory permissions to match the source when
 it is updated.
@@ -410,6 +414,8 @@ can be given as a decimal integer or as a name to be looked up in the
 database.
 The default is
 .Dq rsync .
+.It Fl -progress
+Periodically report file transfer progress.
 .It Fl -protocol Ns = Ns Ar protocol
 The protocol to use.
 This currently may only be set to 27.

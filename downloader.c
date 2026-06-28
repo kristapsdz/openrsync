@@ -1401,6 +1401,9 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 	 */
 
 again:
+	rsync_progress(sess, p->fl[p->idx].st.size, p->total, false,
+	    p->idx, p->flsz);
+
 	assert(p->state == DOWNLOAD_READ_REMOTE ||
 	    p->state == DOWNLOAD_FLUSH_REMOTE);
 	assert(p->fname != NULL || sess->opts->dry_run);
@@ -1549,6 +1552,9 @@ again:
 	 */
 
 	f->flstate &= ~FLIST_NEED_HLINK;
+
+	rsync_progress(sess, p->fl[p->idx].st.size,
+	    p->fl[p->idx].st.size, true, p->idx, p->flsz);
 
 	log_item_impl(LT_LOG, sess, f);
 done:
