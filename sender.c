@@ -20,6 +20,7 @@
 # include <sys/queue.h>
 #endif
 #include <sys/stat.h>
+#include <sys/time.h>
 
 #include <assert.h>
 #include <errno.h>

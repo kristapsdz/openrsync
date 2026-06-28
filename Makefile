@@ -47,8 +47,12 @@ UNAME      != uname
 # Provide compat implementations, if not.
 
 .if $(UNAME) == "Darwin" || $(UNAME) == "FreeBSD"
-LDADD	  += -lsbuf -lutil
-CFLAGS	  += -DHAVE_SBUF -DHAVE_HUMANIZE_NUMBER
+LDADD	  += -lsbuf
+CFLAGS	  += -DHAVE_SBUF
+.endif
+.if $(UNAME) == "FreeBSD" || $(UNAME) == "NetBSD"
+LDADD	  += -lutil
+CFLAGS	  += -DHAVE_HUMANIZE_NUMBER
 .endif
 
 CFLAGS	  += $(CFLAGS_FTS) $(CFLAGS_Z)
