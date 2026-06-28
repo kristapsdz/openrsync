@@ -9,6 +9,8 @@ sinclude Makefile.local
 OBJS	    = blocks.o \
 	      client.o \
 	      compats.o \
+	      compat_humanize_number.o \
+	      compat_sbuf.o \
 	      copy.o \
 	      downloader.o \
 	      fargs.o \
@@ -41,9 +43,12 @@ LDADD_Z	   != pkg-config --libs zlib 2>/dev/null || echo "-lz"
 CFLAGS_Z   != pkg-config --cflags zlib 2>/dev/null || echo ""
 UNAME      != uname
 
+# Darwin and FreeBSD have these helpful functions.
+# Provide compat implementations, if not.
+
 .if $(UNAME) == "Darwin" || $(UNAME) == "FreeBSD"
-LDADD	  += -lsbuf
-CFLAGS	  += -DHAVE_SBUF
+LDADD	  += -lsbuf -lutil
+CFLAGS	  += -DHAVE_SBUF -DHAVE_HUMANIZE_NUMBER
 .endif
 
 CFLAGS	  += $(CFLAGS_FTS) $(CFLAGS_Z)
@@ -77,6 +82,10 @@ distclean: clean
 $(ALLOBJS): extern.h config.h md4.h
 
 flist.o main.o receiver.o rules.o sender.o uploader.o: rules.h
+
+compat_humanize_number.o: compat_humanize_number.h
+
+compat_sbuf.o log.o: compat_sbuf.h
 
 rules.h: extern.h
 

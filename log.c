@@ -25,6 +25,8 @@
 # else
 #  include <sys/sbuf.h>
 # endif
+#else
+# include "compat_sbuf.h"
 #endif
 
 #include <assert.h>
@@ -51,13 +53,6 @@ extern int verbose;
 static FILE *log_file;
 static struct sess *log_sess;
 
-#if !HAVE_SBUF
-struct sbuf {
-	char	*buf;
-	size_t	 len;
-};
-#endif /* !HAVE_SBUF */
-
 static void
 log_writef(enum log_type, const char *, ...)
     __attribute__((format(printf, 2, 3)));
@@ -66,85 +61,6 @@ static const char *
 printf_doformat(const char *, int *, const struct sess *,
     const struct flist *, struct sbuf *)
     __attribute__((format(printf, 1, 0)));
-
-#if !HAVE_SBUF
-static struct sbuf *
-sbuf_new_auto(void)
-{
-	return calloc(1, sizeof(struct sbuf));
-}
-
-static int
-sbuf_bcat(struct sbuf *s, const void *buf, size_t len)
-{
-	void	*pp;
-
-	if (s == NULL)
-		return -1;
-
-	pp = realloc(s->buf, s->len + len);
-	if (pp == NULL)
-		return -1;
-	s->buf = pp;
-	memcpy(s->buf + s->len, buf, len);
-	s->len += len;
-	return 0;
-}
-
-static const char *
-sbuf_data(struct sbuf *s)
-{
-	return s == NULL ? NULL : s->buf;
-}
-
-static void
-sbuf_delete(struct sbuf *s)
-{
-	if (s == NULL)
-		return;
-	free(s->buf);
-	free(s);
-}
-
-static int
-sbuf_printf(struct sbuf *s, const char *fmt, ...)
-{
-	va_list	 ap;
-	char	*buf;
-	int	 rc, len;
-
-	if (s == NULL)
-		return -1;
-
-	va_start(ap, fmt);
-	if ((len = vasprintf(&buf, fmt, ap)) == -1) {
-		va_end(ap);
-		return -1;
-	}
-	va_end(ap);
-	rc = sbuf_bcat(s, buf, len);
-	free(buf);
-	return rc;
-}
-
-static int
-sbuf_putc(struct sbuf *s, int c)
-{
-	char	 cc = c;
-
-	return sbuf_bcat(s, &cc, 1);
-}
-
-static int
-sbuf_finish(struct sbuf *s)
-{
-	if (s == NULL)
-		return -1;
-	if (s->len && s->buf[s->len - 1] == '\0')
-		return 0;
-	return sbuf_putc(s, '\0');
-}
-#endif /* !HAVE_SBUF */
 
 /*
  * Log a message at level "level", starting at zero, which corresponds

@@ -47,6 +47,10 @@ of openrsync, which is available
 [here](https://github.com/apple-oss-distributions/rsync).
 Effort to merge this code into this repository is still underway.
 
+Internally, openrsync provides a portable implementation of
+`humanize_number` (from FreeBSD, originally NetBSD) and a skeleton
+implementation of `sbuf`.
+
 # Installation
 
 On an up-to-date UNIX system, simply download and run:
