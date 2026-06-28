@@ -17,79 +17,107 @@
 #include "config.h"
 
 #include <assert.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "extern.h"
 
 /*
- * Accept how much we've read, written, and file-size, and print them in
- * a human-readable fashion (with GB, MB, etc. prefixes).
- * This only prints as the client.
+ * To make the summary log output more closely resemble that of standard
+ * rsync we remove the space from between the number and the suffix
+ * character, and eliminate any 'B' suffix.
  */
 static void
-stats_log(struct sess *sess,
-	uint64_t tread, uint64_t twrite, uint64_t tsize)
+stats_log_fixup(const size_t bufsz, char *buf)
 {
-	double		 tr, tw, ts;
-	const char	*tru = "B", *twu = "B", *tsu = "B";
-	int		 trsz = 0, twsz = 0, tssz = 0;
+	char	*p;
 
-	assert(verbose);
+	p = strchr(buf, ' ');
+	if (p != NULL && p[1] != '\0') {
+		if (p[1] == 'B') {
+			p[0] = '\0';
+		} else {
+			p[0] = p[1];
+			p[1] = '\0';
+		}
+	}
+}
+
+/*
+ * Accept how much we've read, written, and file-size, and print them in
+ * a human-readable fashion (with GB, MB, etc. prefixes).  This only
+ * prints as the client.
+ * FIXME: does not check return value of rsync_humanize().
+ */
+static void
+stats_log(const struct sess *sess, uint64_t tread, uint64_t twrite,
+    uint64_t tsize)
+{
+	char	 rbuf[32], wbuf[32], sbuf[32], ratebuf[32];
+	int64_t	 rate;
+
 	if (sess->opts->server)
 		return;
 
-	if (tread >= 1024 * 1024 * 1024) {
-		tr = tread / (1024.0 * 1024.0 * 1024.0);
-		tru = "GB";
-		trsz = 3;
-	} else if (tread >= 1024 * 1024) {
-		tr = tread / (1024.0 * 1024.0);
-		tru = "MB";
-		trsz = 2;
-	} else if (tread >= 1024) {
-		tr = tread / 1024.0;
-		tru = "KB";
-		trsz = 1;
-	} else
-		tr = tread;
+	if (verbose > 0 || sess->opts->stats) {
+		rate = (tread + twrite) / ((sess->xfer_time + 0.1) / 1000);
 
-	if (twrite >= 1024 * 1024 * 1024) {
-		tw = twrite / (1024.0 * 1024.0 * 1024.0);
-		twu = "GB";
-		twsz = 3;
-	} else if (twrite >= 1024 * 1024) {
-		tw = twrite / (1024.0 * 1024.0);
-		twu = "MB";
-		twsz = 2;
-	} else if (twrite >= 1024) {
-		tw = twrite / 1024.0;
-		twu = "KB";
-		twsz = 1;
-	} else
-		tw = twrite;
+		rsync_humanize(sess, rbuf, sizeof(rbuf), tread);
+		rsync_humanize(sess, wbuf, sizeof(wbuf), twrite);
+		rsync_humanize(sess, sbuf, sizeof(sbuf), tsize);
+		rsync_humanize(sess, ratebuf, sizeof(ratebuf), rate);
 
-	if (tsize >= 1024 * 1024 * 1024) {
-		ts = tsize / (1024.0 * 1024.0 * 1024.0);
-		tsu = "GB";
-		tssz = 3;
-	} else if (tsize >= 1024 * 1024) {
-		ts = tsize / (1024.0 * 1024.0);
-		tsu = "MB";
-		tssz = 2;
-	} else if (tsize >= 1024) {
-		ts = tsize / 1024.0;
-		tsu = "KB";
-		tssz = 1;
-	} else
-		ts = tsize;
+		stats_log_fixup(sizeof(rbuf), rbuf);
+		stats_log_fixup(sizeof(wbuf), wbuf);
+		stats_log_fixup(sizeof(sbuf), sbuf);
+		stats_log_fixup(sizeof(ratebuf), ratebuf);
 
-	LOG1("Transfer complete: "
-	    "%.*lf %s sent, %.*lf %s read, %.*lf %s file size",
-	    trsz, tr, tru,
-	    twsz, tw, twu,
-	    tssz, ts, tsu);
+		LOG0("\nsent %s bytes  received %s bytes  %s bytes/sec",
+		     wbuf, rbuf, ratebuf);
+		LOG0("total size is %s  speedup is %.2lf",
+		     sbuf, tsize / (tread + twrite + 0.001));
+	}
+
+	LOG3("File list generation time: %.3f seconds, "
+	    "transfer time: %.3f seconds",
+	    (double)sess->flist_build / 1000,
+	    (double)sess->flist_xfer / 1000);
+}
+
+/*
+ * Output detailed statistics on transfer rates.
+ * FIXME: does not check return value of rsync_humanize().
+ */
+static void
+stats_output(const struct sess *sess)
+{
+	char	*tbuf[32];
+
+	LOG0("Number of files: %" PRIu64, sess->total_files);
+	LOG0("Number of files transferred: %" PRIu64, sess->total_files_xfer);
+	rsync_humanize(sess, (char*)&tbuf, sizeof(tbuf), sess->total_size);
+	LOG0("Total file size: %s", (char*)&tbuf);
+	rsync_humanize(sess, (char*)&tbuf, sizeof(tbuf), sess->total_xfer_size);
+	LOG0("Total transferred file size: %s", (char*)&tbuf);
+	rsync_humanize(sess, (char*)&tbuf, sizeof(tbuf), sess->total_unmatched);
+	LOG0("Unmatched data: %s", (char*)&tbuf);
+	rsync_humanize(sess, (char*)&tbuf, sizeof(tbuf), sess->total_matched);
+	LOG0("Matched data: %s", (char*)&tbuf);
+	rsync_humanize(sess, (char*)&tbuf, sizeof(tbuf), sess->flist_size);
+	LOG0("File list size: %s", (char*)&tbuf);
+	if (sess->flist_build) {
+		LOG0("File list generation time: %.3f seconds",
+		    (double)sess->flist_build / 1000);
+		LOG0("File list transfer time: %.3f seconds",
+		    (double)sess->flist_xfer / 1000);
+	}
+	rsync_humanize(sess, (char*)&tbuf, sizeof(tbuf), sess->total_write);
+	LOG0("Total sent: %s", (char*)&tbuf);
+	rsync_humanize(sess, (char*)&tbuf, sizeof(tbuf), sess->total_read);
+	LOG0("Total received: %s", (char*)&tbuf);
 }
 
 /*
@@ -107,7 +135,10 @@ sess_stats_send(struct sess *sess, int fd)
 	tr = sess->total_read;
 	ts = sess->total_size;
 
-	if (verbose > 0)
+	if (sess->opts->stats)
+		stats_output(sess);
+
+	if (verbose > 0 || sess->opts->stats)
 		stats_log(sess, tr, tw, ts);
 
 	if (!sess->opts->server && verbose == 0)
@@ -139,7 +170,7 @@ sess_stats_send(struct sess *sess, int fd)
 bool
 sess_stats_recv(struct sess *sess, int fd)
 {
-	uint64_t tr, tw, ts;
+	uint64_t	 tr, tw, ts;
 
 	if (sess->opts->server)
 		return true;
@@ -155,11 +186,13 @@ sess_stats_recv(struct sess *sess, int fd)
 		return false;
 	}
 
-	if (verbose > 0)
+	if (verbose > 0 || sess->opts->stats)
 		stats_log(sess, tr, tw, ts);
+	if (sess->opts->stats)
+		stats_output(sess);
+
 	return true;
 }
-
 
 /*
  * Clean up a download session.  Should be called before discarding a

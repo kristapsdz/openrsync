@@ -11,27 +11,27 @@ cd dir1
 generate_tree_1
 rm foo/baz/three.txt
 # make this file again the way we want it.
-dd if=/dev/zero bs=1M count=1 status=none > foo/bar/baz/one.txt
+dd if=/dev/zero bs=1M count=1 status=none > foo/bar/baz/one.txt 2>/dev/null
 echo foo >> foo/bar/baz/one.txt
-dd if=/dev/zero bs=1M count=1 status=none >> foo/bar/baz/one.txt
+dd if=/dev/zero bs=1M count=1 status=none >> foo/bar/baz/one.txt 2>/dev/null
 # make the tree we want to compare to
 mkdir ../dir2
 cd ../dir2
 generate_tree_1
 rm foo/baz/three.txt
 # make this file again the way we want it.
-dd if=/dev/zero bs=1M count=1 status=none > foo/bar/baz/one.txt
+dd if=/dev/zero bs=1M count=1 status=none > foo/bar/baz/one.txt 2>/dev/null
 echo foo >> foo/bar/baz/one.txt
-dd if=/dev/zero bs=1M count=1 status=none >> foo/bar/baz/one.txt
+dd if=/dev/zero bs=1M count=1 status=none >> foo/bar/baz/one.txt 2>/dev/null
 
 mkdir ../dir3
 cd ../dir3
 generate_tree_1
 rm foo/baz/three.txt
 # make this file different in the middle
-dd if=/dev/zero bs=1M count=1 status=none > foo/bar/baz/one.txt
+dd if=/dev/zero bs=1M count=1 status=none > foo/bar/baz/one.txt 2>/dev/null
 echo bar >> foo/bar/baz/one.txt
-dd if=/dev/zero bs=1M count=1 status=none >> foo/bar/baz/one.txt
+dd if=/dev/zero bs=1M count=1 status=none >> foo/bar/baz/one.txt 2>/dev/null
 
 cd ..
 # openrsync needs the --ignore-times here since it doesn't have

@@ -19,7 +19,7 @@ mkdir src
 touch src/zero
 jot 999999 1000000 > src/large
 echo "x" >> src/large
-dd if=/dev/zero of=src/sparse bs=1 count=1 seek=1048576
+dd if=/dev/zero of=src/sparse bs=1 count=1 seek=1048576 >/dev/null 2>/dev/null
 touch -t 202308252015.01 src/large
 
 # First, use rsync to create the dest dir:
@@ -76,14 +76,13 @@ touch 0src/zero
 $rsync -a -c -- 0src/ 0dst/
 compare_trees -t 0src 0dst
 
-# TODO
-#$rsync -a -c --stats --no-W -- 0src/ 0dst/ 2>&1 | tee -a log.txt
-#cat log.txt
-#MATCHED=$(grep "Number of files transferred" log.txt)
-#set -- ${MATCHED}
-#ls -al 0src/ 0dst/
-#[ "$5" -gt 0 ] && T=$5 sh -c 'echo "Transferred too many files: $T, checksum must have failed" 1>&2; false'
-#
+$rsync -a -c --stats --no-W -- 0src/ 0dst/ 2>&1 | tee -a log.txt
+cat log.txt
+MATCHED=$(grep "Number of files transferred" log.txt)
+set -- ${MATCHED}
+ls -al 0src/ 0dst/
+[ "$5" -gt 0 ] && T=$5 sh -c 'echo "Transferred too many files: $T, checksum must have failed" 1>&2; false'
+
 # For interop testing, this last part fails under smb rsync because it does not
 # like repeated remote sources, even if they're from the same host.  With
 # openrsync as a client-sender, they still fail for some reason due to a

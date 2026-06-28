@@ -843,6 +843,7 @@ protocol_token_ff(struct sess *sess, struct download *p, size_t tok)
 	}
 
 	p->total += sz;
+	sess->total_matched += sz;
 	LOG4("%s: copied %zu B", p->fname, sz);
 
 	if (!fmap_trap(p->map)) {
@@ -957,6 +958,7 @@ protocol_token_compressed(struct sess *sess, struct download *p)
 			MD4_Update(&p->ctx, dbuf, dsz);
 			p->total += dsz;
 			p->downloaded += bufsz;
+			sess->total_unmatched += dsz;
 			dectx.next_out = (Bytef *)dbuf;
 			dectx.avail_out = MAX_CHUNK_BUF;
 		}
@@ -981,6 +983,7 @@ protocol_token_compressed(struct sess *sess, struct download *p)
 
 		p->total += dsz;
 		p->downloaded += bufsz;
+		sess->total_unmatched += dsz;
 		assert(dectx.avail_in == 0);
 		dec_state_change(COMPRESS_DONE);
 		return TOKEN_RETRY;
@@ -1109,6 +1112,7 @@ protocol_token_raw(struct sess *sess, struct download *p)
 		}
 		p->total += sz;
 		p->downloaded += sz;
+		sess->total_unmatched += sz;
 		LOG4("%s: received %zu B block", p->fname, sz);
 		MD4_Update(&p->ctx, buf, sz);
 
@@ -1480,6 +1484,8 @@ again:
 	 */
 
 	f->flstate = (f->flstate & ~FLIST_REDO) | FLIST_COMPLETE;
+	sess->total_files_xfer++;
+	sess->total_xfer_size += f->st.size;
 
 	/* We can still get here with a DRY_XFER in some cases. */
 

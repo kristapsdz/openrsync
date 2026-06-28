@@ -83,7 +83,7 @@ $(ALLOBJS): extern.h config.h md4.h
 
 flist.o main.o receiver.o rules.o sender.o uploader.o: rules.h
 
-compat_humanize_number.o: compat_humanize_number.h
+compat_humanize_number.o log.o: compat_humanize_number.h
 
 compat_sbuf.o log.o: compat_sbuf.h
 
@@ -96,11 +96,12 @@ rules.h: extern.h
 # Doesn't work openrsync -> rsync: regress/functional/test25_filter_receiver.test
 # Doesn't work openrsync -> rsync: regress/functional/test25_filter_mods.test
 # Doesn't work (protocol/filter rules issue): regress/functional/test25_filter_sender.test
+# Doesn't work: regress/functional/test27_checksum.test
 
 # Partially works (protocol version mismatches): regress/functional/test64_noimpdirs.test
-# Partially works (protocol version mismatches): regress/functional/test27_checksum.test
 
 # Doesn't work openrsync -> openrsync: regress/functional/test14c_hardlinks.test
+# Doesn't work openrsync -> openrsync: regress/functional/test14_hardlinks.test
 
 REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test0_noslash.test \
@@ -133,7 +134,6 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test25_filter_basic.test \
 		  regress/functional/test25_filter_basic_clear.test \
 		  regress/functional/test84_archive.test \
-		  regress/functional/test27_checksum.test \
 		  regress/functional/test65_bwlimits.test \
 		  regress/functional/test30_file_update.test \
 		  regress/functional/test64_noimpdirs.test \
@@ -152,7 +152,7 @@ REGRESS_FAIL 	= regress/functional/test12d_inex.test \
 		  regress/functional/test25_filter_default.test \
 		  regress/functional/test25_filter_dir.test \
 		  regress/functional/test25_filter_merge_cvs.test
-REGRESS_MANUAL 	= 
+REGRESS_MANUAL 	=
 RSYNC_VERBOSE	=
 
 #OPENRSYNC=/home/kristaps/checkedout/apple/rsync/openrsync/openrsync ; \
@@ -194,7 +194,9 @@ regress_functional:: all
 					    SERVER_RSYNC=$$SERVER_RSYNC \
 					    tstdir="$$OPWD/regress/functional" \
 					    rsync="$$FIRST $$OPTGROUP $(RSYNC_VERBOSE) --rsync-path=$$SECOND" \
-					    sh $$TEST ; \
+					    sh $$TEST || { \
+					    echo "TEST FAILED" 1>&2 ; \
+					} ; \
 					set -e ; \
 					cd $$OPWD ; \
 					echo $$TEMP ; \

@@ -20,7 +20,6 @@
 # include <sys/queue.h>
 #endif
 #include <sys/stat.h>
-#include <sys/time.h> /* gettimeofday */
 
 #include <assert.h>
 #include <errno.h>
@@ -554,6 +553,8 @@ send_up_fsm_compressed(struct sess *sess, size_t *phase,
 			    fl[up->cur->idx].path,
 			    (intmax_t)up->stat.total / 1024,
 			    100.0 * up->stat.dirty / up->stat.total);
+		sess->total_files_xfer++;
+		sess->total_xfer_size += fl[up->cur->idx].st.size;
 		log_item_impl(LT_LOG, sess, &fl[up->cur->idx]);
 		send_up_reset(up);
 		return true;
@@ -769,11 +770,13 @@ send_up_fsm(struct sess *sess, size_t *phase, struct send_up *up,
 		 * to find another.
 		 */
 
-		if (!sess->opts->dry_run)
+		if (sess->opts->dry_run != DRY_FULL)
 			LOG3("%s: flushed %jd KB total, %.2f%% uploaded",
 			    fl[up->cur->idx].path,
 			    (intmax_t)up->stat.total / 1024,
 			    100.0 * up->stat.dirty / up->stat.total);
+		sess->total_files_xfer++;
+		sess->total_xfer_size += fl[up->cur->idx].st.size;
 		log_item_impl(LT_LOG, sess, &fl[up->cur->idx]);
 		send_up_reset(up);
 		return true;
@@ -1078,6 +1081,9 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 	struct stat	    st; /* temporary */
 	struct fl	    fl; /* array of flists */
 	double		    now, rate, sleeptime, diff; /* FIXME: move to function */
+	struct timeval      x_before, x_after, /* timing for xfer_time */
+			    fb_before, fb_after, /* timing for flist_build */
+			    fx_before, fx_after; /* timing for flist_xfer */
 	const struct flist *f, /* current flist */
 	      		   *nextfl; /* temporary flist */
 	const char	   *opath; /* nextfl path */
@@ -1085,6 +1091,7 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 			   *mdl = NULL; /* metadata being downloaded */
 	void		   *wbuf = NULL; /* working buffer */
 	size_t		    i, /* temporary */
+			    flist_bytes = 0, /* flist bytes written */
 			    phase = 0, /* transfer phase */
 			    wbufpos = 0, /* position in buffer */
 			    wbufsz = 0, /* current size of buffer */
@@ -1164,11 +1171,18 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 	 * command-line input.  This will also remove all invalid files.
 	 */
 
+	gettimeofday(&fb_before, NULL);
 	if (!flist_gen(sess, argc, argv, &fl)) {
 		ERRX1("flist_gen");
 		goto out;
 	}
 	assert(fl.flp != NULL || fl.sz == 0);
+
+	/* FIXME: move to a timing file. */
+	gettimeofday(&fb_after, NULL);
+	timersub(&fb_after, &fb_before, &tv);
+	sess->flist_build = (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+	sess->total_files = fl.sz;
 
 	/*
 	 * Then the file list in any mode.
@@ -1183,6 +1197,12 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 		ERRX1("io_write_int");
 		goto out;
 	}
+
+	gettimeofday(&fx_after, NULL);
+	timersub(&fx_after, &fx_before, &tv);
+	flist_bytes = sess->total_write;
+	sess->flist_xfer = (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+	sess->flist_size = sess->total_write - flist_bytes;
 
 	/* Exit if we're the server with zero files. */
 
@@ -1199,6 +1219,9 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 		ERRX1("iobuf_alloc");
 		goto out;
 	}
+
+	/* FIXME: move to a timing file */
+	gettimeofday(&x_before, NULL);
 
 	/*
 	 * If we're the server then arrange for log_vwritef() to append
@@ -1679,6 +1702,12 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 		ERRX("phases complete with files still queued");
 		goto out;
 	}
+
+	/* FIXME: move to a timing file */
+
+	gettimeofday(&x_after, NULL);
+	timersub(&x_after, &x_before, &tv);
+	sess->xfer_time = (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
 
 	if (!sess_stats_send(sess, fdout)) {
 		ERRX1("sess_stats_end");

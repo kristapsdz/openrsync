@@ -21,7 +21,7 @@
 #include <fts.h> /* FTSENT */
 #include <stdbool.h>
 #include <stdio.h> /* FILE */
-#include <time.h> /* struct timespec */
+#include <time.h> /* struct timespec, gettimeofday(), etc. */
 
 #if !HAVE_PLEDGE
 # define pledge(x, y) (1)
@@ -377,6 +377,7 @@ struct	opts {
 	enum nidsmode	 numeric_ids;		/* --numeric-ids */
 	int		 compression_level;	/* --compress-level */
 	long		 block_size;		/* -B */
+	size_t		 human_readable;	/* --human-readable, -h NOTYET */
 	size_t		 one_file_system;	/* -x */
 	char		 ipf;			/* 0 (unspec), 4 (IPV4), 6 (IPV6) */
 	bool		 backup;		/* -b */
@@ -404,6 +405,7 @@ struct	opts {
 	bool		 server;		/* --server */
 	bool		 size_only;		/* --size-only */
 	bool		 specials;		/* --specials */
+	bool		 stats;			/* --stats */
 	bool		 update;		/* -u */
 	bool		 whole_file;		/* --whole-file */
 #if 0
@@ -515,9 +517,18 @@ struct	sess {
 	size_t		  *wbufszp; /* senders's output buffer length */
 	struct role	  *role; /* role context */
 	void		 **wbufp; /* senders's output buffer ptr */
+	uint64_t	   flist_build; /* time to build flist */
+	uint64_t	   flist_size; /* items on the flist */
+	uint64_t	   flist_xfer; /* time to transfer flist */
+	uint64_t	   total_files; /* file count */
+	uint64_t	   total_files_xfer; /* files transferred */
+	uint64_t	   total_matched; /* data we recreated */
 	uint64_t	   total_read; /* non-logging wire/reads */
 	uint64_t	   total_size; /* total file size */
+	uint64_t	   total_unmatched; /* data we transferred */
 	uint64_t	   total_write; /* non-logging wire/writes */
+	uint64_t	   total_xfer_size; /* total file size transferred */
+	uint64_t	   xfer_time; /* time to transfer data */
 	double             start_time; /* time of first transfer (epoch fractional seconds) */
 	size_t		   mplex_read_remain; /* remaining bytes */
 	size_t		   sender_flsz; /* sender's flist size */
@@ -797,5 +808,8 @@ bool		 log_item(const struct sess *, const struct flist *);
 bool		 print_7_or_8_bit(const struct sess *, const char *,
 		    const char *, struct sbuf *)
 		    __attribute__((format(printf, 2, 0)));
+
+bool		 rsync_humanize(const struct sess *, char *, size_t, int64_t);
+
 
 #endif /*!EXTERN_H*/

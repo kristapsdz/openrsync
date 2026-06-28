@@ -431,6 +431,7 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 	const char	*wpath; /* temporary */
 	struct hardlink *hl; /* hardlink table */
 	size_t		 i, /* temporary */
+			 flist_bytes = 0, /* flist bytes read */
 			 flsz = 0, /* size of fl */
 			 dflsz = 0, /* size of dfl */
 			 chunksz; /* max send/write size to sender */
@@ -533,10 +534,14 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 	 * These we're going to be touching on our local system.
 	 */
 
+	flist_bytes = sess->total_read;
 	if (!flist_recv(sess, fdin, fdout, &fl, &flsz)) {
 		ERRX1("flist_recv");
 		goto out;
 	}
+
+	sess->total_files = flsz;
+	sess->flist_size = sess->total_read - flist_bytes;
 
 	/* 
 	 * Read: [io-error-value].

@@ -1,0 +1,28 @@
+#! /bin/sh
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree
+mkdir dir1
+cd dir1
+mkdirfile foo
+ln foo bar
+ln foo zzz
+# make the tree we want to compare to
+mkdir ../dir2
+cd ../dir2
+mkdirfile foo
+ln foo bar
+ln foo zzz
+
+cd ..
+$rsync -a --stats -H -- dir1/ dir3 2>&1 | tee log.txt
+TRANSFER=$(grep "Total transferred file size" log.txt)
+set -- ${TRANSFER}
+[ "$5" -lt 1048600 ] || sh -c 'echo "Transfered too much data, hardlinking must not have worked" 1>&2; false'
+compare_trees dir2 dir3

@@ -82,6 +82,7 @@
 .Op Fl -rsync-path Ns = Ns Ar program
 .Op Fl -size-only
 .Op Fl -specials
+.Op Fl -stats
 .Op Fl -suffix Ns = Ns Ar suffix
 .Op Fl -timeout Ns = Ns Ar seconds
 .Op Fl -times , Fl t
@@ -469,6 +470,10 @@ Skip files based only on size, don't check timestamp.
 Also transfer fifo and unix domain socket files.
 Negate with
 .Fl -no-specials .
+.It Fl -stats
+Print verbose statistics about the transfer at the end of the run.
+Provides details about how much data transfer was saved over a direct
+copy.
 .It Fl -suffix Ar suffix
 Sets the suffix to be appended to filenames when backing up with
 .Fl b .

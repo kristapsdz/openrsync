@@ -524,6 +524,7 @@ const struct option	 lopts[] = {
     { "server",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "size-only",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "specials",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "stats",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "suffix",		required_argument, NULL,		OP_SUFFIX },
     { "timeout",	required_argument, NULL,		OP_TIMEOUT },
     { "times",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
@@ -601,6 +602,7 @@ usage(void)
 	    "\t[--rsync-path=program]\n"
 	    "\t[--size-only]\n"
 	    "\t[--specials]\n"
+	    "\t[--stats]\n"
 	    "\t[--suffix=suffix]\n"
 	    "\t[--timeout=seconds]\n"
 	    "\t[--times, -t]\n"
@@ -678,6 +680,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				opts.size_only = true;
 			else if (strcmp(lopts[lidx].name, "specials") == 0)
 				opts.specials = true;
+			else if (strcmp(lopts[lidx].name, "stats") == 0)
+				opts.stats = true;
 			else if (strcmp(lopts[lidx].name, "times") == 0)
 				opts.preserve_times = true;
 			break;

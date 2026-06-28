@@ -28,6 +28,11 @@
 #else
 # include "compat_sbuf.h"
 #endif
+#if HAVE_HUMANIZE_NUMBER
+# include <libutil.h>
+#else
+# include "compat_humanize_number.h"
+#endif
 
 #include <assert.h>
 #include <ctype.h>
@@ -640,6 +645,22 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 			sbuf_printf(sbuf, widthstring,
 				    bytes_transferred);
 			break;
+		case 2:
+			humanize_number(buf, 5, bytes_transferred, "",
+			    HN_AUTOSCALE,
+			    HN_DECIMAL|HN_NOSPACE);
+			widthstring[l + 1] = 's';
+			widthstring[l + 2] = '\0';
+			sbuf_printf(sbuf, widthstring, buf);
+			break;
+		case 3:
+			humanize_number(buf, 5, bytes_transferred, "",
+			    HN_AUTOSCALE,
+			    HN_DECIMAL|HN_NOSPACE|HN_DIVISOR_1000);
+			widthstring[l + 1] = 's';
+			widthstring[l + 2] = '\0';
+			sbuf_printf(sbuf, widthstring, buf);
+			break;
 		}
 		break;
 	}
@@ -847,6 +868,22 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 				widthstring[l + 3] = 'd';
 				widthstring[l + 4] = '\0';
 				sbuf_printf(sbuf, widthstring, fl->st.size);
+				break;
+			case 2:
+				humanize_number(buf, 5, fl->st.size, "",
+				    HN_AUTOSCALE,
+				    HN_DECIMAL|HN_NOSPACE);
+				widthstring[l + 1] = 's';
+				widthstring[l + 2] = '\0';
+				sbuf_printf(sbuf, widthstring, buf);
+				break;
+			case 3:
+				humanize_number(buf, 5, fl->st.size, "",
+				    HN_AUTOSCALE,
+				    HN_DECIMAL|HN_NOSPACE|HN_DIVISOR_1000);
+				widthstring[l + 1] = 's';
+				widthstring[l + 2] = '\0';
+				sbuf_printf(sbuf, widthstring, buf);
 				break;
 			}
 		}
@@ -1059,6 +1096,38 @@ out:
 	}
 
 	return (rval | LOG_FORMAT_SUCCESS);
+}
+
+/*
+ * Print a number into the provided buffer depending on the current
+ * --human-readable level.
+ * Returns true on success, false if the buffer is too small.
+ */
+bool
+rsync_humanize(const struct sess *sess, char *buf, size_t len,
+    int64_t val)
+{
+	size_t	 res = 0; /* sprintf result */
+	char	 tbuf[32]; /* buffer */
+
+	switch (sess->opts->human_readable) {
+	case 0:
+		humanize_number(tbuf, sizeof(tbuf), val, "B", 0, 0);
+		res = snprintf(buf, len, "%s", tbuf);
+		break;
+	case 1:
+		humanize_number(tbuf, 9, val, "B",
+		    HN_AUTOSCALE, HN_DECIMAL|HN_DIVISOR_1000);
+		res = snprintf(buf, len, "%s", tbuf);
+		break;
+	case 2:
+		humanize_number(tbuf, 10, val, "B",
+		    HN_AUTOSCALE, HN_DECIMAL|HN_IEC_PREFIXES);
+		res = snprintf(buf, len, "%s", tbuf);
+		break;
+	}
+
+	return res < len;
 }
 
 bool
