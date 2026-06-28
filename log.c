@@ -29,7 +29,11 @@
 # include "compat_sbuf.h"
 #endif
 #if HAVE_HUMANIZE_NUMBER
-# include <libutil.h>
+# if __FreeBSD__
+#  include <libutil.h>
+# else
+#  include <util.h>
+# endif
 #else
 # include "compat_humanize_number.h"
 #endif
