@@ -50,7 +50,7 @@ UNAME      != uname
 LDADD	  += -lsbuf
 CFLAGS	  += -DHAVE_SBUF
 .endif
-.if $(UNAME) == "FreeBSD" || $(UNAME) == "NetBSD"
+.if $(UNAME) == "FreeBSD"
 LDADD	  += -lutil
 CFLAGS	  += -DHAVE_HUMANIZE_NUMBER
 .endif

@@ -505,10 +505,18 @@ struct	role {
 	const size_t	*phase; /* metadata phase */
 };
 
+struct xferstat {
+	size_t	   count;
+	double	   start_time; /* first time printed */
+	double	   last_time; /* last time printed */
+	uint64_t   last_bytes; /* last bytes printed */
+};
+
 /*
  * Values required during a communication session.
  */
 struct	sess {
+	struct xferstat	   xferstat; /* --progress stats, per-file */
 	char		  *token_buf; /* used for protocol token processing */
 	char		  *token_cbuf; /* decompression buffer */
 	char		  *token_dbuf; /* decompression buffer */

@@ -28,12 +28,12 @@
 #else
 # include "compat_sbuf.h"
 #endif
+/*
+ * NetBSD's humanize_number() doesn't support HN_IEC_PREFIXES.
+ * It also lives in util.h, not libutil.h.
+ */
 #if HAVE_HUMANIZE_NUMBER
-# if __FreeBSD__
-#  include <libutil.h>
-# else
-#  include <util.h>
-# endif
+# include <libutil.h>
 #else
 # include "compat_humanize_number.h"
 #endif
