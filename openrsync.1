@@ -35,6 +35,7 @@
 .Op Fl -copy-dest Ns = Ns Ar dir
 .Op Fl -cvs-exclude , Fl C
 .Op Fl -del , Fl -delete
+.Op Fl -delete-excluded
 .Op Fl -devices
 .Op Fl -dirs , Fl d
 .Op Fl -dry-run , Fl n
@@ -230,6 +231,12 @@ not found in
 directories.
 Only applicable with
 .Fl r .
+.It Fl -delete-excluded
+When used in combination with any one of the
+.Fl -delete
+options, supplied
+.Fl -exclude
+patterns will not prevent a file from being deleted.
 .It Fl -devices
 Also transfer device files.
 Negate with

@@ -384,7 +384,7 @@ struct	opts {
 	bool		 bit8;			/* -8 */
 	bool		 checksum;		/* -c */
 	bool		 compress;		/* -z */
-	bool		 del_excl;		/* FIXME NOTYET --delete-excluded */
+	bool		 del_excl;		/* --delete-excluded */
 	bool		 devices;		/* --devices */
 	bool		 dirs;			/* -d */
 	bool		 from0;			/* -0 */

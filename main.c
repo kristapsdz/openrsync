@@ -468,6 +468,7 @@ const struct option	 lopts[] = {
     { "cvs-exclude",	no_argument,	NULL,			'C' },
     { "del",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "delete",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "delete-excluded", no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "devices",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "dirs",		no_argument,	NULL,			'd' },
     { "dry-run",	no_argument,	NULL,			'n' },
@@ -556,6 +557,7 @@ usage(void)
 	    "\t[--copy-dest=dir]\n"
 	    "\t[--cvs-exclude, -C]\n"
 	    "\t[--del, --delete]\n"
+	    "\t[--delete-excluded]\n"
 	    "\t[--devices]\n"
 	    "\t[--dirs, -d]\n"
 	    "\t[--dry-run, -n]\n"
@@ -662,6 +664,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				opts.del = DMODE_BEFORE;
 			else if (strcmp(lopts[lidx].name, "delete") == 0)
 				opts.del = DMODE_BEFORE;
+			else if (strcmp(lopts[lidx].name, "delete-excluded") == 0)
+				opts.del_excl = true;
 			else if (strcmp(lopts[lidx].name, "devices") == 0)
 				opts.devices = true;
 			else if (strcmp(lopts[lidx].name, "group") == 0)
