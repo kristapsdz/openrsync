@@ -387,6 +387,7 @@ struct	opts {
 	bool		 del_excl;		/* FIXME NOTYET --delete-excluded */
 	bool		 devices;		/* --devices */
 	bool		 dirs;			/* -d */
+	bool		 from0;			/* -0 */
 	bool		 ignore_times;		/* -I */
 	bool		 hard_links;		/* -H */
 	bool		 no_motd;		/* --no-motd */

@@ -45,6 +45,7 @@ print_time(FILE *f, double time)
 /*
  * Print the transfer progress for a given file.  Only applies if the
  * client and having the progress boolean set.
+ * FIXME: move this function to a different place.
  */
 void
 rsync_progress(struct sess *sess, uint64_t total_bytes,

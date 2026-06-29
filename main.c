@@ -452,7 +452,7 @@ enum {
 	OP_TIMEOUT,
 };
 
-const char rsync_shopts[] = "468B:CDFHIJOPRVWabcde:f:ghlnoprtuvxz";
+const char rsync_shopts[] = "0468B:CDFHIJOPRVWabcde:f:ghlnoprtuvxz";
 const struct option	 lopts[] = {
     { "8-bit-output",	no_argument,	NULL,			'8' },
     { "address",	required_argument, NULL,		OP_ADDRESS },
@@ -474,6 +474,7 @@ const struct option	 lopts[] = {
     { "exclude",	required_argument, NULL,		OP_EXCLUDE },
     { "exclude-from",	required_argument, NULL,		OP_EXCLUDE_FROM },
     { "filter",		required_argument, NULL,		'f' },
+    { "from0",		no_argument,	NULL,			'0' },
     { "group",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "hard-links",	no_argument,	NULL,			'H' },
     { "help",		no_argument,	NULL,			'h' },
@@ -561,6 +562,7 @@ usage(void)
 	    "\t[--exclude-from=file]\n"
 	    "\t[--exclude=pattern]\n"
 	    "\t[--filter=filter, -f filter]\n"
+	    "\t[--from0, -0]\n"
 	    "\t[--group, -g]\n"
 	    "\t[--hard-links, -H]\n"
 	    "\t[--ignore-times, -I]\n"
@@ -733,6 +735,9 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			else if (strcmp(lopts[lidx].name, "no-whole-file") == 0)
 				*whole_file = 0;
 			break;
+		case '0':
+			opts.from0 = true;           
+			break;
 		case '4':
 			opts.ipf = 4;           
 			break;
@@ -779,7 +784,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			}
 			if (new_rule == NULL)
 				break;
-			(void)parse_rule(new_rule, RULE_NONE, '\n');
+			(void)parse_rule(new_rule, RULE_NONE,
+				opts.from0 ? '\0' : '\n');
 			break;
 		case 'H':
 			opts.hard_links = true;
@@ -830,7 +836,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			opts.ssh_prog = optarg;
 			break;
 		case 'f':
-			if (!parse_rule(optarg, RULE_NONE, '\n'))
+			if (!parse_rule(optarg, RULE_NONE,
+			    opts.from0 ? '\0' : '\n'))
 				errx(ERR_SYNTAX, "--filter=%s: syntax "
 				    "error", optarg);
 			break;
@@ -926,7 +933,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				    "error", optarg);
 			break;
 		case OP_EXCLUDE_FROM:
-			parse_file_rule(optarg, RULE_EXCLUDE, '\n');
+			parse_file_rule(optarg, RULE_EXCLUDE,
+			    opts.from0 ? '\0' : '\n');
 			break;
 		case OP_INCLUDE:
 			if (!parse_rule(optarg, RULE_INCLUDE, '\0'))
@@ -934,7 +942,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				    "error in include", optarg);
 			break;
 		case OP_INCLUDE_FROM:
-			parse_file_rule(optarg, RULE_INCLUDE, '\n');
+			parse_file_rule(optarg, RULE_INCLUDE,
+			    opts.from0 ? '\0' : '\n');
 			break;
 		case OP_LINK_DEST:
 			if (opts.alt_base_mode != BASE_MODE_OFF &&

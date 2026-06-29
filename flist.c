@@ -1735,7 +1735,8 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 		}
 
 		if (ent->fts_info == FTS_D)
-			rules_dir_push(fts_path, stripdir, '\n');
+			rules_dir_push(fts_path, stripdir,
+			    sess->opts->from0 ? '\0' : '\n');
 
 		/* We don't allow symlinks without -l. */
 

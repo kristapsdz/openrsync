@@ -41,6 +41,7 @@
 .Op Fl -exclude-from Ns = Ns Ar file
 .Op Fl -exclude Ns = Ns Ar pattern
 .Op Fl -filter Ns = Ns Ar filter , Fl f filter
+.Op Fl -from0 , Fl 0
 .Op Fl -group , Fl g
 .Op Fl -hard-links , Fl H
 .Op Fl -ignore-times , Fl I
@@ -277,6 +278,17 @@ Regular filter files are processed immediately, while per-directory
 filter files are processed as directories are encountered.
 See
 .Sx FILTER RULES .
+.It -from0 , Fl 0
+Use a NUL
+.Sq \e0
+character, rather than a newline, to separate filenames read from:
+.Fl -exclude-from ,
+.Fl -include-from ,
+and any merged files specified in
+.Fl -filter
+rules.
+Does not affect
+.Fl -cvs-exclude .
 .It Fl -group , Fl g
 Set the group name to match the source.
 For example, group
