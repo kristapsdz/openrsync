@@ -136,13 +136,21 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "--sender");
 
 	switch (sess->opts->del) {
+	case DMODE_AFTER:
+		addargs(&args, "--delete-after");
+		break;
 	case DMODE_BEFORE:
-		addargs(&args, "--delete");
+		addargs(&args, "--delete-before");
+		break;
+	case DMODE_DELAY:
+		addargs(&args, "--delete-delay");
 		break;
 	case DMODE_DURING:
-		/* FALLTHROUGH */
-	case DMODE_DELAY:
-		/* FALLTHROUGH */
+		addargs(&args, "--delete-during");
+		break;
+	case DMODE_UNSPECIFIED:
+		addargs(&args, "--delete");
+		break;
 	default:
 		break;
 	}

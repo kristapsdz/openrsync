@@ -149,6 +149,7 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 	sess.opts = opts;
 	sess.mode = f->mode;
 	sess.lver = sess.protocol = RSYNC_PROTOCOL;
+	sess.wbatch_fd = -1;
 
 	LOG4("Printing(%d): itemize %d late %d", getpid(), 0, 0);
 

@@ -35,6 +35,10 @@
 .Op Fl -copy-dest Ns = Ns Ar dir
 .Op Fl -cvs-exclude , Fl C
 .Op Fl -del , Fl -delete
+.Op Fl -delete-after
+.Op Fl -delete-before
+.Op Fl -delete-delay
+.Op Fl -delete-during
 .Op Fl -delete-excluded
 .Op Fl -devices
 .Op Fl -dirs , Fl d
@@ -231,6 +235,37 @@ not found in
 directories.
 Only applicable with
 .Fl r .
+.It Fl -delete-after
+Execute the action of
+.Fl -delete
+after the transfer has completed.
+This option is mutually exclusive with
+.Fl -delete-before ,
+.Fl -delete-during ,
+and
+.Fl -delete-delay .
+.It Fl -delete-before
+Execute the action of
+.Fl -delete
+before the transfer begins.
+This is the default timing when
+.It Fl -delete
+is used.
+This option is mutually exclusive with
+.Fl -delete-during ,
+.Fl -delete-delay ,
+and
+.Fl -delete-after .
+.It Fl -delete-during
+Execute the action of
+.Fl -delete
+as the transfer happens, right before each directory to be transferred
+is checked for updates.
+This option is mutually exclusive with
+.Fl -delete-before ,
+.Fl -delete-delay ,
+and
+.Fl -delete-after .
 .It Fl -delete-excluded
 When used in combination with any one of the
 .Fl -delete

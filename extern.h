@@ -259,13 +259,15 @@ enum log_type {
 };
 
 /*
- * Delete modes.  Currently only supports DMODE_BEFORE or no deletion.
+ * Delete modes.
  */
 enum	delmode {
 	DMODE_NONE = 0,
-	DMODE_BEFORE,
-	DMODE_DURING, /* FIXME: NOT SUPPORTED */
-	DMODE_DELAY, /* FIXME: NOT SUPPORTED */
+	DMODE_UNSPECIFIED, /* delete, but unspecified how */
+	DMODE_BEFORE, /* compute and delete files up-front (default) */
+	DMODE_DURING, /* compute and delete files during xfer */
+	DMODE_DELAY, /* compute during xfer, delete after */
+	DMODE_AFTER, /* compute and delete after */
 };
 
 /* --numeric-ids mode */
@@ -548,6 +550,7 @@ struct	sess {
 	enum fmode	   mode; /* sender or receiver */
 	int		   mplex_reads; /* multiplexing reads? */
 	int		   mplex_writes; /* multiplexing writes? */
+	int		   wbatch_fd; /* TODO */
 	int32_t		   lver; /* local version */
 	int32_t		   protocol; /* negotiated protocol version */
 	int32_t		   rver; /* remote version */
@@ -752,6 +755,7 @@ void		 download_free(struct sess *, struct download *);
 struct upload	*upload_alloc(const char *, int, int, size_t,
 		    struct flist *, size_t, size_t, mode_t);
 void		upload_free(struct upload *);
+void		upload_del(struct upload *, const struct sess *);
 
 struct blktab	*blkhash_alloc(void);
 bool		 blkhash_set(struct blktab *, const struct blkset *);

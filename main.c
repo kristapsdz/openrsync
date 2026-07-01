@@ -468,6 +468,10 @@ const struct option	 lopts[] = {
     { "cvs-exclude",	no_argument,	NULL,			'C' },
     { "del",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "delete",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "delete-after",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "delete-before",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "delete-delay",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "delete-during",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "delete-excluded", no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "devices",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "dirs",		no_argument,	NULL,			'd' },
@@ -557,6 +561,10 @@ usage(void)
 	    "\t[--copy-dest=dir]\n"
 	    "\t[--cvs-exclude, -C]\n"
 	    "\t[--del, --delete]\n"
+	    "\t[--delete-after]\n"
+	    "\t[--delete-before]\n"
+	    "\t[--delete-delay]\n"
+	    "\t[--delete-during]\n"
 	    "\t[--delete-excluded]\n"
 	    "\t[--devices]\n"
 	    "\t[--dirs, -d]\n"
@@ -661,9 +669,17 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 		switch (c) {
 		case OP_SET_BOOL_TRUE:
 			if (strcmp(lopts[lidx].name, "del") == 0)
-				opts.del = DMODE_BEFORE;
+				opts.del = DMODE_UNSPECIFIED;
 			else if (strcmp(lopts[lidx].name, "delete") == 0)
+				opts.del = DMODE_UNSPECIFIED;
+			else if (strcmp(lopts[lidx].name, "delete-after") == 0)
+				opts.del = DMODE_AFTER;
+			else if (strcmp(lopts[lidx].name, "delete-before") == 0)
 				opts.del = DMODE_BEFORE;
+			else if (strcmp(lopts[lidx].name, "delete-delay") == 0)
+				opts.del = DMODE_DELAY;
+			else if (strcmp(lopts[lidx].name, "delete-during") == 0)
+				opts.del = DMODE_DURING;
 			else if (strcmp(lopts[lidx].name, "delete-excluded") == 0)
 				opts.del_excl = true;
 			else if (strcmp(lopts[lidx].name, "devices") == 0)
@@ -855,10 +871,7 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			opts.preserve_links = true;
 			break;
 		case 'n':
-			if (opts.dry_run == DRY_DISABLED)
-				opts.dry_run = DRY_XFER;
-			else if (opts.dry_run == DRY_XFER)
-				opts.dry_run = DRY_FULL;
+			opts.dry_run = DRY_FULL;
 			break;
 		case 'o':
 			opts.preserve_uids = true;
@@ -1008,7 +1021,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 		}
 	}
 
-	if (opts.del > DMODE_NONE && !(opts.recursive || opts.dirs))
+	if (opts.del >= DMODE_UNSPECIFIED &&
+	    !(opts.recursive || opts.dirs))
 		errx(ERR_SYNTAX, "--delete does not work without "
 		    "--recursive or --dirs");
 
@@ -1026,7 +1040,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 		if ((opts.backup_suffix = strdup("~")) == NULL)
 			err(ERR_NOMEM, NULL);
 
-	if (opts.backup && opts.del > DMODE_NONE) {
+	if (opts.backup && opts.del > DMODE_UNSPECIFIED &&
+	    !opts.del_excl) {
 		snprintf(rbuf, sizeof(rbuf), "P *%s",
 		    opts.backup_suffix);
 		if (!parse_rule(rbuf, RULE_NONE, 0))
@@ -1050,6 +1065,15 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 		poll_timeout = -1;
 	else
 		poll_timeout *= 1000;
+
+	/*
+	 * FIXME: rsync started defaulting to --delete-during in later
+	 * versions of the protocol (30 and up).  This computation
+	 * should eventually occur after protocol negotiation.
+	 */
+
+	if (opts.del == DMODE_UNSPECIFIED)
+		opts.del = DMODE_BEFORE;
 
 	if (!opts.server && cvs_excl) {
 		(void)parse_rule("-C", RULE_NONE, '\n');

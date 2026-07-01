@@ -734,8 +734,7 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 	}
 
 	/*
-	 * Begin by conditionally getting all files we have currently
-	 * available in our destination.
+	 * Begin by deleting everything instructed prior to transmission.
 	 */
 
 	if (sess->opts->del == DMODE_BEFORE) {
@@ -744,9 +743,6 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 			ERRX1("rsync_receiver");
 			goto out;
 		}
-
-		/* If we have a local set, go for the deletion. */
-
 		flist_del(sess, dfd, dfl, dflsz);
 	}
 
@@ -893,7 +889,7 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 
 				if (sess->opts->hard_links &&
 				    phase == 2 &&
-				    sess->opts->dry_run == DRY_DISABLED)
+				    !sess->opts->dry_run)
 					make_hardlinks(sess, fl, flsz, &hls, dfd);
 
 				LOG3("%s: receiver ready for phase %d "
@@ -915,6 +911,22 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 	}
 
 	assert(phase == max_phase + 1);
+
+	/*
+	 * Following transfers, we'll take care of --delete-after.
+	 * If performing a --delete-delay, however, we've already
+	 * computed the delete list, so use it directly.
+	 */
+
+	if (sess->opts->del == DMODE_AFTER) {
+		if (!flist_gen_dels(sess, root, &dfl, &dflsz, fl,
+		    flsz)) {
+			ERRX1("flist_gen_dels");
+			goto out;
+		}
+		flist_del(sess, dfd, dfl, dflsz);
+	} else if (sess->opts->del == DMODE_DELAY)
+		upload_del(ul, sess);
 
 	/*
 	 * Now all of our transfers are complete, so we can fix up our

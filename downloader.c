@@ -93,6 +93,7 @@ struct	download {
 	size_t		    obufmax; /* max size we'll wbuffer */
 	bool		    needredo; /* needs redo phase */
 	size_t		    curtok; /* current token (compression) */
+	off_t		    fdpos; /* current pre-buffer position in file */
 };
 
 
@@ -124,15 +125,34 @@ download_reinit(struct sess *sess, struct download *p, size_t idx)
 	/* Don't touch p->obufmax. */
 	/* Don't touch p->needredo. */
 	p->curtok = 0;
+	p->fdpos = 0;
 	MD4_Update(&p->ctx, &seed, sizeof(int32_t));
 	(void)decompress_reinit();
+}
+
+/*
+ * TODO: this is a placeholder.
+ */
+static bool
+sess_is_inplace(const struct sess *sess)
+{
+	return false;
 }
 
 static inline bool
 download_is_inplace(struct sess *sess, struct download *p,
     bool resumed_only)
 {
-	return false;
+	if (!sess_is_inplace(sess))
+		return false;
+	if (!resumed_only)
+		return true;
+
+	/*
+	 * We're definitely inplace, but we're only a resumed transfer
+	 * if we actually have the previous file mapped.
+	 */
+	return p->ofd >= 0;
 }
 
 /*
@@ -349,6 +369,7 @@ buf_copy_chunk(struct download *p, const char **pwritebuf,
 	 * the new block.
 	 */
 
+	p->fdpos += clipsz;
 	*pwritebuf += clipsz;
 	*pwritesz -= clipsz;
 	return true;
@@ -819,14 +840,29 @@ protocol_token_ff(struct sess *sess, struct download *p, size_t tok)
 	 * from, i.e., if we were able to map our origin file and create
 	 * a block profile from it.
 	 */
-
-	if (!buf_copy(buf, sz, p, sess)) {
+	if (download_is_inplace(sess, p, true) && p->total == off) {
 		fmap_untrap(p->map);
-		ERRX("buf_copy");
-		return TOKEN_ERROR;
-	}
 
-	fmap_untrap(p->map);
+		/* Flush any pending data before we seek ahead. */
+
+		if (!sess->opts->dry_run &&
+		    !buf_copy(NULL, 0, p, sess)) {
+			ERRX("buf_copy");
+			return TOKEN_ERROR;
+		}
+		if (p->fd >= 0 && lseek(p->fd, sz, SEEK_CUR) == -1) {
+			ERRX1("lseek");
+			return TOKEN_ERROR;
+		}
+
+	} else {
+		if (!buf_copy(buf, sz, p, sess)) {
+			fmap_untrap(p->map);
+			ERRX("buf_copy");
+			return TOKEN_ERROR;
+		}
+		fmap_untrap(p->map);
+	}
 
 	if (!sess->opts->dry_run && !buf_copy(NULL, 0, p, sess)) {
 		ERRX("buf_copy");
@@ -1238,7 +1274,7 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 		 *  data, record it and throw it away.
 		 */
 
-		if (sess->opts->dry_run)
+		if (sess->opts->dry_run && sess->wbatch_fd == -1)
 			return 1;
 
 		/*
@@ -1326,7 +1362,7 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 	if (p->state == DOWNLOAD_READ_LOCAL) {
 		assert(p->fname == NULL);
 
-		if (sess->opts->dry_run) {
+		if (sess->opts->dry_run && sess->wbatch_fd == -1) {
 			/*
 			 * Ideally we'd just be able to drive the token
 			 * protocol a little more cleanly.
@@ -1360,6 +1396,16 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 
 		*ofd = -1;
 
+		/*
+		 * For the only-write-batch case, we need to map the
+		 * file to do the delta algorithm on it.
+		 */
+
+		if (sess->opts->dry_run && sess->wbatch_fd != -1) {
+			p->state = DOWNLOAD_READ_REMOTE;
+			return 1;
+		}
+
 		/* Create the temporary file. */
 
 		if (mktemplate(&p->fname, f->path,
@@ -1369,7 +1415,7 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 			goto out;
 		}
 
-		if ((p->fd = mkstempat(p->rootfd, p->fname)) == -1) {
+		if ((p->fd = mkstempat(TMPDIR_FD, p->fname)) == -1) {
 			ERR("mkstempat: %s", p->fname);
 			goto out;
 		} else if (p->ofd != -1)
@@ -1444,7 +1490,7 @@ again:
 		p->obufsz = 0;
 	}
 
-	assert(p->fd == -1 || p->obufsz == 0 || sess->opts->dry_run);
+	assert(p->fd < 0 || p->obufsz == 0 || sess->opts->dry_run);
 	assert(tokres == TOKEN_EOF);
 
 	/*
@@ -1478,6 +1524,7 @@ again:
 		}
 
 		f->flstate |= FLIST_REDO;
+		p->needredo++;
 		goto done;
 	}
 
@@ -1530,8 +1577,8 @@ again:
 	 * up being incorrect.
 	 */
 
-	//if (ftruncate(p->fd, p->fdpos) == -1)
-	//	ERR("%s: ftruncate", f->path);
+	if (ftruncate(p->fd, p->fdpos) == -1)
+		ERR("%s: ftruncate", f->path);
 
 	if (!download_is_inplace(sess, p, false)) {
 		fromfd = TMPDIR_FD;
@@ -1564,7 +1611,7 @@ done:
 	 * ahead and cleanup the --partial-dir if it was a relative path.
 	 */
 	download_cleanup(sess, p,
-	    (f->flstate & (FLIST_REDO | FLIST_SUCCESS)) != 0);
+	    (f->flstate & (FLIST_REDO | FLIST_SUCCESS)));
 
 	if (!(f->flstate & FLIST_REDO)) {
 		if (usethis == NULL)

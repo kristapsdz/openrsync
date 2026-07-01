@@ -935,6 +935,14 @@ send_rules(struct sess *sess, int fd)
 			 postlen, /* length of postfix */
 			 i; /* temporary index */
 	int		 writelen; /* write length */
+	const int	 batch_saved = sess->wbatch_fd;
+
+	/*
+	 * Don't send rules to the batch file, they are transfered via the
+	 * batch shell script that is created beside the batch file.
+	 */
+
+	sess->wbatch_fd = -1;
 
 	for (i = 0; i < global_ruleset.numrules; i++) {
 		r = &global_ruleset.rules[i];
@@ -971,6 +979,10 @@ send_rules(struct sess *sess, int fd)
 
 	if (!io_write_int(sess, fd, 0))
 		err(ERR_SOCK_IO, "send rules");
+
+	/* Restore batch fd. */
+
+	sess->wbatch_fd = batch_saved;
 }
 
 void

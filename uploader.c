@@ -399,7 +399,7 @@ pre_dev(struct upload *p, struct sess *sess)
 	if (rc != -1 && !(S_ISBLK(st.st_mode) || S_ISCHR(st.st_mode))) {
 		if (!sess->opts->dry_run) {
 			if (force_delete_applicable(p, sess, st.st_mode))
-				if (pre_dir_delete(p, sess, DMODE_DURING) == 0)
+				if (!pre_dir_delete(p, sess, DMODE_DURING))
 					return -1;
 			if (S_ISDIR(st.st_mode) &&
 			    unlinkat(p->rootfd, f->path, AT_REMOVEDIR) == -1) {
@@ -845,6 +845,7 @@ pre_dir_delete(struct upload *p, struct sess *sess, enum delmode delmode)
 	ret = true;
 out:
 	if (delmode == DMODE_DURING) {
+		/* FIXME: why isn't the cmp in flist_del()? */
 		qsort(p->dfl, p->dflsz, sizeof(struct flist), flist_dir_cmp);
 		flist_del(sess, p->rootfd, p->dfl, p->dflsz);
 		flist_free(p->dfl, p->dflsz);
@@ -856,6 +857,18 @@ out:
 	free(dirpath);
 	hdestroy();
 	return ret;
+}
+
+/*
+ * Perform a delayed delete on the pre-computed delete list.
+ */
+void
+upload_del(struct upload *p, const struct sess *sess)
+{
+	assert(sess->opts->del == DMODE_DELAY);
+	/* FIXME: why isn't the cmp in flist_del()? */
+	qsort(p->dfl, p->dflsz, sizeof(struct flist), flist_dir_cmp);
+	flist_del(sess, p->rootfd, p->dfl, p->dflsz);
 }
 
 /*
@@ -969,7 +982,7 @@ pre_dir(struct upload *p, struct sess *sess)
 			}
 		}
 	} else if (rc != -1) {
-		if ((f->iflags & IFLAG_NEW) == 0) {
+		if (!(f->iflags & IFLAG_NEW)) {
 			LOG3("%s: updating directory", f->path);
 			f->iflags |= itemize_changes(sess, &st, f);
 		}
@@ -1439,6 +1452,7 @@ pre_file(struct upload *p, int *filefd, off_t *size, struct sess *sess,
 			 uflags = 0; /* unlinkat flags */
 	bool 		 do_unlink = false, /* unlink dir */
 			 dry_run = false, /* dry-run */
+			 dry_xfer = false, /* xfer-only dry-run */
 			 dry_full = false, /* full dry-run */
 			 fix_metadata, /* fix up metadata */
 			 failed; /* fix_metadata failed */
@@ -1461,8 +1475,19 @@ pre_file(struct upload *p, int *filefd, off_t *size, struct sess *sess,
 	 * in the rsync_uploader() function.
 	 */
 
-	if (sess->opts->dry_run)
+	switch (sess->opts->dry_run) {
+	case DRY_DISABLED:
+		dry_run = dry_xfer = dry_full = false;
+		break;
+	case DRY_XFER:
+		dry_run = dry_xfer = true;
+		dry_full = false;
+		break;
+	case DRY_FULL:
 		dry_run = dry_full = true;
+		dry_xfer = false;
+		break;
+	}
 
 	*size = 0;
 	*filefd = -1;
@@ -1481,7 +1506,7 @@ pre_file(struct upload *p, int *filefd, off_t *size, struct sess *sess,
 
 	if (rc == 2 && !S_ISREG(st.st_mode)) {
 		if (force_delete_applicable(p, sess, st.st_mode))
-			if (pre_dir_delete(p, sess, DMODE_DURING) == 0)
+			if (!pre_dir_delete(p, sess, DMODE_DURING))
 				return -1;
 
 		/*
@@ -1596,7 +1621,10 @@ fixed:
 		}
 	}
 
-	if (!dry_full && rc < 3) {
+	if (p->rootfd == -1 && sess->opts->dry_run == DRY_XFER) {
+		/* We just want to pretend to transfer the file */
+		return 1;
+	} else if (!dry_full && rc < 3) {
 		*size = 0;
 		*filefd = openat(p->rootfd, f->path, O_RDONLY | O_NOFOLLOW);
 		if (*filefd == -1 && (errno == EACCES || errno == EPERM)) {
@@ -1616,6 +1644,9 @@ fixed:
 	}
 
 	if (dry_run) {
+		if (dry_xfer)
+			return 1;
+
 		if (*filefd != -1) {
 			close(*filefd);
 			*filefd = -1;
@@ -1639,6 +1670,7 @@ fixed:
 	f->iflags |= IFLAG_TRANSFER;
 	return 1;
 }
+
 
 /*
  * Allocate an uploader object in the correct state to start.  Returns
@@ -1967,6 +1999,14 @@ rsync_uploader(struct upload *u, struct sess *sess, int revents,
 		 */
 
 		u->state = UPLOAD_FIND_NEXT;
+
+		/*
+		 * For delay-updates, there's no use scanning the flist
+		 * for every file since they won't flip to SUCCESS until
+		 * after the delayed updates have been processed.
+		 */
+
+		rsync_uploader_ack_complete(u, sess, *fileoutfd);
 		return 1;
 	}
 
@@ -1986,7 +2026,7 @@ rsync_uploader(struct upload *u, struct sess *sess, int revents,
 		for ( ; u->idx < u->flsz; u->idx++) {
 			assert(u->fl[u->idx].sendidx != -1);
 			if (u->phase == PHASE_REDO &&
-			    (u->fl[u->idx].flstate & FLIST_REDO) == 0)
+			    !(u->fl[u->idx].flstate & FLIST_REDO))
 				continue;
 			else if (u->phase == PHASE_DLUPDATES)
 				continue;

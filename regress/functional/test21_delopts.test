@@ -1,0 +1,121 @@
+#! /bin/sh
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+delopt_prepare() {
+	rm -rf dir1 dir2 dir3
+	# make the copy-from-here tree
+	mkdir dir1
+	cd dir1
+	generate_tree_1
+	# make the tree we want to compare to
+	mkdir ../dir2
+	cd ../dir2
+	generate_tree_1
+
+	cd ..
+
+	# Drop some stuff in the destination to delete
+	mkdir -p dir3/abandoned_dir
+	touch dir3/abandoned_file
+	ln -s /dev/null dir3/abandoned_link
+}
+
+check_abandoned() {
+	if [ -e dir3/abandoned_dir ]; then
+		1>&2 echo "abandoned_dir not cleaned up"
+		return 1
+	elif [ -e dir3/abandoned_file ]; then
+		1>&2 echo "abandoned_file not cleaned up"
+		return 1
+	elif [ -e dir3/abandoned_link ]; then
+		1>&2 echo "abandoned_link not cleaned up"
+		return 1
+	fi
+
+	return 0
+}
+
+check_abandoned_exists() {
+	if [ ! -e dir3/abandoned_dir ]; then
+		1>&2 echo "abandoned_dir cleaned up"
+		return 1
+	elif [ ! -e dir3/abandoned_file ]; then
+		1>&2 echo "abandoned_file cleaned up"
+		return 1
+	elif [ ! -e dir3/abandoned_link ]; then
+		1>&2 echo "abandoned_link cleaned up"
+		return 1
+	fi
+
+	return 0
+}
+
+delopt_prepare
+$rsync -a --delete-before -- dir1/ dir3
+if ! check_abandoned ; then
+	exit 1
+fi
+
+delopt_prepare
+$rsync -a --delete-during -- dir1/ dir3
+if ! check_abandoned ; then
+	exit 1
+fi
+
+# rsync 3.x and openrsync only
+#delopt_prepare
+#rsync -a --delete-delay -- dir1/ dir3
+#if ! check_abandoned ; then
+#	exit 1
+#fi
+
+delopt_prepare
+$rsync -a --delete-after -- dir1/ dir3
+if ! check_abandoned ; then
+	exit 1
+fi
+
+# Now attempt a dry-run, make sure we don't delete anything.  It's sufficient to
+# just test before and during, as after and delay will use the same deletion
+# mechanism as before that we know respects dry-runs if these two do.
+delopt_prepare
+$rsync -an --delete-before -- dir1/ dir3
+if check_abandoned 2>/dev/null ; then
+	echo "fasdfasd"
+	exit 1
+fi
+
+delopt_prepare
+$rsync -an --delete-during -- dir1/ dir3
+if check_abandoned 2>/dev/null ; then
+	exit 1
+fi
+
+# Finally, check that exclusions apply up until they don't.  For this one,
+# -before/-after and -during/-delay are implemented with the same logic.
+delopt_prepare
+$rsync -a --exclude="abandoned_*" --delete-before -- dir1/ dir3
+if ! check_abandoned_exists 2>/dev/null ; then
+	exit 1
+fi
+
+delopt_prepare
+$rsync -a --exclude="abandoned_*" --delete-before --delete-excluded -- dir1/ dir3
+if ! check_abandoned ; then
+	exit 1
+fi
+
+delopt_prepare
+$rsync -a --exclude="abandoned_*" --delete-during -- dir1/ dir3
+if ! check_abandoned_exists 2>/dev/null ; then
+	exit 1
+fi
+
+delopt_prepare
+$rsync -a --exclude="abandoned_*" --delete-during --delete-excluded -- dir1/ dir3
+if ! check_abandoned ; then
+	exit 1
+fi
+

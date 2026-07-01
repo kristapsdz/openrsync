@@ -866,6 +866,69 @@ send_up_fsm(struct sess *sess, size_t *phase, struct send_up *up,
 }
 
 /*
+ * Deal with the conditional "follows" flags for extra iflag metadata.
+ * Returns -1 on error, 0 for incomplete, 1 when complete.
+ */
+static int
+sender_get_iflags(struct iobuf *buf, struct flist *fl,
+    struct send_dl *sdl)
+{
+	uint8_t	 basis; /* raw "follows" byte */
+	int	 ret; /* vstring return code */
+
+	fl = &fl[sdl->idx];
+	if (fl->iflags & IFLAG_BASIS_FOLLOWS) {
+		if (iobuf_get_readsz(buf) < sizeof(uint8_t)) {
+			if (iobuf_seen_eof(buf)) {
+				ERR("hangup while awaiting iflags");
+				return -1;
+			}
+			return 0;
+		}
+
+		iobuf_read_byte(buf, &basis);
+		fl->basis = basis;
+
+		if (fl->iflags & IFLAG_HLINK_FOLLOWS) {
+			fl->iflags |= IFLAG_HAD_BASIS;
+			fl->iflags &= ~IFLAG_BASIS_FOLLOWS;
+		}
+	}
+
+	if (fl->iflags & IFLAG_HLINK_FOLLOWS) {
+		ret = iobuf_read_vstring(buf, &sdl->linkstr);
+		if (ret <= 0)
+			return ret;
+
+		fl->link = sdl->linkstr.vstring_buffer;
+		if (fl->iflags & IFLAG_HAD_BASIS) {
+			fl->iflags &= ~IFLAG_HAD_BASIS;
+			fl->iflags |= IFLAG_BASIS_FOLLOWS;
+		}
+	}
+
+	return 1;
+}
+
+
+/*
+ * Send the itemization flags for an index over the wire.  Deal with the
+ * conditional "follows" flags for extra metadata.  Returns true on
+ * success, false on failure.
+ */
+static bool
+send_iflags(struct sess *sess, void **wb, size_t *wbsz, size_t *wbmax,
+    size_t *pos, const struct flist *fl, int32_t idx)
+{
+	if (!io_lowbuffer_alloc(sess, wb, wbsz, wbmax, sizeof(int32_t))) {
+		ERRX1("io_lowbuffer_alloc");
+		return false;
+	}
+	io_lowbuffer_int(sess, *wb, pos, *wbsz, idx);
+	return true;
+}
+
+/*
  * Enqueue a download request, getting it off the read channel as
  * quickly a possible.
  * This frees up the read channel for further incoming requests.
@@ -970,69 +1033,6 @@ send_dl_enqueue(struct sess *sess, struct send_dlq *q, int32_t idx,
 }
 
 /*
- * Deal with the conditional "follows" flags for extra iflag metadata.
- * Returns -1 on error, 0 for incomplete, 1 when complete.
- */
-static int
-sender_get_iflags(struct iobuf *buf, struct flist *fl,
-    struct send_dl *sdl)
-{
-	uint8_t	 basis; /* raw "follows" byte */
-	int	 ret; /* vstring return code */
-
-	fl = &fl[sdl->idx];
-	if (fl->iflags & IFLAG_BASIS_FOLLOWS) {
-		if (iobuf_get_readsz(buf) < sizeof(uint8_t)) {
-			if (iobuf_seen_eof(buf)) {
-				ERR("hangup while awaiting iflags");
-				return -1;
-			}
-			return 0;
-		}
-
-		iobuf_read_byte(buf, &basis);
-		fl->basis = basis;
-
-		if ((fl->iflags & IFLAG_HLINK_FOLLOWS) != 0) {
-			fl->iflags |= IFLAG_HAD_BASIS;
-			fl->iflags &= ~IFLAG_BASIS_FOLLOWS;
-		}
-	}
-
-	if (fl->iflags & IFLAG_HLINK_FOLLOWS) {
-		ret = iobuf_read_vstring(buf, &sdl->linkstr);
-		if (ret <= 0)
-			return ret;
-
-		fl->link = sdl->linkstr.vstring_buffer;
-		if ((fl->iflags & IFLAG_HAD_BASIS) != 0) {
-			fl->iflags &= ~IFLAG_HAD_BASIS;
-			fl->iflags |= IFLAG_BASIS_FOLLOWS;
-		}
-	}
-
-	return 1;
-}
-
-
-/*
- * Send the itemization flags for an index over the wire.  Deal with the
- * conditional "follows" flags for extra metadata.  Returns true on
- * success, false on failure.
- */
-static bool
-send_iflags(struct sess *sess, void **wb, size_t *wbsz, size_t *wbmax,
-    size_t *pos, const struct flist *fl, int32_t idx)
-{
-	if (!io_lowbuffer_alloc(sess, wb, wbsz, wbmax, sizeof(int32_t))) {
-		ERRX1("io_lowbuffer_alloc");
-		return false;
-	}
-	io_lowbuffer_int(sess, *wb, pos, *wbsz, idx);
-	return true;
-}
-
-/*
  * Read off the last file index, which should be -1.
  * Returns false on failure, true on success.
  */
@@ -1110,7 +1110,8 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 			    dirfd, /* openat() first argument */
 			    nlinkflag, /* openat() argument */
 			    oflags, /* openat() argument */
-			    bret; /* temporary */
+			    bret, /* temporary */
+			    writefd; /* switch batch/fdout */
 	int32_t		    idx; /* current block index */
 	ssize_t		    ssz; /* temporary */
 	bool		    ret, /* temporary */
@@ -1160,8 +1161,9 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 	if (!sess->opts->server) {
 		check_send_rules(sess);
 		/* Client sends zero-length exclusions if deleting. */
-		if (sess->opts->del && !sess->opts->del_excl)
+		if (sess->opts->del && !sess->opts->del_excl) {
 			send_rules(sess, fdout);
+		}
 	}
 
 	/* If we're the server, read our rules. */
@@ -1475,7 +1477,7 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 		 * event for output.
 		 */
 
-	  check_other:
+check_other:
 		if (pfd[2].revents & POLLIN) {
 			assert(up.cur != NULL);
 			assert(up.stat.fd != -1);
@@ -1515,16 +1517,30 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 		 */
 
 		if ((pfd[1].revents & POLLOUT) && wbufsz > 0) {
+			writefd = fdout;
+
 			assert(pfd[2].fd == -1);
 			assert(wbufsz - wbufpos);
 
-			ssz = write(fdout, wbuf + wbufpos, wbufsz - wbufpos);
+			/*
+			 * If we're writing a batch file, we just send the file
+			 * data straight to the batch.  We still need to catch
+			 * the end of phase marker and send that over to the
+			 * other side.
+			 */
+
+			if (up.stat.curst != BLKSTAT_PHASE &&
+			    sess->wbatch_fd != -1 &&
+			    sess->opts->dry_run == DRY_XFER)
+				writefd = sess->wbatch_fd;
+
+			ssz = write(writefd, wbuf + wbufpos, wbufsz - wbufpos);
 			if (ssz == -1) {
 				ERR("write");
 				goto out;
 			}
 
-			if (!io_data_written(sess, fdout,
+			if (!io_data_written(sess, writefd,
 			    wbuf + wbufpos, ssz)) {
 				ERRX1("io_data_written");
 				goto out;

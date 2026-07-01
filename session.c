@@ -130,6 +130,7 @@ bool
 sess_stats_send(struct sess *sess, int fd)
 {
 	uint64_t	 tw, tr, ts;
+	int		 statfd = -1;
 
 	tw = sess->total_write;
 	tr = sess->total_read;
@@ -141,17 +142,31 @@ sess_stats_send(struct sess *sess, int fd)
 	if (verbose > 0 || sess->opts->stats)
 		stats_log(sess, tr, tw, ts);
 
-	if (!sess->opts->server && verbose == 0)
+	if (!sess->opts->server && sess->wbatch_fd == -1 && verbose == 0)
 		return true;
 
-	if (sess->opts->server) {
-		if (!io_write_ulong(sess, fd, tr)) {
+	/*
+	 * The client-sender doesn't need to send stats, unless we're
+	 * writing a batch file; they're going to be read by a
+	 * client-receiver, and will be expecting stats.  In that case,
+	 * we'll just write the stats directly to the batch file.
+	 */
+
+	if (sess->opts->server || sess->wbatch_fd != -1) {
+		if (sess->opts->server)
+			statfd = fd;
+		else
+			statfd = sess->wbatch_fd;
+	}
+
+	if (statfd != -1) {
+		if (!io_write_ulong(sess, statfd, tr)) {
 			ERRX1("io_write_ulong");
 			return false;
-		} else if (!io_write_ulong(sess, fd, tw)) {
+		} else if (!io_write_ulong(sess, statfd, tw)) {
 			ERRX1("io_write_ulong");
 			return false;
-		} else if (!io_write_ulong(sess, fd, ts)) {
+		} else if (!io_write_ulong(sess, statfd, ts)) {
 			ERRX1("io_write_ulong");
 			return false;
 		}

@@ -322,6 +322,16 @@ bool
 io_data_written(struct sess *sess, int fdout, const void *buf, size_t bsz)
 {
 	sess->total_write += bsz;
+
+	/* Conditionally write to batch descriptor. */
+
+	if (sess->wbatch_fd != -1 && sess->mode == FARGS_SENDER &&
+	    fdout != sess->wbatch_fd &&
+	    !io_write_blocking(sess->wbatch_fd, buf, bsz)) {
+		ERRX("write outgoing to batch");
+		return false;
+	}
+
 	return true;
 }
 
@@ -340,6 +350,17 @@ io_write_buf_tagged_impl(struct sess *sess, int fd, const void *buf, size_t sz,
 	int32_t		 tag, tagbuf;
 	size_t		 wsz;
 	bool		 c; /* temporary return value */
+
+	/* Conditionally write to batch descriptor. */
+
+	if (sess->wbatch_fd != -1 && sess->mode == FARGS_SENDER &&
+	    iotag == IT_DATA && fd != sess->wbatch_fd &&
+	    !io_write_blocking(sess->wbatch_fd, buf, sz)) {
+		if (raise_errors)
+			ERRX("write outgoing to batch");
+		return false;
+	}
+
 
 	if (!sess->mplex_writes) {
 		/*
@@ -624,8 +645,10 @@ io_read_flush(struct sess *sess, int fd)
 bool
 io_read_buf(struct sess *sess, int fd, void *buf, size_t sz)
 {
-	size_t	 rsz; /* size to tbe read */
-	bool	 c; /* temporary return code */
+	const char	*inbuf = buf; /* copy */
+	const size_t	 totalsz = sz; /* copy */
+	size_t		 rsz; /* size to tbe read */
+	bool		 c; /* temporary return code */
 
 	/* If we're not multiplexing, read directly. */
 
@@ -663,6 +686,14 @@ io_read_buf(struct sess *sess, int fd, void *buf, size_t sz)
 			ERRX1("io_read_flush");
 			return false;
 		}
+	}
+
+	/* Snatch the sender's output if we're the receiver. */
+
+	if (sess->wbatch_fd != -1 && sess->mode == FARGS_RECEIVER &&
+	    !io_write_blocking(sess->wbatch_fd, inbuf, totalsz)) {
+		ERRX("write incoming to batch");
+		return false;
 	}
 
 	return true;

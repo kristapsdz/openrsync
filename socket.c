@@ -405,6 +405,7 @@ rsync_socket(const struct opts *opts, int sd, const struct fargs *f)
 	memset(&sess, 0, sizeof(struct sess));
 	sess.opts = opts;
 	sess.mode = f->mode;
+	sess.wbatch_fd = -1;
 	sess.lver = sess.protocol = RSYNC_PROTOCOL;
 
 	assert(f->host != NULL);
