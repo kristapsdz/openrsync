@@ -81,10 +81,21 @@ struct	upload {
 static bool pre_dir_delete(struct upload *, struct sess *, enum delmode); /* FIXME: move */
 static bool check_path(int, const char *); /* FIXME: move into place */
 
+/*
+ * See if force deleting of the file is applicable: for non-directories,
+ * this is always if --delete-before; otherwise, if --force, for
+ * anything but --delete-during.
+ */
 static bool
 force_delete_applicable(const struct upload *p,
     const struct sess *sess, mode_t mode)
 {
+	if (S_ISDIR(mode) && sess->opts->force_delete)
+		return sess->opts->del == DMODE_NONE ||
+		    sess->opts->del == DMODE_BEFORE ||
+		    sess->opts->del == DMODE_AFTER ||
+		    sess->opts->del == DMODE_DELAY;
+
 	return sess->opts->del == DMODE_BEFORE;
 }
 

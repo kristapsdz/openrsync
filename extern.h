@@ -389,6 +389,7 @@ struct	opts {
 	bool		 del_excl;		/* --delete-excluded */
 	bool		 devices;		/* --devices */
 	bool		 dirs;			/* -d */
+	bool		 force_delete;		/* --force */
 	bool		 from0;			/* -0 */
 	bool		 ignore_times;		/* -I */
 	bool		 hard_links;		/* -H */

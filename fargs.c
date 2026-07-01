@@ -234,6 +234,8 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		    (long long)(sess->opts->bwlimit / 1024));
         if (sess->opts->block_size > 0)
 		addargs(&args, "-B%ld", sess->opts->block_size);
+	if (sess->opts->force_delete)
+		addargs(&args, "--force");
 
 	/* Extra options for the receiver (local is sender). */
 

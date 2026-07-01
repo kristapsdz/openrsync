@@ -479,6 +479,7 @@ const struct option	 lopts[] = {
     { "exclude",	required_argument, NULL,		OP_EXCLUDE },
     { "exclude-from",	required_argument, NULL,		OP_EXCLUDE_FROM },
     { "filter",		required_argument, NULL,		'f' },
+    { "force",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "from0",		no_argument,	NULL,			'0' },
     { "group",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "hard-links",	no_argument,	NULL,			'H' },
@@ -572,6 +573,7 @@ usage(void)
 	    "\t[--exclude-from=file]\n"
 	    "\t[--exclude=pattern]\n"
 	    "\t[--filter=filter, -f filter]\n"
+	    "\t[--force]\n"
 	    "\t[--from0, -0]\n"
 	    "\t[--group, -g]\n"
 	    "\t[--hard-links, -H]\n"
@@ -684,6 +686,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				opts.del_excl = true;
 			else if (strcmp(lopts[lidx].name, "devices") == 0)
 				opts.devices = true;
+			else if (strcmp(lopts[lidx].name, "force") == 0)
+				opts.force_delete = true;
 			else if (strcmp(lopts[lidx].name, "group") == 0)
 				opts.preserve_gids = true;
 			else if (strcmp(lopts[lidx].name, "links") == 0)

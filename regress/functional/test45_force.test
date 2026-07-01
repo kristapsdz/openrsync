@@ -1,0 +1,55 @@
+#! /bin/sh
+
+# Test that the --force option works as expected.
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+# Number of regular files to create at each of the top-level
+# and one subdir of the source dir.
+#
+NUMFILES=7
+
+# Clean up from prior run:
+#
+rm -rf src dst
+
+# Create the source tree:
+#
+mkdir src src/dir
+for i in $(seq ${NUMFILES}) ; do
+    jot 31 $i > src/file$i
+    jot 1007 $i > src/dir/file$i
+done
+
+rm -rf dst
+$rsync -a -- src/ dst/
+compare_trees -t src dst
+
+# Make each top-level file in src/ be a directory
+# so that a simple rsync by a like-named file will
+# refuse to replace it:
+#
+for i in $(seq ${NUMFILES}) ; do
+    rm dst/file$i
+    cp -a dst/dir dst/file$i
+done
+
+$rsync -a -- src/ dst/ || [ $? -eq 23 ]
+compare_trees -t src/dir dst/dir
+
+# Check to ensure none of the dirs were changed:
+#
+for i in $(seq ${NUMFILES}) ; do
+    [ -d dst/file$i ]
+    compare_trees -t src/dir dst/file$i
+done
+
+# Now, with --force all the problematic dirs in dst/
+# should be replaced by the like-named files from src/:
+#
+$rsync -a --force -- src/ dst/
+compare_trees -t src dst

@@ -2564,8 +2564,9 @@ flist_del(const struct sess *sess, int root, const struct flist *fl,
 	if (flsz == 0)
 		return;
 
-	assert(sess->opts->del != DMODE_NONE);
-	assert(sess->opts->recursive || sess->opts->dirs);
+	assert(sess->opts->del || sess->opts->force_delete);
+	assert(sess->opts->recursive || sess->opts->force_delete ||
+	    sess->opts->dirs);
 
 	begin = flsz - 1;
 	end = begin - del_limit;
