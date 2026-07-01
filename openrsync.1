@@ -33,6 +33,7 @@
 .Op Fl -compare-dest Ns = Ns Ar dir
 .Op Fl -contimeout Ns = Ns Ar seconds
 .Op Fl -copy-dest Ns = Ns Ar dir
+.Op Fl -copy-links , Fl L
 .Op Fl -cvs-exclude , Fl C
 .Op Fl -del , Fl -delete
 .Op Fl -delete-after
@@ -194,6 +195,8 @@ The default is 0, which means no timeout.
 Like
 .Fl -compare-dest ,
 but if found and identical, the file will be locally copied.
+.It -copy-links , Fl L
+Copy targets of symbolic links, rather than the link itself.
 .It Fl -cvs-exclude , Fl C
 Exclude a common list of files as
 .Xr cvs 1

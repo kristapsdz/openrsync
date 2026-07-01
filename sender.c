@@ -20,7 +20,7 @@
 # include <sys/queue.h>
 #endif
 #include <sys/stat.h>
-#include <sys/time.h>
+#include <sys/time.h> /* gettimeofday, timersub */
 
 #include <assert.h>
 #include <errno.h>
@@ -1702,7 +1702,8 @@ check_other:
 			 * to pick O_NOFOLLOW back up unconditionally.
 			 */
 
-			oflags |= nlinkflag;
+			if (!sess->opts->copy_links)
+				oflags |= nlinkflag;
 
 			up.stat.fd = openat(dirfd, opath, oflags, 0);
 

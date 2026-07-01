@@ -1,0 +1,29 @@
+#! /bin/sh
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree
+mkdir dir1
+cd dir1
+mkdirfile foo
+ln -s foo bar
+# make the tree we want to compare to
+mkdir ../dir2
+cd ../dir2
+mkdirfile foo
+mkdirfile bar
+
+cd ..
+mkdir dir3
+# sync timestamps
+touch dir1/* dir2/*
+# test case 2: symlink is reached via recursion
+cd dir1
+$rsync -r -L -- . ../dir3
+cd ..
+compare_trees dir2 dir3

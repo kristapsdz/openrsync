@@ -452,7 +452,7 @@ enum {
 	OP_TIMEOUT,
 };
 
-const char rsync_shopts[] = "0468B:CDFHIJOPRVWabcde:f:ghlnoprtuvxz";
+const char rsync_shopts[] = "0468B:CDFHIJLOPRVWabcde:f:ghlnoprtuvxz";
 const struct option	 lopts[] = {
     { "8-bit-output",	no_argument,	NULL,			'8' },
     { "address",	required_argument, NULL,		OP_ADDRESS },
@@ -465,6 +465,7 @@ const struct option	 lopts[] = {
     { "compress",	no_argument,	NULL,			'z' },
     { "contimeout",	required_argument, NULL,		OP_CONTIMEOUT },
     { "copy-dest",	required_argument, NULL,		OP_COPY_DEST },
+    { "copy-links",	no_argument,	NULL,			'L' },
     { "cvs-exclude",	no_argument,	NULL,			'C' },
     { "del",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "delete",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
@@ -560,6 +561,7 @@ usage(void)
 	    "\t[--compare-dest=dir]\n"
 	    "\t[--contimeout=seconds]\n"
 	    "\t[--copy-dest=dir]\n"
+	    "\t[--copy-links, -L]\n"
 	    "\t[--cvs-exclude, -C]\n"
 	    "\t[--del, --delete]\n"
 	    "\t[--delete-after]\n"
@@ -819,6 +821,9 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			break;
 		case 'J':
 			opts.omit_link_times = true;
+			break;
+		case 'L':
+			opts.copy_links = true;
 			break;
 		case 'O':
 			opts.omit_dir_times = true;

@@ -17,6 +17,7 @@
 #include "config.h"
 
 #include <sys/stat.h>
+#include <sys/time.h> /* gettimeofday */
 
 #include <assert.h>
 #include <inttypes.h>

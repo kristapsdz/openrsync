@@ -241,6 +241,8 @@ flist_fts_check(struct sess *sess, FTSENT *ent, enum fmode fmode)
 		errno = ent->fts_errno;
 		WARN("%s", ent->fts_path);
 	} else if (ent->fts_info == FTS_SLNONE) {
+		if (sess->opts->copy_links)
+			return false;
 		return sess->opts->preserve_links;
 	} else if (ent->fts_info == FTS_SL) {
 		/*
@@ -1385,15 +1387,21 @@ flist_dir_recurse(const char *root)
 	return tc == '/' || tc == '.';
 }
 
+/*
+ * Normalise the path in "ent" into the output parameters of "pathp" and
+ * "lenp". "Normalise" means to strip out trailing and leading slashes
+ * and dots.  This puts the directories into a canonical form.  Use
+ * "pathbuf" as a temporary buffer.
+ */
 static void
 flist_dirent_normalize(const FTSENT * const ent, char *pathbuf,
     size_t pathbufsz, ssize_t *stripdirp, char **pathp, size_t *lenp)
 {
-	size_t		 fts_pathlen = ent->fts_pathlen;
-	char		*fts_path = ent->fts_path;
-	const char	*src;
-	char		*dst;
-	ptrdiff_t 	 delta;
+	size_t		 fts_pathlen = ent->fts_pathlen; /* path len */
+	char		*fts_path = ent->fts_path; /* path in play */
+	const char	*src; /* position in fts_path */
+	char		*dst; /* position in destination */
+	ptrdiff_t 	 delta; /* temporary */
 
 	if (fts_pathlen > 2) {
 		if (strncmp(fts_path, "./", 2) == 0) {
@@ -1617,26 +1625,34 @@ static bool
 flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
     ssize_t stripdir, const char *prefix, struct froot *froot)
 {
-	char		 fts_pathbuf[PATH_MAX];
-	struct stat	 st;
+	char		 fts_pathbuf[PATH_MAX]; /* flist_dirent_normalise */
+	struct stat	 st; /* root directory stat */
 	const char	*cargv[2]; /* fts_open args */
-	char		*fts_path;
-	int		 fts_options;
-	int              ret;
-	FTS		*fts;
-	FTSENT		*ent;
-	struct flist	*f;
-	size_t		 fts_pathlen;
-	ssize_t		 stripdir_saved;
-	bool		 rootfilter = true;
-	bool		 rc = false;
+	char		*fts_path; /* output of flist_dirent_normalise */
+	FTS		*fts; /* directory traversal */
+	FTSENT		*ent; /* current in traversal */
+	dev_t		*xdev = NULL; /* list of mountpoints */
+	struct flist	*f; /* new flist entry */
+	void		*pp; /* temporary */
+	size_t		 fts_pathlen, /* fts_path size */
+			 i, /* temporary */
+			 nxdev = 0; /* size of xdev */
+	ssize_t		 stripdir_saved; /* stripdir save/restore */
+	int		 fts_options, /* pass to fts_open */
+			 ret; /* temporary */
+	bool		 rootfilter = true; /* filter root directory */
+	bool		 rc = false, /* return value */
+			 flag; /* temporary */
 
 	/*
 	 * If we're a file, then revert to the same actions we use for
 	 * the non-recursive scan.
 	 */
 
-	ret = rsync_lstat(root, &st);
+	if (sess->opts->copy_links)
+		ret = stat(root, &st);
+	else
+		ret = rsync_lstat(root, &st);
 
 	if (ret == -1) {
 		ERR("%s: (l)stat", root);
@@ -1704,6 +1720,10 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 	 */
 
 	fts_options = FTS_PHYSICAL | FTS_NOCHDIR | FTS_COMFOLLOW;
+	if (sess->opts->copy_links)
+		fts_options = FTS_LOGICAL;
+	if (sess->opts->one_file_system)
+		fts_options |= FTS_XDEV;
 	fts = fts_open((char * const *)cargv, fts_options, NULL);
 	if (fts == NULL) {
 		if (froot != NULL)
@@ -1741,6 +1761,43 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 		/* We don't allow symlinks without -l. */
 
 		assert(ent->fts_statp != NULL);
+
+		/*
+		 * If rsync is told to avoid crossing a filesystem
+		 * boundary when recursing, then replace all mount point
+		 * directories with empty directories.  The latter is
+		 * prevented by telling rsync multiple times to avoid
+		 * crossing a filesystem boundary when recursing.
+		 * Replacing mount point directories is tricky. We need
+		 * to sort out which directories to include.  As such,
+		 * keep track of unique device inodes, and use these for
+		 * comparison.
+		 */
+
+		if (sess->opts->one_file_system &&
+		    ent->fts_statp->st_dev != st.st_dev) {
+			if (sess->opts->one_file_system > 1 ||
+			    !S_ISDIR(ent->fts_statp->st_mode))
+				continue;
+
+			flag = false;
+			for (i = 0; i < nxdev; i++)
+				if (xdev[i] == ent->fts_statp->st_dev) {
+					flag = true;
+					break;
+				}
+			if (flag)
+				continue;
+
+			if ((pp = reallocarray(xdev, nxdev + 1,
+			    sizeof(dev_t))) == NULL) {
+				ERRX1("reallocarray flist_gen_dirent()");
+				goto out;
+			}
+			xdev = pp;
+			xdev[nxdev] = ent->fts_statp->st_dev;
+			nxdev++;
+		}
 
 		/* This is for macOS fts, which returns "foo//bar" */
 
@@ -1808,6 +1865,18 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 			    ent->fts_statp->st_size);
 			if (f->link == NULL) {
 				ERRX1("symlink_read");
+				fl_pop(fl);
+				continue;
+			}
+		}
+
+		/* Optionally hash file. */
+
+		if (sess->opts->checksum && S_ISREG(f->st.mode)) {
+			rc = hash_file_by_path(AT_FDCWD, f->path,
+			    f->st.size, f->md);
+			if (rc) {
+				ERR("%s: hash_file_by_path", f->path);
 				fl_pop(fl);
 				continue;
 			}
@@ -1910,7 +1979,10 @@ flist_gen_files(struct sess *sess, size_t argc, char **argv,
 		if (fname[0] == '\0')
 			strcpy(fname, ".");
 
-		ret = rsync_lstat(fname, &st);
+		if (sess->opts->copy_links)
+			ret = stat(fname, &st);
+		else
+			ret = rsync_lstat(fname, &st);
 
 		if (ret == -1) {
 			ERR("'%s': (l)stat", fname);

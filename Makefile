@@ -101,6 +101,7 @@ rules.h: extern.h
 # Doesn't work openrsync -> rsync: regress/functional/test25_filter_mods.test
 # Doesn't work (protocol/filter rules issue): regress/functional/test25_filter_sender.test
 # Doesn't work: regress/functional/test27_checksum.test
+# Doesn't work (in Apple as well): regress/functional/test16a_symlinks.test
 
 # Partially works (protocol version mismatches): regress/functional/test64_noimpdirs.test
 
@@ -160,7 +161,7 @@ REGRESS_FAIL 	= regress/functional/test12d_inex.test \
 		  regress/functional/test25_filter_dir.test \
 		  regress/functional/test25_filter_merge_cvs.test
 REGRESS_MANUAL 	= 
-RSYNC_VERBOSE	= 
+RSYNC_VERBOSE	=
 
 #OPENRSYNC=/home/kristaps/checkedout/apple/rsync/openrsync/openrsync ; \
 
