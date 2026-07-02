@@ -354,22 +354,35 @@ log_priority(enum log_type type)
 	}
 }
 
+/*
+ * Log the given message with the given log type.  This has a large
+ * number of possible output destinations: syslog, stderr, or the remote
+ * server.
+ */
 static void
 log_vwritef(enum log_type type, const char *fmt, va_list ap)
 {
-	int pri;
-
-	pri = log_priority(type);
+	char		  msgbuf[BIGPATH_MAX]; /* message buffer */
+	va_list		  cap; /* temporary varargs */
+	void		**wbufp; /* wbuf */
+	size_t		 *wbufszp; /* wbufsz */
+	size_t		  pos; /* current wbufsz */
+	int32_t		  tag, /* multiplexing tag */
+			  tagbuf; /* tag as multiplex value */
+	int		  n, /* message buffer length */
+			  client = STDOUT_FILENO; /* output */
+	const int	  pri = log_priority(type); /* log as type */
 
 	/*
-	 * If logging is configured, we'll send all non-client messages to it.
-	 * Note that in various places throughout here, we'll tap out a copy of
-	 * the va_list -- there's a good chance we'll be logging to multiple
-	 * places, so we want to avoid running off the end of the arg list.
+	 * If logging is configured, we'll send all non-client messages
+	 * to it.  Note that in various places throughout here, we'll
+	 * tap out a copy of the va_list -- there's a good chance we'll
+	 * be logging to multiple places, so we want to avoid running
+	 * off the end of the arg list.
 	 */
-	if (type != LT_CLIENT && (log_file == NULL || log_file != stdout)) {
-		va_list cap;
 
+	if (type != LT_CLIENT &&
+	    (log_file == NULL || log_file != stdout)) {
 		va_copy(cap, ap);
 		if (log_file == NULL) {
 			vsyslog(pri, fmt, cap);
@@ -380,16 +393,19 @@ log_vwritef(enum log_type type, const char *fmt, va_list ap)
 		va_end(cap);
 	}
 
-	/*
-	 * We shouldn't route log messages to the client.  If write multiplexing
-	 * isn't turned on, we may not have a client yet (in the daemon).
-	 */
-	if (log_sess != NULL && type != LT_LOG && log_sess->mplex_writes) {
-		va_list cap;
-		char msgbuf[BIGPATH_MAX];
-		int32_t tag;
-		int n;
+	/* "Quiet" mode. */
 
+	if (verbose < 0 && pri != LOG_ERR)
+		return;
+
+	/*
+	 * We shouldn't route log messages to the client.  If write
+	 * multiplexing isn't turned on, we may not have a client yet
+	 * (in the daemon).
+	 */
+
+	if (log_sess != NULL && type != LT_LOG &&
+	    log_sess->mplex_writes) {
 		assert(log_sess->opts->server);
 
 		va_copy(cap, ap);
@@ -404,25 +420,24 @@ log_vwritef(enum log_type type, const char *fmt, va_list ap)
 		tag = (pri == LOG_ERR) ? IT_ERROR_XFER : IT_INFO;
 
 		if (log_sess->wbufp == NULL) {
-			int client = STDOUT_FILENO;
 			if (log_sess->role != NULL)
 				client = log_sess->role->client;
-
-			io_write_buf_tagged_safe(log_sess, client, msgbuf, n,
-			    tag);
+			io_write_buf_tagged_safe(log_sess, client,
+			    msgbuf, n, tag);
 		} else {
-			size_t *wbufszp = log_sess->wbufszp;
-			size_t pos = *log_sess->wbufszp;
-			void **wbufp = log_sess->wbufp;
-			int32_t	tagbuf;
+			wbufszp = log_sess->wbufszp;
+			pos = *log_sess->wbufszp;
+			wbufp = log_sess->wbufp;
 
 			assert(log_sess->opts->sender);
-			if (!io_lowbuffer_alloc_safe(log_sess, wbufp, wbufszp,
-			    log_sess->wbufmaxp, n))
+			if (!io_lowbuffer_alloc_safe(log_sess, wbufp,
+			    wbufszp, log_sess->wbufmaxp, n))
 				return;
-			tagbuf = htole32(((tag + IOTAG_OFFSET) << 24) + n);
+			tagbuf = htole32(((tag + IOTAG_OFFSET) << 24) +
+			    n);
 			io_buffer_int(*wbufp, &pos, *wbufszp, tagbuf);
-			io_buffer_buf(*wbufp, &pos, *wbufszp, msgbuf, n);
+			io_buffer_buf(*wbufp, &pos, *wbufszp, msgbuf,
+			    n);
 		}
 
 		if (type == LT_CLIENT)
@@ -430,9 +445,10 @@ log_vwritef(enum log_type type, const char *fmt, va_list ap)
 	}
 
 	/*
-	 * Log messages stop here, every other type will trickle through and get
-	 * routed to stderr/stdout as appropriate.
+	 * Log messages stop here, every other type will trickle through
+	 * and get routed to stderr/stdout as appropriate.
 	 */
+
 	if (type == LT_LOG || log_sess != NULL)
 		return;
 
@@ -447,6 +463,9 @@ log_vwritef(enum log_type type, const char *fmt, va_list ap)
 	}
 }
 
+/*
+ * See log_vwritef().
+ */
 static void
 log_writef(enum log_type type, const char *fmt, ...)
 {

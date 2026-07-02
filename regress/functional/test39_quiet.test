@@ -1,0 +1,38 @@
+#! /bin/sh
+
+# Test that the --quiet option works as expected.
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf src dst
+
+# Create the source tree:
+mkdir src
+date > src/file
+mkdir src/dir
+
+# A full rsync with -av should emit a least two lines:
+#
+touch src/*
+LC=$($rsync -av -- src/ dst/ 2>&1 | wc -l)
+[ $? -eq 0 ]
+[ ${LC} -ge 2 ]
+compare_trees -t src dst
+
+# A full rsync with -av --quiet should not emit any characters:
+#
+touch src/*
+CC=$($($rsync -av --quiet -- src/ dst/ 2>&1) | wc -c)
+[ $? -eq 0 ]
+[ ${CC} -eq 0 ]
+compare_trees -t src dst
+
+touch src/*
+CC=$($($rsync -avq -- src/ dst/ 2>&1) | wc -c)
+[ $? -eq 0 ]
+[ ${CC} -eq 0 ]
+compare_trees -t src dst

@@ -85,6 +85,7 @@
 .Op Fl -port Ns = Ns Ar portnumber
 .Op Fl -progress
 .Op Fl -protocol Ns = Ns Ar protocol
+.Op Fl -quiet , Fl q
 .Op Fl -relative , Fl R
 .Op Fl -recursive , Fl r
 .Op Fl -rsh Ns = Ns Ar program , Fl e program
@@ -483,6 +484,8 @@ Periodically report file transfer progress.
 .It Fl -protocol Ns = Ns Ar protocol
 The protocol to use.
 This currently may only be set to 27.
+.It Fl -quiet , Fl q
+Suppress all non-error related informational messages.
 .It Fl -relative , Fl R
 Normally, pathnames on the command-line omit the directory components.
 This option will include those directory components.

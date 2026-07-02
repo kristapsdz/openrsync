@@ -602,6 +602,10 @@ void		 freeargs(arglist *);
 struct	download;
 struct	upload;
 
+/*
+ * Verbosity.  If 0, then only transfer informational.  If <0, radio
+ * silence.  If >0, then increasing degress of verbosity.
+ */
 extern int verbose;
 
 #define TMPDIR_FD       (p->rootfd)

@@ -452,7 +452,7 @@ enum {
 	OP_TIMEOUT,
 };
 
-const char rsync_shopts[] = "0468B:CDFHIJLOPRVWabcde:f:ghlnoprtuvxz";
+const char rsync_shopts[] = "0468B:CDFHIJLOPRVWabcde:f:ghlnopqrtuvxz";
 const struct option	 lopts[] = {
     { "8-bit-output",	no_argument,	NULL,			'8' },
     { "address",	required_argument, NULL,		OP_ADDRESS },
@@ -525,6 +525,7 @@ const struct option	 lopts[] = {
     { "port",		required_argument, NULL,		OP_PORT },
     { "progress",	no_argument, 	NULL,			OP_SET_BOOL_TRUE },
     { "protocol",	required_argument, NULL,		OP_PROTOCOL },
+    { "quiet",		no_argument,	NULL,			'q' },
     { "recursive",	no_argument,	NULL,			'r' },
     { "relative",	no_argument,	NULL,			'R' },
     { "rsh",		required_argument, NULL,		'e' },
@@ -614,6 +615,7 @@ usage(void)
 	    "\t[--port=portnumber]\n"
 	    "\t[--progress]\n"
 	    "\t[--protocol]\n"
+	    "\t[--quiet, -q]\n"
 	    "\t[--relative, -R]\n"
 	    "\t[--recursive, -r]\n"
 	    "\t[--rsh=program, -e program]\n"
@@ -887,6 +889,9 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			break;
 		case 'p':
 			opts.preserve_perms = true;
+			break;
+		case 'q':
+			verbose = -1;
 			break;
 		case 'r':
 			opts.recursive = true;

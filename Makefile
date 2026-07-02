@@ -147,7 +147,8 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test14e_hardlinks.test \
 		  regress/functional/test81_progress.test \
 		  regress/functional/test21_delopts.test \
-		  regress/functional/test45_force.test
+		  regress/functional/test45_force.test \
+		  regress/functional/test39_quiet.test
 
 # Doesn't work (protocol < 29): regress/functional/test25_filter_basic_cvs.test
 # Doesn't work (protocol < 29): regress/functional/test25_filter_clear.test
