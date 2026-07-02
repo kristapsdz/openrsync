@@ -55,7 +55,7 @@ jobs:
       uses: vmactions/netbsd-vm@v1
       with:
         usesh: true
-        prepare: pkgin install cunit
+        prepare: pkg_add rsync cunit
         run: |
           ./configure
           make
@@ -73,7 +73,8 @@ jobs:
           musl-fts-dev
           zlib-dev
           outils-jot
-          ncompress
+          gzip
+          sharutils
           rsync
           cunit
           cunit-dev
