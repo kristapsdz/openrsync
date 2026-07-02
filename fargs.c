@@ -233,6 +233,10 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "--dirs");
 	if (sess->opts->noimpdirs)
 		addargs(&args, "--no-implied-dirs");
+	if (sess->opts->copy_unsafe_links)
+		addargs(&args, "--copy-unsafe-links");
+	if (sess->opts->safe_links)
+		addargs(&args, "--safe-links");
 	if (f->mode == FARGS_SENDER && sess->opts->ignore_times)
 		addargs(&args, "--ignore-times");
 

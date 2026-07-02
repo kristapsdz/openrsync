@@ -389,6 +389,7 @@ struct	opts {
 	bool		 checksum;		/* -c */
 	bool		 compress;		/* -z */
 	bool		 copy_links;		/* -L */
+	bool		 copy_unsafe_links;	/* --copy-unsafe-links */
 	bool		 del_excl;		/* --delete-excluded */
 	bool		 devices;		/* --devices */
 	bool		 dirs;			/* -d */
@@ -409,6 +410,7 @@ struct	opts {
 	bool		 progress;		/* --progress */
 	bool		 recursive;		/* -r */
 	bool		 relative;		/* -R */
+	bool		 safe_links;		/* --safe-links */
 	bool		 sender;		/* --sender */
 	bool		 server;		/* --server */
 	bool		 size_only;		/* --size-only */
@@ -838,6 +840,7 @@ bool		 rsync_humanize(const struct sess *, char *, size_t, int64_t);
 void		 rsync_progress(struct sess *, uint64_t, uint64_t, bool,
 		    size_t, size_t);
 enum log_type	 xfer_log_level(const struct sess *);
+bool		 is_unsafe_link(const char *, const char *, const char *);
 
 
 #endif /*!EXTERN_H*/

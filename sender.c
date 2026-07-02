@@ -1702,7 +1702,8 @@ check_other:
 			 * to pick O_NOFOLLOW back up unconditionally.
 			 */
 
-			if (!sess->opts->copy_links)
+			if (!sess->opts->copy_links &&
+			    !sess->opts->copy_unsafe_links)
 				oflags |= nlinkflag;
 
 			up.stat.fd = openat(dirfd, opath, oflags, 0);

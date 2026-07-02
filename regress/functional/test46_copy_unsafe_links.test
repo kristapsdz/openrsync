@@ -1,0 +1,174 @@
+#! /bin/sh
+
+# Test that the --copy-unsafe-links option works as expected.
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+# Clean up from prior run:
+#
+rm -rf src dst out
+
+# Create the source tree:
+#
+mkdir src out
+
+for c in a b y z ; do
+    dd if=/dev/random bs=64 count=1 2> /dev/null | od -x > src/${c}file
+done
+
+cp -a src/* out/
+
+ln -s afile src/sym1
+ln -s ../out/bfile src/sym2
+ln -s ../out/yfile src/sym3
+ln -s ../out src/sym4
+ln -s ../src/yfile src/sym5
+ln -s zfile src/sym6
+ln -s /bin src/sym7
+ln -s /bin/ls src/sym8
+
+# Determine the number of dirs, files, and links in src/:
+#
+NDSRC=$(find src -type d | wc -l)
+NFSRC=$(find src -type f | wc -l)
+NLSRC=$(find src -type l | wc -l)
+
+
+# rsync -a should duplicate src/ into dst/, so check
+# that dst/ contains the expected files and symlinks
+# (both non-existent and fully populated dest dir):
+#
+rm -rf dst
+[ ! -d dst ]
+
+for i in $(seq 3) ; do
+    for c in a b y z ; do
+	dd if=/dev/random bs=64 count=1 2>/dev/null | od -x >> src/${c}file
+    done
+
+    # The dest dir will not exist on the first pass of the loop,
+    # but will exist on the second and third passes:
+    #
+    $rsync -a -- src/ dst/
+
+    X=$(find dst -type d | wc -l) && [ "$X" -eq "${NDSRC}" ]
+    X=$(find dst -type f | wc -l) && [ "$X" -eq "${NFSRC}" ]
+    X=$(find dst -type l | wc -l) && [ "$X" -eq "${NLSRC}" ]
+
+    compare_trees -t src dst
+
+    # Check that the contents of all symlinks were transferred
+    # successfully:
+    #
+    find src -type l | while read sfile ; do
+	dfile=$(echo ${sfile} | sed 's/^src/dst/')
+	slink=$(readlink ${sfile})
+	dlink=$(readlink ${dfile})
+	[ "${slink}" == "${dlink}" ]
+    done
+done
+
+
+# Test that existing unsafe symlinks in dest dir are not removed:
+#
+$rsync -a --safe-links --delete -- src/ dst/
+X=$(find dst -type d | wc -l) && [ "$X" -eq "${NDSRC}" ]
+X=$(find dst -type f | wc -l) && [ "$X" -eq "${NFSRC}" ]
+X=$(find dst -type l | wc -l) && [ "$X" -eq "${NLSRC}" ]
+
+$rsync -a --safe-links -- src/ dst/
+X=$(find dst -type d | wc -l) && [ "$X" -eq "${NDSRC}" ]
+X=$(find dst -type f | wc -l) && [ "$X" -eq "${NFSRC}" ]
+X=$(find dst -type l | wc -l) && [ "$X" -eq "${NLSRC}" ]
+
+
+# Test that unsafe symlinks are transferred and converted to
+# the appropriate type (file or dir) in the dest dir, and that
+# dirs converted from symlinks in the dest dir are fully populated:
+#
+for i in $(seq 3) ; do
+    $rsync -a --copy-unsafe-links -- src/ dst/
+
+    # Check that the expected number of dirs symlinks exists
+    # (a bit brittle since it depends upon how the source
+    # dir was originally populated):
+    #
+    X=$(find dst -type d | wc -l) && [ "$X" -eq 3 ]
+    X=$(find dst -type l | wc -l) && [ "$X" -eq 2 ]
+
+    X=$(find -L src -type f | wc -l)
+    Y=$(find -L dst -type f | wc -l)
+    [ "$X" -gt "${NFSRC}" ]
+    [ "$X" -eq "$Y" ]
+
+    # Remove the dest dir after the first pass so that subsequent
+    # passes test both a non-existant dest dir and a fully populated
+    # dest dir:
+    #
+    [ $i -eq 1 ] && rm -rf dst && [ ! -d dst ] || true
+done
+
+
+# Test that a symlink that points out of and then back
+# to the source dir is handled correctly:
+#
+ln -s ../src src/sym9
+
+$rsync -a --copy-unsafe-links -- src/ dst/
+X=$(find dst -type d | wc -l) && [ "$X" -eq 5 ]
+X=$(find dst -type l | wc -l) && [ "$X" -eq 9 ]
+
+# The dest dir should contain many more files than
+# the source dir:
+#
+X=$(find -L src -type f | wc -l)
+Y=$(find -L dst -type f | wc -l)
+[ "$X" -gt "${NFSRC}" ]
+[ "$X" -lt "$Y" ]
+
+
+# Test that all unsafe symlinks are copied as dirs, and all safe
+# symlinks are skipped:
+#
+$rsync -a --no-links --copy-unsafe-links -- src/ dst/
+X=$(find dst -type d | wc -l) && [ "$X" -eq 5 ]
+X=$(find dst -type l | wc -l) && [ "$X" -eq 9 ]
+
+$rsync -a --no-links --copy-unsafe-links --delete -- src/ dst/
+X=$(find dst -type d | wc -l) && [ "$X" -eq 5 ]
+X=$(find dst -type l | wc -l) && [ "$X" -eq 9 ]
+
+rm -rf dst && [ ! -d dst ] || true
+$rsync -a --no-links --copy-unsafe-links -- src/ dst/
+X=$(find dst -type d | wc -l) && [ "$X" -eq 5 ]
+X=$(find dst -type l | wc -l) && [ "$X" -eq 0 ]
+
+
+# Test that --copy-links disables additional effects provided
+# by --copy-unsafe-links:
+#
+rm src/sym9
+rm -rf dst && [ ! -d dst ] || true
+$rsync -a --copy-unsafe-links --copy-links -- src/ dst/
+X=$(find dst -type d | wc -l) && [ "$X" -eq 3 ]
+X=$(find dst -type l | wc -l) && [ "$X" -eq 0 ]
+
+$rsync -a --copy-unsafe-links -- src/ dst/
+X=$(find dst -type d | wc -l) && [ "$X" -eq 3 ]
+X=$(find dst -type l | wc -l) && [ "$X" -eq 2 ]
+
+
+# Finally, we should be able to restore the destination
+# directory with a little help from --force:
+#
+$rsync -a -- src/ dst/ || [ $? -eq 23 ]
+
+$rsync -a --force -- src/ dst/
+X=$(find dst -type d | wc -l) && [ "$X" -eq "${NDSRC}" ]
+X=$(find dst -type f | wc -l) && [ "$X" -eq "${NFSRC}" ]
+X=$(find dst -type l | wc -l) && [ "$X" -eq "${NLSRC}" ]
+compare_trees -t src dst

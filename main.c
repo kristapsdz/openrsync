@@ -468,6 +468,7 @@ const struct option	 lopts[] = {
     { "contimeout",	required_argument, NULL,		OP_CONTIMEOUT },
     { "copy-dest",	required_argument, NULL,		OP_COPY_DEST },
     { "copy-links",	no_argument,	NULL,			'L' },
+    { "copy-unsafe-links", no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "cvs-exclude",	no_argument,	NULL,			'C' },
     { "del",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "delete",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
@@ -532,6 +533,7 @@ const struct option	 lopts[] = {
     { "relative",	no_argument,	NULL,			'R' },
     { "rsh",		required_argument, NULL,		'e' },
     { "rsync-path",	required_argument, NULL,		OP_RSYNCPATH },
+    { "safe-links",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "sender",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "server",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "size-only",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
@@ -566,6 +568,7 @@ usage(void)
 	    "\t[--contimeout=seconds]\n"
 	    "\t[--copy-dest=dir]\n"
 	    "\t[--copy-links, -L]\n"
+	    "\t[--copy-unsafe-links]\n"
 	    "\t[--cvs-exclude, -C]\n"
 	    "\t[--del, --delete]\n"
 	    "\t[--delete-after]\n"
@@ -623,6 +626,7 @@ usage(void)
 	    "\t[--recursive, -r]\n"
 	    "\t[--rsh=program, -e program]\n"
 	    "\t[--rsync-path=program]\n"
+	    "\t[--safe-links]\n"
 	    "\t[--size-only]\n"
 	    "\t[--specials]\n"
 	    "\t[--stats]\n"
@@ -677,7 +681,9 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 	while ((c = getopt_long(argc, argv, rsync_shopts, lopts, &lidx)) != -1) {
 		switch (c) {
 		case OP_SET_BOOL_TRUE:
-			if (strcmp(lopts[lidx].name, "del") == 0)
+			if (strcmp(lopts[lidx].name, "copy-unsafe-links") == 0)
+				opts.copy_unsafe_links = true;
+			else if (strcmp(lopts[lidx].name, "del") == 0)
 				opts.del = DMODE_UNSPECIFIED;
 			else if (strcmp(lopts[lidx].name, "delete") == 0)
 				opts.del = DMODE_UNSPECIFIED;
@@ -709,6 +715,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				opts.preserve_perms = true;
 			else if (strcmp(lopts[lidx].name, "progress") == 0)
 				opts.progress = true;
+			else if (strcmp(lopts[lidx].name, "safe-links") == 0)
+				opts.safe_links = true;
 			else if (strcmp(lopts[lidx].name, "sender") == 0)
 				opts.sender = true;
 			else if (strcmp(lopts[lidx].name, "server") == 0)

@@ -1,0 +1,133 @@
+#! /bin/sh
+
+# Test that the --safe-links option works as expected.
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+# Create the source tree containing no
+# out-of-tree symlinks:
+#
+rm -rf src
+mkdir -p src/dir
+
+for c in a b y z ; do
+    date > src/${c}file
+    ln -s ${c}file src/${c}sym
+
+    date > src/dir/${c}file
+    ln -s ${c}file src/dir/${c}sym
+    ln -s ../${c}file src/dir/${c}sym2
+done
+
+# Create the reference tree from the source tree:
+#
+rm -rf ref
+cp -a src ref
+compare_trees -t src ref
+
+# Create some out-of-tree symlinks in the source tree:
+#
+#ln -s /tmp/foobie-bletch src/tmp
+#ln -s /root/foobie-bletch src/root
+
+ln -s ../src/${c}file src/${c}sym2
+ln -s ../../src/${c}file src/dir/${c}sym3
+
+date > file
+ln -s ../file src/sym4
+ln -s ../../file src/dir/sym5
+
+
+# A simple rsync should copy all in/out-of-tree symlinks
+# exactly as they are (whether or not the dest dir exists):
+#
+rm -rf dst
+
+for i in $(seq 2) ; do
+    $rsync -a -- src/ dst/
+    compare_trees -t src dst
+
+    # Check that the contents of all symlinks were transferred
+    # successfully:
+    #
+    find src -type l | while read sfile ; do
+	dfile=$(echo ${sfile} | sed 's/^src/dst/')
+	slink=$(readlink ${sfile})
+	dlink=$(readlink ${dfile})
+	[ "${slink}" == "${dlink}" ]
+    done
+done
+
+
+# Check that valid unsafe links are not removed
+# from the dest dir:
+#
+$rsync -a --safe-links --delete -- src/ dst/
+compare_trees -t src dst
+
+
+# Check that dangling unsafe links are not removed
+# from the dest dir:
+#
+rm file
+$rsync -a --safe-links --delete -- src/ dst/
+compare_trees -t src dst
+
+
+# Check that only safe links are copied to a non-existent
+# dest dir:
+#
+rm -rf dst
+
+ln -s /tmp src/tmp
+ln -s /tmp src/dir/tmp
+ln -s /root src/root
+ln -s /root src/dir/root
+
+touch src ref src/dir ref/dir
+
+for i in $(seq 2) ; do
+    $rsync -a --safe-links -- src/ dst/
+    compare_trees -t ref dst
+done
+
+# Check that non-leading ../ components will cause a symlink to be filtered
+# out, as earlier components could be replaced with something that makes it
+# unsafe.
+rm -rf src dst
+mkdir -p src/bar
+
+ln -s . src/safe_1
+ln -s ./. src/safe_2
+ln -s ../ src/bar/safe_3
+ln -s . src/bar/safe_4
+
+# These ones would clearly be unsafe just by looking at safe_1
+ln -s safe_1/.. src/unsafe_1
+ln -s safe_1/../.. src/unsafe_2
+
+# These ones look safe, but rsync 3.x will reject them out of an abundance of
+# caution because `safe_5` could have been replaced by a symlink that points
+# outside of the root.
+ln -s safe_4/.. src/bar/unsafe_3
+ln -s safe_4/../ src/bar/unsafe_4
+ln -s safe_4/../safe_1 src/bar/unsafe_5
+$rsync -av --safe-links -- src/ dst/
+
+for wanted in safe_1 safe_2 bar/safe_3 bar/safe_4; do
+	if [ ! -L dst/"$wanted" ]; then
+		1>&2 echo "$wanted was not copied, but it should have been"
+		exit 1
+	fi
+done
+
+for unwanted in unsafe_1 unsafe_2 bar/unsafe_3 bar/unsafe_4 bar/unsafe_5; do
+	if [ -L dst/"$unwanted" ]; then
+		1>&2 echo "$unwanted should not have been copied, but it was"
+		exit 1
+	fi
+done

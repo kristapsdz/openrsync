@@ -35,6 +35,7 @@
 .Op Fl -contimeout Ns = Ns Ar seconds
 .Op Fl -copy-dest Ns = Ns Ar dir
 .Op Fl -copy-links , Fl L
+.Op Fl -copy-unsafe-links
 .Op Fl -cvs-exclude , Fl C
 .Op Fl -del , Fl -delete
 .Op Fl -delete-after
@@ -91,6 +92,7 @@
 .Op Fl -recursive , Fl r
 .Op Fl -rsh Ns = Ns Ar program , Fl e program
 .Op Fl -rsync-path Ns = Ns Ar program
+.Op Fl -safe-links
 .Op Fl -size-only
 .Op Fl -specials
 .Op Fl -stats
@@ -218,6 +220,9 @@ Like
 but if found and identical, the file will be locally copied.
 .It -copy-links , Fl L
 Copy targets of symbolic links, rather than the link itself.
+.It Fl -copy-unsafe-links
+Copy targets of symbolic links that are unsafe (absolute symlinks or
+where the target reaches outside the copied tree).
 .It Fl -cvs-exclude , Fl C
 Exclude a common list of files as
 .Xr cvs 1
@@ -557,6 +562,9 @@ Run
 .Ar program
 on the remote host instead of the default
 .Pa rsync .
+.It Fl -safe-links
+Skip any symlinks that are unsafe (absolute symlinks or where the target
+is outside the copied tree).
 .It Fl -size-only
 Skip files based only on size, don't check timestamp.
 .It Fl -specials

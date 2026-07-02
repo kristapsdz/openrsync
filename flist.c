@@ -241,7 +241,8 @@ flist_fts_check(struct sess *sess, FTSENT *ent, enum fmode fmode)
 		errno = ent->fts_errno;
 		WARN("%s", ent->fts_path);
 	} else if (ent->fts_info == FTS_SLNONE) {
-		if (sess->opts->copy_links)
+		if (sess->opts->copy_links || sess->opts->safe_links ||
+		    sess->opts->copy_unsafe_links)
 			return false;
 		return sess->opts->preserve_links;
 	} else if (ent->fts_info == FTS_SL) {
@@ -1626,7 +1627,10 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
     ssize_t stripdir, const char *prefix, struct froot *froot)
 {
 	char		 fts_pathbuf[PATH_MAX]; /* flist_dirent_normalise */
-	struct stat	 st; /* root directory stat */
+	char             buf[PATH_MAX], /* temporary buffer */
+			 buf2[PATH_MAX]; /* temporary buffer */
+	struct stat	 st, /* root directory stat */
+			 st2; /* link stat */
 	const char	*cargv[2]; /* fts_open args */
 	char		*fts_path; /* output of flist_dirent_normalise */
 	FTS		*fts; /* directory traversal */
@@ -1637,7 +1641,8 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 	size_t		 fts_pathlen, /* fts_path size */
 			 i, /* temporary */
 			 nxdev = 0; /* size of xdev */
-	ssize_t		 stripdir_saved; /* stripdir save/restore */
+	ssize_t		 stripdir_saved, /* stripdir save/restore */
+			 ssz; /* temporary */
 	int		 fts_options, /* pass to fts_open */
 			 ret; /* temporary */
 	bool		 rootfilter = true; /* filter root directory */
@@ -1661,6 +1666,42 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 		return flist_gen_dirent_file(sess, "file", root, fl,
 		    &st, prefix, froot);
 	} else if (S_ISLNK(st.st_mode)) {
+		/*
+		 * How does this work?
+		 * - see whether the symlink target is a dir
+		 * - if yes, recurse
+		 * We did an lstat, now we need a stat.
+		 */
+		if (sess->opts->copy_unsafe_links) {
+			if (stat(root, &st2) == -1) {
+				ERR("%s: stat", root);
+				return false;
+			}
+			ssz = readlink(root, buf, sizeof(buf));
+			if (ssz == -1) {
+				ERR("%s: readlink", root);
+				return false;
+			}
+			buf[ssz] = '\0';
+		}
+		if (sess->opts->copy_unsafe_links &&
+		    is_unsafe_link(buf, root, prefix)) {
+			if (S_ISDIR(st2.st_mode)) {
+				if (stripdir == -1)
+					stripdir = flist_dirent_strip
+					    (sess, root);
+				snprintf(buf2, sizeof(buf2), "%s/",
+				    root);
+				LOG4("symlinks: recursing '%s' -> "
+				    "'%s' '%s'", root, buf, buf2);
+				return flist_gen_dirent(sess, buf2,
+				    fl, stripdir, prefix, froot);
+			} else {
+				return flist_gen_dirent_file(sess,
+				    "file", root, fl, &st2, prefix,
+				    froot);
+			}
+		}
 		return flist_gen_dirent_file(sess, "symlink", root, fl,
 		    &st, prefix, froot);
 	} else if (!S_ISDIR(st.st_mode)) {
@@ -1762,6 +1803,32 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 
 		assert(ent->fts_statp != NULL);
 
+		if (S_ISLNK(ent->fts_statp->st_mode)) {
+			if (sess->opts->copy_unsafe_links) {
+				/* We did lstat, now we need stat */
+				if (stat(ent->fts_accpath, &st2) == -1) {
+					ERR("%s: stat", ent->fts_accpath);
+					continue;
+				}
+				ssz = readlink(ent->fts_accpath, buf,
+				    sizeof(buf));
+				if (ssz == -1) {
+					ERR("%s: readlink", ent->fts_accpath);
+					continue;
+				}
+				buf[ssz] = '\0';
+			}
+			if (sess->opts->copy_unsafe_links &&
+			    is_unsafe_link(buf, root, prefix)) {
+				if (S_ISDIR(st2.st_mode)) {
+					ret = flist_gen_dirent(sess,
+					    fts_path, fl, stripdir,
+					    prefix, froot);
+					continue;
+				}
+			}
+		}
+
 		/*
 		 * If rsync is told to avoid crossing a filesystem
 		 * boundary when recursing, then replace all mount point
@@ -1861,12 +1928,20 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 		/* Optionally copy link information. */
 
 		if (S_ISLNK(ent->fts_statp->st_mode)) {
-			f->link = symlink_read(ent->fts_accpath,
-			    ent->fts_statp->st_size);
-			if (f->link == NULL) {
-				ERRX1("symlink_read");
-				fl_pop(fl);
-				continue;
+			if (sess->opts->copy_unsafe_links &&
+			    is_unsafe_link(buf, fts_path, prefix)) {
+				flist_copy_stat(f, &st2);
+				LOG3("copy_unsafe_links: converting "
+				    "unsafe link %s -> %s to a "
+				    "regular file", fts_path, buf);
+			} else {
+				f->link = symlink_read(ent->fts_accpath,
+				    ent->fts_statp->st_size);
+				if (f->link == NULL) {
+					ERRX1("symlink_read");
+					fl_pop(fl);
+					continue;
+				}
 			}
 		}
 

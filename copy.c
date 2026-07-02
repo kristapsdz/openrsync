@@ -61,6 +61,143 @@ iszerobuf(const void *b, size_t len)
 }
 
 /*
+ * Calculate the depth of a path (in directories).  Account for ../, and
+ * return -1 if the depth drops below zero.
+ *
+ * Note that in strict mode, non-leading ../ components are assumed to
+ * be unsafe and will return -1 as well because we do not know if the
+ * previous components would be replaced with a symlink that makes it
+ * unsafe.
+ */
+static ssize_t
+count_dir_depth(const char *path, ssize_t dirdepth, bool strict)
+{
+	const char	*dp, /* current position in path */
+	      		*lastp; /* last seen position */
+	bool		 leading = true; /* leading component */
+
+	/* Empty paths have zero depth. */
+
+	if (path == NULL || *path == '\0')
+		return 0;
+
+	dp = lastp = path;
+	while (dp != NULL) {
+		/* Skip any excess slashes */
+		while (*dp == '/')
+			dp++;
+
+		if (strncmp(dp, "../", 3) == 0) {
+			/* Traversing up directory depth */
+			if (strict && !leading)
+				return -1;
+			dirdepth--;
+		} else if (strncmp(dp, "./", 2) == 0) {
+			/*
+			 * No Change in directory depth This is more
+			 * strict than we need to be, but it matches
+			 * what rsync 3.x did.  Presumably openrsync
+			 * won't be running on a machine where ./ could
+			 * be replaced.
+			 */
+			leading = false;
+		} else if (strchr(dp, '/') != NULL) {
+			/* Traversing down directory depth */
+			dirdepth++;
+
+			/*
+			 * If we didn't hit one of the above cases, then
+			 * we're no longer a leading component.  We're
+			 * defining leading here as everything up to the
+			 * first non-..  and non-. component.
+			 * Subsequent ../ should fail.
+			 */
+			leading = false;
+		}
+
+		/* If we ever go above the starting point, fail. */
+
+		if (strict && dirdepth < 0)
+			return -1;
+
+		lastp = dp;
+		dp = strchr(dp, '/');
+		if (dp != NULL) {
+			dp++;
+			/*
+			 * If we had a trailing '/', we'll zap lastp and
+			 * break so that we don't examine the last
+			 * component.
+			 */
+			if (*dp == '\0') {
+				lastp = NULL;
+				break;
+			}
+		}
+	}
+
+	/*
+	 * lastp will be NULL if we had a trailing slash, as we don't
+	 * need to inspect anything else -- it was properly accounted
+	 * for in the loop.
+	 */
+
+	if (lastp != NULL && strcmp(lastp, "..") == 0) {
+		dirdepth--;
+		if (strict && !leading)
+			return -1;
+	}
+
+	return dirdepth;
+}
+
+/*
+ * Determine if the target of a symlink is "safe", relative to the src
+ * (the path of the symlink).  Absolute symlinks are unsafe.  Any
+ * symlink target that reaches above the root, is unsafe.
+ * This function returns a negative ("it's unsafe").  Be warned.
+ */
+bool
+is_unsafe_link(const char *link, const char *src, const char *root)
+{
+	size_t	 rootlen; /* length of the root */
+	ssize_t	 srcdepth, /* depth of the source */
+		 linkdepth; /* depth of the link dir */
+
+	/* Blank or absolute symlinks are always unsafe */
+
+	if (link == NULL || *link == '\0' || *link == '/')
+		return true;
+
+	if (root != NULL) {
+		rootlen = strlen(root);
+		if (strncmp(src, root, rootlen) == 0) {
+			/* Make src relative to root */
+			src += rootlen;
+			if (*src == '/') {
+				src++;
+			}
+		} else {
+			/* src is outside of the root, this is unsafe */
+			WARNX("%s: is_unsafe_link: src file is outside "
+			    "of the root: %s\n", src, root);
+			return true;
+		}
+	}
+
+	srcdepth = count_dir_depth(src, 0, false);
+	if (srcdepth < 0) {
+		/* src escapes the root, this in unsafe */
+		WARNX("%s: is_unsafe_link: src escaped the root: "
+		    "%s\n", src, root);
+		return true;
+	}
+
+	linkdepth = count_dir_depth(link, srcdepth, true);
+	return linkdepth < 0;
+}
+
+/*
  * Drain from one descriptor into another, truncating the resulting file
  * to the last position written.
  * FIXME: are there faster ways of doing this?
