@@ -253,6 +253,7 @@ flist_fts_check(struct sess *sess, FTSENT *ent, enum fmode fmode)
 		 *  send the link along.
 		 */
 		if (sess->opts->preserve_links ||
+		    sess->opts->copy_dirlinks ||
 		    fmode == FARGS_SENDER)
 			return true;
 		WARNX("%s: skipping symlink (5)", ent->fts_path);
@@ -1672,7 +1673,8 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 		 * - if yes, recurse
 		 * We did an lstat, now we need a stat.
 		 */
-		if (sess->opts->copy_unsafe_links) {
+		if (sess->opts->copy_dirlinks ||
+		    sess->opts->copy_unsafe_links) {
 			if (stat(root, &st2) == -1) {
 				ERR("%s: stat", root);
 				return false;
@@ -1683,6 +1685,20 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 				return false;
 			}
 			buf[ssz] = '\0';
+		}
+		if (sess->opts->copy_dirlinks) {
+			if (S_ISDIR(st2.st_mode)) {
+				if (stripdir == -1)
+					stripdir = flist_dirent_strip
+					    (sess, root);
+				snprintf(buf2, sizeof(buf2), "%s/",
+				    root);
+				LOG4("symlinks: recursing '%s' -> "
+				    "'%s' '%s'", root, buf, buf2);
+				return flist_gen_dirent(sess, buf2,
+				    fl, stripdir,
+				    prefix, froot);
+			}
 		}
 		if (sess->opts->copy_unsafe_links &&
 		    is_unsafe_link(buf, root, prefix)) {
@@ -1804,7 +1820,8 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 		assert(ent->fts_statp != NULL);
 
 		if (S_ISLNK(ent->fts_statp->st_mode)) {
-			if (sess->opts->copy_unsafe_links) {
+			if (sess->opts->copy_dirlinks ||
+			    sess->opts->copy_unsafe_links) {
 				/* We did lstat, now we need stat */
 				if (stat(ent->fts_accpath, &st2) == -1) {
 					ERR("%s: stat", ent->fts_accpath);
@@ -1818,8 +1835,9 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 				}
 				buf[ssz] = '\0';
 			}
-			if (sess->opts->copy_unsafe_links &&
-			    is_unsafe_link(buf, root, prefix)) {
+			if (sess->opts->copy_dirlinks ||
+			    (sess->opts->copy_unsafe_links &&
+			    is_unsafe_link(buf, root, prefix))) {
 				if (S_ISDIR(st2.st_mode)) {
 					ret = flist_gen_dirent(sess,
 					    fts_path, fl, stripdir,

@@ -890,6 +890,31 @@ upload_del(struct upload *p, const struct sess *sess)
 }
 
 /*
+ * Check whether the conditions for keep_dirlink are present.
+ * Returns true if so, false otherwise.
+ */
+static bool
+keep_dirlinks_applies(const struct stat *st, const struct flist *f, 
+    int rootfd)
+{
+	struct stat	 st2;
+
+	/*
+	 * The thing that is a dir on the sender side must be a symlink
+	 * to a dir.
+	 */
+
+	if (!S_ISLNK(st->st_mode))
+		return false;
+	if (fstatat(rootfd, f->path, &st2, 0) == -1)
+		return false;
+	if (!S_ISDIR(st2.st_mode))
+		return false;
+
+	return true;
+}
+
+/*
  * Fix the mode of the file/directory in place for the flist entry.
  * This deals with upgrading permissions just enough to allow us to
  * progress.
@@ -988,6 +1013,10 @@ pre_dir(struct upload *p, struct sess *sess)
 	}
 
 	if (rc != -1 && !S_ISDIR(st.st_mode)) {
+		if (sess->opts->keep_dirlinks &&
+		    keep_dirlinks_applies(&st, f, p->rootfd))
+			return 0;
+
 		/*
 		 * Incoming item is a directory, but there is a
 		 * non-directory in the way, so we need to remove it.
@@ -1076,6 +1105,9 @@ post_dir(const struct sess *sess, const struct upload *u, size_t idx)
 		return false;
 	}
 	if (!S_ISDIR(st.st_mode)) {
+		if (sess->opts->keep_dirlinks &&
+		    keep_dirlinks_applies(&st, f, u->rootfd))
+			return true;
 		WARNX("%s: not a directory", f->path);
 		return false;
 	}

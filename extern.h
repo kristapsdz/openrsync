@@ -388,6 +388,7 @@ struct	opts {
 	bool		 bit8;			/* -8 */
 	bool		 checksum;		/* -c */
 	bool		 compress;		/* -z */
+	bool		 copy_dirlinks;		/* -k */
 	bool		 copy_links;		/* -L */
 	bool		 copy_unsafe_links;	/* --copy-unsafe-links */
 	bool		 del_excl;		/* --delete-excluded */
@@ -395,8 +396,9 @@ struct	opts {
 	bool		 dirs;			/* -d */
 	bool		 force_delete;		/* --force */
 	bool		 from0;			/* -0 */
-	bool		 ignore_times;		/* -I */
 	bool		 hard_links;		/* -H */
+	bool		 ignore_times;		/* -I */
+	bool		 keep_dirlinks;		/* -K */
 	bool		 no_motd;		/* --no-motd */
 	bool		 noimpdirs;		/* --no-implied-dirs */
 	bool		 omit_dir_times;	/* -O */

@@ -1,0 +1,51 @@
+#! /bin/sh
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf src ref
+mkdir src ref
+
+# Create a dangling symlink:
+#
+ln -s foo src/b
+
+echo "Test 1: Copy dangling symlink, non-recursive"
+rm -rf dst
+$rsync -a -L --no-r -- src/* dst/ || [ $? -eq 23 ]
+if [ -d dst ]; then
+	compare_trees ref dst
+fi
+
+echo "Test 2: Copy dangling symlink, recursive"
+rm -rf dst
+$rsync -a -L -- src/ dst/ || [ $? -eq 23 ]
+compare_trees ref dst
+
+
+# Create non-dangling symlinks that sort before and after src/b:
+#
+date > src/file
+ln -s file src/a
+ln -s file src/c
+rm -rf ref
+cp -a src ref
+rm ref/b
+
+echo "Test 3: Copy dangling symlink, non-recursive"
+rm -rf dst
+$rsync -a -L --no-r -- src/* dst/ || [ $? -eq 23 ]
+diff -r ref dst
+
+echo "Test 4: Copy dangling symlink, non-recursive 2"
+rm -rf dst
+$rsync -a --copy-links --no-r -- src/* dst/ || [ $? -eq 23 ]
+diff -r ref dst
+
+echo "Test 5: Copy dangling symlink, recursive"
+rm -rf dst
+$rsync -a -L -- src/ dst/ || [ $? -eq 23 ]
+diff -r ref dst

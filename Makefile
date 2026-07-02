@@ -165,19 +165,23 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test39_quiet.test \
 		  regress/functional/test41_backup_dir.test \
 		  regress/functional/test46_copy_unsafe_links.test \
-		  regress/functional/test48_safe_links.test
+		  regress/functional/test48_safe_links.test \
+		  regress/functional/test16d_symlinks.test \
+		  regress/functional/test47_keep_dirlinks.test
 
 # Doesn't work (protocol < 29): regress/functional/test25_filter_basic_cvs.test
 # Doesn't work (protocol < 29): regress/functional/test25_filter_clear.test
 # Doesn't work (protocol < 29): regress/functional/test25_filter_default.test
 # Doesn't work (protocol < 29): regress/functional/test25_filter_dir.test
+# Doesn't work (???): regress/functional/test16_symlinks.test
 
 REGRESS_FAIL 	= regress/functional/test12d_inex.test \
 		  regress/functional/test25_filter_basic_cvs.test \
 		  regress/functional/test25_filter_clear.test \
 		  regress/functional/test25_filter_default.test \
 		  regress/functional/test25_filter_dir.test \
-		  regress/functional/test25_filter_merge_cvs.test
+		  regress/functional/test25_filter_merge_cvs.test \
+		  regress/functional/test16_symlinks.test
 REGRESS_MANUAL 	= 
 RSYNC_VERBOSE	= 
 

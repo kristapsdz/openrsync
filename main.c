@@ -453,7 +453,7 @@ enum {
 	OP_TIMEOUT,
 };
 
-const char rsync_shopts[] = "0468B:CDFHIJLOPRVWabcde:f:ghlnopqrtuvxz";
+const char rsync_shopts[] = "0468B:CDFHIJKLOPRVWabcde:f:ghklnopqrtuvxz";
 const struct option	 lopts[] = {
     { "8-bit-output",	no_argument,	NULL,			'8' },
     { "address",	required_argument, NULL,		OP_ADDRESS },
@@ -467,6 +467,7 @@ const struct option	 lopts[] = {
     { "compress",	no_argument,	NULL,			'z' },
     { "contimeout",	required_argument, NULL,		OP_CONTIMEOUT },
     { "copy-dest",	required_argument, NULL,		OP_COPY_DEST },
+    { "copy-dirlinks",	no_argument, NULL,			'k' },
     { "copy-links",	no_argument,	NULL,			'L' },
     { "copy-unsafe-links", no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "cvs-exclude",	no_argument,	NULL,			'C' },
@@ -493,6 +494,7 @@ const struct option	 lopts[] = {
     { "include-from",	required_argument, NULL,		OP_INCLUDE_FROM },
     { "ipv4",           no_argument,    NULL,                   '4' },
     { "ipv6",           no_argument,    NULL,                   '6' },
+    { "keep-dirlinks",	no_argument, NULL,			'K' },
     { "link-dest",	required_argument, NULL,		OP_LINK_DEST },
     { "links",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "max-size",	required_argument, NULL,		OP_MAX_SIZE },
@@ -512,6 +514,7 @@ const struct option	 lopts[] = {
     { "no-owner",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-partial",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-perms",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
+    { "no-r",		no_argument,	NULL,			OP_SET_BOOL_FALSE }, /* XXX */
     { "no-relative",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-recursive",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
     { "no-specials",	no_argument,	NULL,			OP_SET_BOOL_FALSE },
@@ -567,6 +570,7 @@ usage(void)
 	    "\t[--compare-dest=dir]\n"
 	    "\t[--contimeout=seconds]\n"
 	    "\t[--copy-dest=dir]\n"
+	    "\t[--copy-dirlinks, -k]\n"
 	    "\t[--copy-links, -L]\n"
 	    "\t[--copy-unsafe-links]\n"
 	    "\t[--cvs-exclude, -C]\n"
@@ -591,6 +595,7 @@ usage(void)
 	    "\t[--include]\n"
 	    "\t[--ipv4, -4]\n"
 	    "\t[--ipv6, -6]\n"
+	    "\t[--keep-dirlinks, -k]\n"
 	    "\t[--link-dest=dir]\n"
 	    "\t[--links, -l]\n"
 	    "\t[--max-size=size]\n"
@@ -763,6 +768,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				opts.partial = false;
 			else if (strcmp(lopts[lidx].name, "no-perms") == 0)
 				opts.preserve_perms = false;
+			else if (strcmp(lopts[lidx].name, "no-r") == 0)
+				opts.recursive = false;
 			else if (strcmp(lopts[lidx].name, "no-recursive") == 0)
 				opts.recursive = false;
 			else if (strcmp(lopts[lidx].name, "no-relative") == 0)
@@ -835,6 +842,9 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 		case 'J':
 			opts.omit_link_times = true;
 			break;
+		case 'K':
+			opts.keep_dirlinks = true;
+			break;
 		case 'L':
 			opts.copy_links = true;
 			break;
@@ -889,6 +899,9 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 		case 'h':
 			usage();
 			return NULL;
+		case 'k':
+			opts.copy_dirlinks = true;
+			break;
 		case 'l':
 			opts.preserve_links = true;
 			break;

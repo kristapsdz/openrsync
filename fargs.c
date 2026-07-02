@@ -269,6 +269,13 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 				    sess->opts->basedir[j]);
 			}
 		}
+		if (sess->opts->keep_dirlinks)
+			addargs(&args, "-K");
+	} else {
+		if (sess->opts->copy_links)
+			addargs(&args, "-L");
+		if (sess->opts->copy_dirlinks)
+			addargs(&args, "-k");
 	}
 
 	/* Terminate with a full-stop for reasons unknown. */

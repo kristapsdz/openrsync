@@ -1,0 +1,72 @@
+#! /bin/sh
+
+# Test that the --keep-dirlinks option works as expected.
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+# Create the source tree:
+#
+rm -rf src
+mkdir -p src/dir/dir/dir
+
+for c in a b y z ; do
+    date > src/${c}file
+    date > src/dir/${c}file
+    date > src/dir/dir/${c}file
+    date > src/dir/dir/dir/${c}file
+done
+
+
+# With --keep-dirlinks, rsync should follow the symlink
+# in the dest dir and populate it with the contents
+# from the source dir:
+#
+rm -rf dst
+mkdir -p dst/keepdir
+ln -s keepdir dst/dir
+
+$rsync -a --keep-dirlinks -- src/ dst/
+[ -h "dst/dir" ]
+touch src/dir dst/dir
+compare_trees -t src/dir dst/dir
+compare_trees -t src/dir dst/keepdir
+
+
+# rsync -a should duplicate src/ into dst/, replacing the
+# valid symlink dst/dir with a real directory from src/:
+#
+rm -rf dst
+mkdir -p dst/keepdir
+ln -s keepdir dst/dir
+
+$rsync -a -- src/ dst/
+[ -d "dst/dir" ]
+
+# keepdir doesn't exist in src, so we'll move it out.  We're comparing times but
+# this will obviously modify dst's, so we create a reference file with the last
+# mtime and revert it afterwards.
+touch -r dst ref
+mv dst/keepdir .
+touch -r ref dst
+
+compare_trees -t src dst
+X=$(find keepdir | wc -l)
+[ "$X" -eq 1 ]
+
+
+# rsync -a --keep-dirlinks should duplicate src/ into dst/,
+# replacing the dangling symlink dst/dir with a real
+# directory from src/:
+#
+rm -rf dst keepdir
+mkdir dst
+[ ! -e /foobie-bletch ]
+ln -s /foobie-bletch dst/dir
+
+$rsync -a --keep-dirlinks -- src/ dst/
+[ -d "dst/dir" ]
+compare_trees -t src/dir dst/dir

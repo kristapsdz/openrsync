@@ -1703,7 +1703,8 @@ check_other:
 			 */
 
 			if (!sess->opts->copy_links &&
-			    !sess->opts->copy_unsafe_links)
+			    !sess->opts->copy_unsafe_links &&
+			    !sess->opts->copy_dirlinks)
 				oflags |= nlinkflag;
 
 			up.stat.fd = openat(dirfd, opath, oflags, 0);

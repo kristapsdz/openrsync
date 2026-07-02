@@ -1,0 +1,53 @@
+#! /bin/sh
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree
+mkdir dir1
+cd dir1
+mkdirfile foo
+ln -s foo bar
+# make the tree we want to compare to
+mkdir ../dir2
+cd ../dir2
+mkdirfile foo
+mkdirfile bar
+
+cd ..
+mkdir dir3
+# sync timestamps
+touch dir1/* dir2/*
+cd dir1
+# test case 1: symlink is named on the commandline
+$rsync -L -- * ../dir3/.
+cd ..
+compare_trees dir2 dir3
+
+rm -rf dir1 dir2
+# test case 2: symlink directory chain
+# make the copy-from-here tree
+mkdir -p dir1/source
+echo "Hello, world" > dir1/source/foo
+ln -s source dir1/middle
+ln -s middle dir1/end
+
+# make the tree we want to compare to
+mkdir -p dir2
+cp -R dir1/source/ dir2/
+
+for flag in "-a" "--dirs" "--copy-dirlinks"; do
+	1>&2 echo "Trying flag: $flag"
+	rm -rf dir3
+	$rsync "$flag" -- dir1/end/ dir3/
+
+	# --copy-dirlinks shouldn't actually do anything, but it shouldn't
+	# crash.
+	if [ "$flag" != "--copy-dirlinks" ]; then
+		compare_trees dir2 dir3
+	fi
+done
