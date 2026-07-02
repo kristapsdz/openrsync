@@ -6,7 +6,7 @@ jobs:
     steps:
     - uses: actions/checkout@master
     - name: Install dependencies
-      run: sudo apt-get install -y bmake rsync athena-jot ncompress
+      run: sudo apt-get install -y bmake rsync athena-jot ncompress libcunit1 libcunit1-dev
     - name: Configure
       run: ./configure
     - name: Build and test
@@ -16,7 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@master
     - name: Install dependencies
-      run: sudo apt-get install -y bmake rsync athena-jot ncompress
+      run: sudo apt-get install -y bmake rsync athena-jot ncompress libcunit1 libcunit1-dev
     - name: Configure
       run: |
         echo "HAVE_SECCOMP_FILTER=0" > configure.local
@@ -30,7 +30,7 @@ jobs:
     steps:
     - uses: actions/checkout@master
     - name: Install dependencies
-      run: brew install bmake
+      run: brew install bmake cunit
     - name: Configure
       run: ./configure
     - name: Build and test
@@ -43,6 +43,7 @@ jobs:
       uses: vmactions/freebsd-vm@v1
       with:
         usesh: true
+        prepare: pkg install -y cunit
         run: |
           ./configure
           make
@@ -54,6 +55,7 @@ jobs:
       uses: vmactions/netbsd-vm@v1
       with:
         usesh: true
+        prepare: pkgin install cunit
         run: |
           ./configure
           make
@@ -70,6 +72,11 @@ jobs:
           musl-fts
           musl-fts-dev
           zlib-dev
+          outils-jot
+          ncompress
+          rsync
+          cunit
+          cunit-dev
         shell-name: alpine-x86_64.sh
     - name: Configure, build, and test on x86_64
       run: |

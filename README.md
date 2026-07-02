@@ -93,10 +93,28 @@ for a listing.
 
 # Testing
 
-The testing system is still in development.  It currently requires `jot`,
-`compress`, and `truncate`.
+There are two regression systems actively being developed.  The first is
+*functional* tests, which run openrsync through a variety of scenarios
+and check its output.  It runs these against the stock rsync as well.
 
+The second is *unit* tests, which test specific functions in the source.
+
+Functional tests require `jot`, `compress`, and `truncate`.
+
+Unit tests require [cunit](https://cunit.sourceforge.net/).
+
+To run both, simply use:
+
+```
 % make regress
+```
+
+For each type:
+
+```
+% make regress_functional
+% make regress_unit
+```
 
 # Algorithm
 

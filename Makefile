@@ -37,11 +37,15 @@ OBJS	    = blocks.o \
 ALLOBJS	    = $(OBJS) \
 	      main.o
 UNAME 	   != uname
+
 LDADD_FTS  != pkg-config --libs musl-fts 2>/dev/null || echo ""
 CFLAGS_FTS != pkg-config --cflags musl-fts 2>/dev/null || echo ""
+
 LDADD_Z	   != pkg-config --libs zlib 2>/dev/null || echo "-lz"
 CFLAGS_Z   != pkg-config --cflags zlib 2>/dev/null || echo ""
-UNAME      != uname
+
+LDADD_CU   != pkg-config --libs cunit 2>/dev/null || echo ""
+CFLAGS_CU  != pkg-config --cflags cunit 2>/dev/null || echo ""
 
 # Darwin and FreeBSD have these helpful functions.
 # Provide compat implementations, if not.
@@ -57,6 +61,9 @@ CFLAGS	  += -DHAVE_HUMANIZE_NUMBER
 
 CFLAGS	  += $(CFLAGS_FTS) $(CFLAGS_Z)
 LDADD	  += -lm $(LDADD_LIB_SOCKET) $(LDADD_SCAN_SCALED) $(LDADD_Z) $(LDADD_FTS)
+
+RCFLAGS	   = $(CFLAGS) $(CFLAGS_CU)
+RLDADD	   = $(LDADD) $(LDADD_CU)
 
 all: openrsync
 
@@ -79,6 +86,7 @@ uninstall:
 
 clean:
 	rm -f $(ALLOBJS) openrsync
+	rm -f regress/cunit/print_7_or_8_bit
 
 distclean: clean
 	rm -f Makefile.configure config.h config.log
@@ -89,9 +97,15 @@ flist.o main.o receiver.o rules.o sender.o uploader.o: rules.h
 
 compat_humanize_number.o log.o: compat_humanize_number.h
 
-compat_sbuf.o log.o: compat_sbuf.h
+compat_sbuf.o log.o regress/cunit/print_7_or_8_bit: compat_sbuf.h
 
 rules.h: extern.h
+
+regress/cunit/print_7_or_8_bit: regress/cunit/print_7_or_8_bit.c $(OBJS)
+	$(CC) $(RCFLAGS) -o $@ regress/cunit/print_7_or_8_bit.c $(OBJS) $(RLDADD)
+
+regress_cunit: regress/cunit/print_7_or_8_bit
+	./regress/cunit/print_7_or_8_bit
 
 # Doesn't work: regress/functional/test10b_perms.test (???)
 # Doesn't work openrsync -> rsync: regress/functional/test40_backup.test
@@ -254,4 +268,4 @@ regress_functional:: all
 		done ; \
 	done
 
-regress:: regress_functional
+regress:: regress_functional regress_cunit

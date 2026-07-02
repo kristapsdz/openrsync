@@ -7,3 +7,4 @@ config.log.old
 *.o
 *.swp
 openrsync
+regress/cunit/print_7_or_8_bit

@@ -58,7 +58,6 @@
 #define LOG_FORMAT_OPERATION	(1 << 3)
 #define LOG_FORMAT_ITEMIZE_I	(1 << 4)
 
-extern int verbose;
 static FILE *log_file;
 static struct sess *log_sess;
 
@@ -478,8 +477,12 @@ log_writef(enum log_type type, const char *fmt, ...)
 
 /*
  * Do the 8-bit escaping as needed for `s`.  If `sbuf` is NULL, then the
- * result will be written to the log file -- otherwise, it'll be stashed
+ * result will be written to the log file.  Otherwise, it'll be stashed
  * in the sbuf passed in as requested.
+ *
+ * This filters out non-printables and octals.  If --8-bit-output, it
+ * prints anything else; if not, only ASCII and 2-Byte UTF8 sequences
+ * are printed.
  *
  * TODO: We used to print the names of items to be updated with a mix of
  * calls to LOG1() and print_7_or_8_bit().  With the former, embedded
@@ -516,23 +519,34 @@ print_7_or_8_bit(const struct sess *sess, const char *fmt, const char *s,
 		c = *(unsigned char *)p;
 
 		if (isprint(c) || c == '\t' || c == 0x7f) {
+			/*
+			 * Branch: printable, tab, delete.
+			 * Test specially for octals now.
+			 */
 			if (c == '\\' &&
 			    *(unsigned char *)(p + 1) == '#' &&
 			    isdigit(*(unsigned char *)(p + 2)) &&
 			    isdigit(*(unsigned char *)(p + 3)) &&
-			    isdigit(*(unsigned char *)(p + 4))) {
+			    isdigit(*(unsigned char *)(p + 4)))
 				sbuf_printf(innerbuf, "\\#%03o", '\\');
-			} else {
+			else
 				sbuf_putc(innerbuf, c);
-			}
 		} else if (c < ' ') {
+			/*
+			 * Non-printable ASCII.
+			 */
                         sbuf_printf(innerbuf, "\\#%03o", c);
 		} else if (sess->opts->bit8) {
+			/*
+			 * 8bit (above ASCII).
+			 */
                         sbuf_putc(innerbuf, c);
 		} else if (c >= 0xc2 && c <= 0xdf) {
 			c2 = *(unsigned char *)(p + 1);
-
-			/* TODO: Use iconv() */
+			/*
+			 * Two-byte UTF8 characters.
+			 * TODO: Use iconv().
+			 */
 			if (c2 >= 0x80 && c2 <= 0xdf) {
 				sbuf_putc(innerbuf, c);
 				sbuf_putc(innerbuf, c2);
