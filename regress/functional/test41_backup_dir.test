@@ -160,7 +160,7 @@ for i in $(seq ${NUMFILES}) ; do
     # Ensure ref/ has the same group ID as ${BUD}/ so
     # that compare_trees() doesn't fail on that point.
     #
-    [ $i -eq 1 ] && chgrp $(stat -f %g ref) ${BUD}
+    [ $i -eq 1 ] && chgrp $(stat $STAT_FMT_FLAG %g ref) ${BUD}
 
     touch -c -t ${DIRTIME} ref/dir ${BUD}/dir ref ${BUD}
     compare_trees -t ref ${BUD}
