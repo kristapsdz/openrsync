@@ -501,18 +501,6 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 			err(ERR_IPC, "%s: unveil", root);
 	}
 
-#if 0
-	/*
-	 * This was moved to below because "root" may not exist yet.
-	 * FIXME: conditionally unveil if the root exists.
-	 * FIXME: allow for ~/.cvsignore
-	 */
-	if (unveil(root, "rwc") == -1)
-		err(ERR_IPC, "%s: unveil", root);
-	if (unveil(NULL, NULL) == -1)
-		err(ERR_IPC, "unveil");
-#endif
-
 	/*
 	 * Client sends rules.  If in a position to send, check whether
 	 * the negotiated protocol is satisfied beforehand.
@@ -656,6 +644,31 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 				    IFLAG_LOCAL_CHANGE;
 		}
 	}
+
+	/*
+	 * If we've specified an absolute backup directory, protect
+	 * against the directory now.  This is ignored in dry-run mode,
+	 * because the directory is never touched.
+	 */
+
+	if (sess->opts->backup_dir != NULL &&
+	    sess->opts->backup_dir[0] == '/' &&
+	    !sess->opts->dry_run) {
+		if (mkpath(sess->opts->backup_dir, 0755) < 0)
+			err(ERR_FILE_IO, "%s: mkatph",
+			    sess->opts->backup_dir);
+		if (unveil(sess->opts->backup_dir, "rwc") == -1)
+			err(ERR_IPC, "%s: unveil",
+			    sess->opts->backup_dir);
+	}
+
+	/*
+	 * Lock down the file-system.
+	 * FIXME: this has been available during the flist transfer,
+	 * which is not good.  See if it can be moved above the flist
+	 * transfer.  I'm not sure how this would work, given that the
+	 * root for relative transfers is inferred from the given list.
+	 */
 
 	if (unveil(root, "rwc") == -1)
 		err(ERR_IPC, "%s: unveil", root);

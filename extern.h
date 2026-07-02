@@ -367,8 +367,9 @@ struct	opts {
 	off_t		 bwlimit;		/* --bwlimit (B/s) */
 	off_t		 max_size;		/* --max-size */
 	off_t		 min_size;		/* --min-size */
-	char		*backup_suffix;		/* --suffix */
 	char		*address;		/* --address */
+	char		*backup_dir;		/* --backup-dir */
+	char		*backup_suffix;		/* --suffix */
 	char		*basedir[MAX_BASEDIR];	/* --compare/copy/link-dest */
 	char		*port;			/* --port */
 	char		*rsync_path;		/* --rsync-path */
@@ -383,6 +384,7 @@ struct	opts {
 	size_t		 one_file_system;	/* -x */
 	char		 ipf;			/* 0 (unspec), 4 (IPV4), 6 (IPV6) */
 	bool		 backup;		/* -b */
+	bool		 backup_suffix_given;	/* --suffix given */
 	bool		 bit8;			/* -8 */
 	bool		 checksum;		/* -c */
 	bool		 compress;		/* -z */
@@ -789,6 +791,9 @@ void		 copy_file(int, const char *, const struct flist *);
 bool   	 	 move_file(int, const char *, int, const char *, bool, bool);
 bool		 backup_file(int, const char *, int, const char *, bool,
 		    const struct fldstat *);
+bool		 backup_to_dir(const struct sess *, int, const struct flist *,
+		    const char *, mode_t);
+bool		 backup_prep_dir(const struct sess *, int, const char *);
 
 int		 mkpath(char *, mode_t);
 int		 mkpathat(int fd, char *, mode_t);

@@ -1,0 +1,237 @@
+#! /bin/sh
+
+# Test that the --backup-dir option works as expected.  Note that
+# creating and deleting backup files will update the mtime on
+# the current directory so after calls to rsync we use touch(1)
+# to ensure they match before calling compare_trees().
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+# Number of regular files to create at each of the top-level
+# and one subdir of the source dir.
+#
+NUMFILES=17
+DIRTIME=$(date +%Y%m%d)0000.00
+
+# Clean up from prior run:
+#
+rm -rf src dst ref .backupd
+
+# Create the source tree:
+#
+mkdir src src/dir
+for i in $(seq ${NUMFILES}) ; do
+    jot 1 $i > src/file$i
+    jot 262144 $i > src/dir/file$i
+done
+
+# First, run some tests with a relative backup-dir that resides
+# within the destination directory:
+#
+BUD=".backupd"
+
+# A full rsync --backup on a non-existing dest dir
+# should not create any backup files:
+#
+$rsync -a --backup --backup-dir=${BUD} -- src/ dst/
+touch -c -t ${DIRTIME} src/dir dst/dir src dst
+compare_trees -t src dst
+
+# A full rsync --backup on an existing dest dir that is identical
+# to the source dir should not create backup files:
+#
+for i in $(seq ${NUMFILES}) ; do
+    $rsync -a --backup --backup-dir=${BUD} -- src/ dst/
+    touch -c -t ${DIRTIME} src/dir dst/dir src dst
+    compare_trees -t src dst
+done
+
+# A full rsync --backup on an existing dest dir should create
+# backup files only for files that have changed on the source.
+# Existing backup files should be replaced each time:
+#
+for i in $(seq ${NUMFILES}) ; do
+    rm -rf ref
+    cp -a dst ref
+    mkdir -p ref/${BUD} ref/${BUD}/dir
+
+    cp -a ref/file1 ref/${BUD}/
+    date >> src/file1
+    cp -a src/file1 ref/
+
+    cp -a ref/dir/file1 ref/${BUD}/dir/
+    date >> src/dir/file1
+    cp -a src/dir/file1 ref/dir/
+
+    $rsync -a --backup --backup-dir=${BUD} -- src/ dst/
+    touch -c -t ${DIRTIME} ref/${BUD}/dir ref/${BUD} dst/${BUD}/dir dst/${BUD} ref dst
+    compare_trees -t ref dst
+done
+
+# Same as above except selecting a different file each iteration
+# and using -b rather than --backup:
+#
+for i in $(seq ${NUMFILES}) ; do
+    [ $# -le 0 ] && set -- $(id -G)
+    rm -rf ref
+    cp -a dst ref
+    mkdir -p ref/${BUD} ref/${BUD}/dir
+
+    cp -a ref/file$i ref/${BUD}/
+    date >> src/file$i
+    chmod 600 src/file$i
+    chgrp $1 src/file$i
+    cp -a src/file$i ref/
+
+    cp -a ref/dir/file$i ref/${BUD}/dir/
+    date >> src/dir/file$i
+    chmod 600 src/dir/file$i
+    chgrp $1 src/dir/file$i
+    cp -a src/dir/file$i ref/dir/
+
+    $rsync -a -b --backup-dir=${BUD} -- src/ dst/
+    touch -c -t ${DIRTIME} ref/${BUD}/dir ref/${BUD} dst/${BUD}/dir dst/${BUD} ref dst
+    compare_trees -t ref dst
+    shift
+done
+
+# At this point a full rsync --backup should make no changes:
+#
+$rsync -a --backup --backup-dir=${BUD} -- src/ dst/
+touch -t ${DIRTIME} ref/dir dst/dir ref dst
+compare_trees -t ref dst
+
+# Pure metadata changes on the source should not be reflected
+# in backup files:
+#
+for i in $(seq ${NUMFILES}) ; do
+    [ $# -le 0 ] && set -- $(id -G)
+    rm -rf ref
+    cp -a dst ref
+
+    chmod 640 src/file$i
+    chgrp $1 src/file$i
+    cp -a src/file$i ref/
+
+    chmod 640 src/dir/file$i
+    chgrp $1 src/dir/file$i
+    cp -a src/dir/file$i ref/dir/
+
+    $rsync -a --backup --backup-dir=${BUD} -- src/ dst/
+    touch -c -t ${DIRTIME} ref/${BUD}/dir ref/${BUD} dst/${BUD}/dir dst/${BUD} ref dst
+    compare_trees -t ref dst
+    shift
+done
+
+# Now --delete (without --backup) should delete all the backup files:
+#
+$rsync -a --delete -- src/ dst/
+touch -c -t ${DIRTIME} ref/${BUD}/dir ref/${BUD} dst/${BUD}/dir dst/${BUD} ref dst
+compare_trees -t src dst
+
+# Now run some tests with a backup-dir that resides
+# outside the destination directory:
+#
+BUD="/tmp/.backupd$$"
+rm -rf ref ${BUD}
+cp -a dst ref
+find ref ! -type d | xargs rm -f
+
+# A full rsync --backup on an existing dest dir should create
+# backup files only for files that have changed on the source.
+# Existing backup files should be replaced each time:
+#
+for i in $(seq ${NUMFILES}) ; do
+    cp -a dst/file$i ref/
+    date >> src/file$i
+
+    cp -a dst/dir/file$i ref/dir/
+    date >> src/dir/file$i
+
+    $rsync -a --backup --backup-dir=${BUD} -- src/ dst/
+
+    touch -c -t ${DIRTIME} src/dir dst/dir src dst
+    compare_trees -t src dst
+
+    # Ensure ref/ has the same group ID as ${BUD}/ so
+    # that compare_trees() doesn't fail on that point.
+    #
+    [ $i -eq 1 ] && chgrp $(stat -f %g ref) ${BUD}
+
+    touch -c -t ${DIRTIME} ref/dir ${BUD}/dir ref ${BUD}
+    compare_trees -t ref ${BUD}
+done
+
+# Same as above with the default suffix:
+#
+SUF="~"
+for i in $(seq ${NUMFILES}) ; do
+    cp -a dst/file$i ref/file$i${SUF}
+    date >> src/file$i
+
+    cp -a dst/dir/file$i ref/dir/file$i${SUF}
+    date >> src/dir/file$i
+
+    $rsync -a --backup --backup-dir=${BUD} --suffix=${SUF} -- src/ dst/
+
+    touch -c -t ${DIRTIME} src/dir dst/dir src dst
+    compare_trees -t src dst
+
+    touch -c -t ${DIRTIME} ref/dir ${BUD}/dir ref ${BUD}
+    compare_trees -t ref ${BUD}
+done
+
+SUF=".bak"
+for i in $(seq ${NUMFILES}) ; do
+    cp -a dst/file$i ref/file$i${SUF}
+    date >> src/file$i
+
+    cp -a dst/dir/file$i ref/dir/file$i${SUF}
+    date >> src/dir/file$i
+
+    $rsync -a --backup --backup-dir=${BUD} --suffix=${SUF} -- src/ dst/
+
+    touch -c -t ${DIRTIME} src/dir dst/dir src dst
+    compare_trees -t src dst
+
+    touch -c -t ${DIRTIME} ref/dir ${BUD}/dir ref ${BUD}
+    compare_trees -t ref ${BUD}
+done
+
+# Exit for now until we get the long file name issue
+# fixed in openrsync (and remove this entire block).
+#
+rm -rf ${BUD}
+exit
+
+# Create a file with a name that is 255-bytes long.  The first
+# rsync with this name should succeed:
+#
+FN="$(jot -bx -sy -n 128)"
+
+date >> src/${FN}
+chmod 644 src/${FN}
+
+$rsync -a --backup --backup-dir=${BUD} --suffix=${SUF} -- src/ dst/
+
+touch -c -t ${DIRTIME} src dst
+compare_trees -t src dst
+compare_trees -t ref ${BUD}
+
+# The second rsync with this long file name plus suffix should cause
+# the backup to fail, hence the backup-dir should not be perturbed.
+# With rsync327 the destination file is not updated, but it is
+# updated by rsync269, so we don't bother checking...
+#
+date >> src/${FN}
+chmod 600 src/${FN}
+
+$rsync -a --backup --backup-dir=${BUD} --suffix=${SUF} -- src/ dst/ && false
+
+compare_trees -t ref ${BUD}
+
+rm -rf ${BUD}

@@ -432,6 +432,7 @@ scan_scaled_def(char *maybe_scaled, long long *result, char def)
 
 enum {
 	OP_ADDRESS = CHAR_MAX + 1,
+	OP_BACKUP_DIR,
 	OP_BWLIMIT,
 	OP_COMP_DEST,
 	OP_CONTIMEOUT,
@@ -458,6 +459,7 @@ const struct option	 lopts[] = {
     { "address",	required_argument, NULL,		OP_ADDRESS },
     { "archive",	no_argument,	NULL,			'a' },
     { "backup",		no_argument,	NULL,			'b' },
+    { "backup-dir",	required_argument, NULL,		OP_BACKUP_DIR },
     { "block-size",	required_argument, NULL,		'B' },
     { "bwlimit",	required_argument, NULL,		OP_BWLIMIT },
     { "checksum",	no_argument,	NULL,			'c' },
@@ -556,6 +558,7 @@ usage(void)
 	    "\t[--address=sourceaddr]\n"
 	    "\t[--archive, -a]\n"
 	    "\t[--backup, -b]\n"
+	    "\t[--backup-dir=dir]\n"
 	    "\t[--block-size=size, -B size]\n"
 	    "\t[--bwlimit=limit]\n"
 	    "\t[--checksum, -c]\n"
@@ -922,6 +925,12 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 		case OP_ADDRESS:
 			opts.address = optarg;
 			break;
+		case OP_BACKUP_DIR:
+			free(opts.backup_dir);
+			opts.backup_dir = strdup(optarg);
+			if (opts.backup_dir == NULL)
+				errx(ERR_NOMEM, NULL);
+			break;
 		case OP_BWLIMIT:
 			if (scan_scaled_def(optarg, &tmpint, 'k') == -1 ||
 			    tmpint < 0)
@@ -1020,6 +1029,7 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			opts.backup_suffix = strdup(optarg);
 			if (opts.backup_suffix == NULL)
 				errx(ERR_NOMEM, NULL);
+			opts.backup_suffix_given = true;
 			break;
 		case OP_TIMEOUT:
 			poll_timeout = strtonum(optarg, 0, 60 * 60,
@@ -1050,9 +1060,12 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 	if (opts.port == NULL)
 		opts.port = (char *)"rsync";
 
-	if (opts.backup_suffix == NULL)
-		if ((opts.backup_suffix = strdup("~")) == NULL)
+	if (opts.backup_suffix == NULL) {
+		opts.backup_suffix = opts.backup_dir ?
+		    strdup("") : strdup("~");
+		if (opts.backup_suffix == NULL)
 			err(ERR_NOMEM, NULL);
+	}
 
 	if (opts.backup && opts.del > DMODE_UNSPECIFIED &&
 	    !opts.del_excl) {
@@ -1063,7 +1076,7 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			    "rule: %s", rbuf);
 	}
 
-	if (opts.backup)
+	if (opts.backup && opts.backup_dir == NULL)
 		opts.omit_dir_times = true;
 
 	/* By default and for --contimeout=0 disable poll_contimeout. */

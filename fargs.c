@@ -201,7 +201,14 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "-W");
 	if (sess->opts->backup)
 		addargs(&args, "--backup");
-	if (sess->opts->backup_suffix != NULL) {
+	if (sess->opts->backup_dir != NULL) {
+		addargs(&args, "--backup-dir");
+		addargs(&args, "%s", sess->opts->backup_dir);
+	}
+	if (sess->opts->backup_suffix != NULL &&
+	    *sess->opts->backup_suffix != '\0' &&
+	    (sess->opts->backup_suffix_given ||
+	     strcmp(sess->opts->backup_suffix, "~") != 0)) {
 		addargs(&args, "--suffix");
 		addargs(&args, "%s", sess->opts->backup_suffix);
 	}

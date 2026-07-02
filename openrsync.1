@@ -27,6 +27,7 @@
 .Op Fl -address Ns = Ns Ar sourceaddr
 .Op Fl -archive , Fl a
 .Op Fl -backup , Fl b
+.Op Fl -backup-dir Ns = Ns directory
 .Op Fl -block-size Ns = Ns Ar size , Fl B Ar size
 .Op Fl -bwlimit Ns = Ns Ar limit
 .Op Fl -checksum , Fl c
@@ -151,6 +152,25 @@ Make a backup of changed files with a
 .Li ~
 suffix, if not overridden with
 .Fl -suffix .
+.It Fl -backup-dir Ar directory
+When combined with the
+.Fl -backup
+flag,
+.Nm
+will store backups of files being replaced in the designated backup
+directory on the receiving side.
+Can be combined with the
+.Fl -suffix
+flag to name the backup files with a suffix.
+The default is to not append a suffix.
+.Pp
+If specified as a relative path, the backup directory will be contained
+within the copied tree, and may cause conflicts or be subject to
+.Fl -delete
+rules.
+It is advised to use an absolute path outside of the copied tree, or a relative
+path such as
+.Pa ../ .
 .It Fl -block-size Ns = Ns Ar size , Fl B Ar size
 Specify the block size to be used for file transfers.
 The upper bound is 512M.

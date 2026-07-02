@@ -1204,7 +1204,7 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 	const char			*path; /* path to open */
 	int				 rootfd, /* where path rooted */
 					 fromfd; /* temporary */
-	char            		*usethis = NULL;
+	char            		*usethis = NULL; /* path backup */
 	bool				 newfile; /* creating new */
 
 	/*
@@ -1550,6 +1550,30 @@ again:
 			 */
 			if (errno != ENOENT) {
 				ERR("%s: stat during --backup", f->path);
+				goto out;
+			}
+		} else if (sess->opts->backup_dir != NULL) {
+			LOG3("%s: doing backup-dir to %s", f->path,
+			    sess->opts->backup_dir);
+			usethis = f->path;
+			while (strncmp(usethis, "./", 2) == 0)
+				usethis += 2;
+
+			if (snprintf(buf2, sizeof(buf2), "%s/%s%s",
+			    sess->opts->backup_dir, usethis,
+			    sess->opts->backup_suffix) >=
+			    (int)sizeof(buf2)) {
+				ERR("%s: backup-dir: compound backup "
+				    "path too long: %s/%s%s >= %d",
+				    f->path,
+				    sess->opts->backup_dir, usethis,
+				    sess->opts->backup_suffix,
+				    (int)sizeof(buf2));
+				goto out;
+			}
+			if (!backup_to_dir(sess, p->rootfd, f, buf2,
+			    st2.st_mode)) {
+				ERR("%s: backup_to_dir: %s", f->path, buf2);
 				goto out;
 			}
 		} else if (!S_ISDIR(st2.st_mode)) {

@@ -2703,7 +2703,32 @@ flist_del(const struct sess *sess, int root, const struct flist *fl,
 		flag = S_ISDIR(fl[i].st.mode) ? AT_REMOVEDIR : 0;
 
 		if (sess->opts->backup) {
-			if (!S_ISDIR(fl[i].st.mode)) {
+			if (sess->opts->backup_dir != NULL) {
+				LOG3("%s: doing backup-dir to %s",
+				    fl[i].wpath,
+				    sess->opts->backup_dir);
+				if (snprintf(buf, sizeof(buf),
+				    "%s/%s%s",
+				    sess->opts->backup_dir, fl[i].wpath,
+				    sess->opts->backup_suffix) >=
+				    (int)sizeof(buf)) {
+					ERR("%s: backup-dir: compound "
+					    "backup path too long: "
+					    "%s/%s%s > %d",
+					    fl[i].wpath,
+					    sess->opts->backup_dir,
+					    fl[i].wpath,
+					    sess->opts->backup_suffix,
+					    (int)sizeof(buf));
+					continue;
+				}
+				if (!backup_to_dir(sess, root, &fl[i],
+				    buf, fl[i].st.mode)) {
+					ERR("%s: backup_to_dir: %s",
+					    fl[i].wpath, buf);
+					continue;
+				}
+			} else if (!S_ISDIR(fl[i].st.mode)) {
 				LOG3("%s: doing backup", fl[i].wpath);
 				if (snprintf(buf, sizeof(buf), "%s%s",
 				    fl[i].wpath,
