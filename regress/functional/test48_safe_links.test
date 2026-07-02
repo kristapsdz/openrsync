@@ -58,7 +58,7 @@ for i in $(seq 2) ; do
 	dfile=$(echo ${sfile} | sed 's/^src/dst/')
 	slink=$(readlink ${sfile})
 	dlink=$(readlink ${dfile})
-	[ "${slink}" == "${dlink}" ]
+	[ "${slink}" = "${dlink}" ]
     done
 done
 
