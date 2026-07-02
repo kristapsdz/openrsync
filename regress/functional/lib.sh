@@ -7,8 +7,14 @@
 set -u
 set -e
 
+# These are not currently used.
+
 : ${RSYNC_PREFIX_SRC=""}
 : ${RSYNC_PREFIX_DEST=""}
+
+# Override behaviour in compare_trees.
+
+: ${DIFF_ARGS=""}
 
 # Test which flag works on the current system.
 
@@ -121,23 +127,22 @@ findme()
 	(
 		cd "$1"
 		shift
+		# On GNU Linux, using "xargs" without "-r" causes
+		# superfluous warnings.
 		if [ ${dirs} -ne 0 ]
 		then
 			find "$@" -type d -print0 | \
-				xargs -0 stat $STAT_FMT_FLAG "$stat_fmt" | \
+				xargs -r -0 stat $STAT_FMT_FLAG "$stat_fmt" | \
 				sort
 		else
 			find "$@" ! -type d -print0 | \
-				xargs -0 stat $STAT_FMT_FLAG "$stat_fmt $STAT_SIZE" | \
+				xargs -r -0 stat $STAT_FMT_FLAG "$stat_fmt $STAT_SIZE" | \
 				sort
 		fi
 	)
 }
 
-# compare two trees.  This will later be modular to pick between:
-# - diff
-# - find . -print0 | sort --zero-terminated | xargs -0 tar fc foo.tar
-# - mtree
+# Compare two trees.
 compare_trees ()
 {
 	local need_time
@@ -161,19 +166,22 @@ compare_trees ()
 		return 1
 	fi
 
-	# files_and_permissions
+	# Files and permissions.
 
 	findme "$need_time" "$1" . > find1
 	findme "$need_time" "$2" . > find2
 	diff -u find[12] 1>&2
 
-	# dirs_and_permissions
+	# Dirs and permissions.
 
 	findme "-d" "$need_time" "$1" . > find1d
 	findme "-d" "$need_time" "$2" . > find2d
 	diff -u find[12]d 1>&2
 
-	# file contents
-
-	diff -ru "$1" "$2"
+	# File contents.
+	# Symbolic links will affect this when running on GNU/Linux, so
+	# allow a DIFF_ARGS to be set by a test to indicate whether
+	# this is running with (usually) --no-dereference.
+	
+	diff $DIFF_ARGS -ru "$1" "$2"
 }

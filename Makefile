@@ -182,8 +182,8 @@ REGRESS_FAIL 	= regress/functional/test12d_inex.test \
 		  regress/functional/test25_filter_dir.test \
 		  regress/functional/test25_filter_merge_cvs.test \
 		  regress/functional/test16_symlinks.test
-REGRESS_MANUAL 	= 
-RSYNC_VERBOSE	= 
+REGRESS_MANUAL 	=
+RSYNC_VERBOSE	=
 
 #OPENRSYNC=/home/kristaps/checkedout/apple/rsync/openrsync/openrsync ; \
 

@@ -8,6 +8,12 @@ set -u
 . ${tstdir-.}/lib.sh
 . ${tstdir-.}/conf.sh
 
+if [ "$(uname)" = "Linux" ]
+then
+	echo "not running this test on Linux"
+	exit 0
+fi
+
 # Clean up from prior run:
 #
 rm -rf src dst out
