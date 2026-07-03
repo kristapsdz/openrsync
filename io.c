@@ -626,7 +626,9 @@ io_read_flush(struct sess *sess, int fd)
 			LOG0("%s", mpbuf);
 		}
 		if (tag == IT_ERROR_XFER || tag == IT_ERROR) {
-			if (tag != IT_ERROR_XFER) {
+			sess->total_errors++;
+			if (tag != IT_ERROR_XFER &&
+			    !sess->opts->ignore_errors) {
 				ERRX1("error from remote host");
 				return false;
 			}

@@ -793,6 +793,7 @@ pre_dir_delete(struct upload *p, struct sess *sess, enum delmode delmode)
 					LOG1("%.*s",
 					    (int)ent->fts_namelen,
 					    ent->fts_name);
+				sess->total_errors++;
 			}
 			errno = 0;
 			continue;
@@ -886,7 +887,7 @@ out:
  * Perform a delayed delete on the pre-computed delete list.
  */
 void
-upload_del(struct upload *p, const struct sess *sess)
+upload_del(struct upload *p, struct sess *sess)
 {
 	assert(sess->opts->del == DMODE_DELAY);
 	/* FIXME: why isn't the cmp in flist_del()? */
@@ -1551,8 +1552,10 @@ pre_file(struct upload *p, int *filefd, off_t *size, struct sess *sess,
 
 	rc = check_file(p->rootfd, f, &st, sess, hl);
 
-	if (rc == -1)
+	if (rc == -1) {
+		sess->total_errors++;
 		return 0;
+	}
 
 	if (rc == 4) {
 		f->flstate |= FLIST_SKIPPED;
@@ -1637,6 +1640,9 @@ pre_file(struct upload *p, int *filefd, off_t *size, struct sess *sess,
 			 * reproduce rsync's exit code semantics.
 			 */
 
+			if (faccessat(p->rootfd, f->path, R_OK, 0) == -1 &&
+			    errno == EACCES)
+				sess->total_errors++;
 			if (unlinkat(p->rootfd, f->path, 0) == -1) {
 				ERR("%s: unlinkat", f->path);
 				return -1;
@@ -1683,6 +1689,7 @@ fixed:
 		*size = 0;
 		*filefd = openat(p->rootfd, f->path, O_RDONLY | O_NOFOLLOW);
 		if (*filefd == -1 && (errno == EACCES || errno == EPERM)) {
+			sess->total_errors++;
 			if (!dry_run && unlinkat(p->rootfd, f->path, 0) == -1) {
 				ERR("%s: unlinkat", f->path);
 				return -1;
@@ -2121,6 +2128,7 @@ rsync_uploader(struct upload *u, struct sess *sess, int revents,
 
 			if (c < 0) {
 				u->fl[u->idx].flstate |= FLIST_FAILED;
+				sess->total_errors++;
 				continue;
 			} else if (c > 0)
 				break;
@@ -2338,7 +2346,8 @@ rsync_uploader_tail(struct upload *u, struct sess *sess)
 
 	for (i = 0; i < u->flsz; i++)
 		if (S_ISDIR(u->fl[i].st.mode))
-			(void)post_dir(sess, u, i);
+			if (!post_dir(sess, u, i))
+				sess->total_errors++;
 
 	return true;
 }

@@ -1424,7 +1424,7 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 
 		if ((p->fd = mkstempat(TMPDIR_FD, p->fname)) == -1) {
 			ERR("mkstempat: %s", p->fname);
-			goto out;
+			sess->total_errors++;
 		} else if (p->ofd != -1)
 			if (!download_fix_metadata(sess, p->fname,
 			    p->fd, &st))
@@ -1526,6 +1526,7 @@ again:
 		     "will not" : "will");
 
 		if (f->flstate & FLIST_REDO) {
+			sess->total_errors++;
 			f->flstate |= FLIST_FAILED;
 			goto out;
 		}
@@ -1594,8 +1595,10 @@ again:
 				goto out;
 			}
 			if (!backup_file(p->rootfd, f->path,
-			    p->rootfd, buf2, 1, &f->dstat))
+			    p->rootfd, buf2, 1, &f->dstat)) {
 				ERR("%s: backup_file: %s", f->path, buf2);
+				sess->total_errors++;
+			}
 		}
 	}
 

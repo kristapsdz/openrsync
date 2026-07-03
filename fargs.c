@@ -253,6 +253,8 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "-B%ld", sess->opts->block_size);
 	if (sess->opts->force_delete)
 		addargs(&args, "--force");
+	if (sess->opts->ignore_errors)
+		addargs(&args, "--ignore-errors");
 
 	/* Extra options for the receiver (local is sender). */
 

@@ -540,7 +540,8 @@ rsync_socket(const struct opts *opts, int sd, const struct fargs *f)
 		if (sess.mplex_read_remain > 0)
 			WARNX("data remains in read pipe");
 		rc = ERR_IPC;
-	}
+	} else if (sess.total_errors > 0)
+		rc = ERR_PARTIAL;
 
 out:
 	sess_cleanup(&sess);

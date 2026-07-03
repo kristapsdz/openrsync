@@ -218,6 +218,7 @@ token_ff_compressed(struct sess *sess, struct send_up *up, size_t tok,
 	assert(sz == up->cur->blks->len || sz == up->stat.mapsz - off);
 
 	if (!fmap_trap(up->stat.map)) {
+		sess->total_errors++;
 		sender_terminate_file(sess, up);
 		WARNX("%s: file truncated while reading",
 		    fl[up->cur->idx].path);
@@ -281,6 +282,7 @@ send_up_fsm_compressed(struct sess *sess, size_t *phase,
     struct flist *fl)
 {
 	unsigned char	 fmd[MD4_DIGEST_LENGTH]; /* file hash */
+	double		 uploaded; /* temporary */
 	char		 buf[16]; /* block header buffer */
 	const char	*sbuf; /* buffer to be compressed */
 	char		*cbuf; /* compressed buffer */
@@ -305,6 +307,7 @@ send_up_fsm_compressed(struct sess *sess, size_t *phase,
 			up->stat.curlen - up->stat.curpos);
 
 		if (!fmap_trap(up->stat.map)) {
+			sess->total_errors++;
 			sender_terminate_file(sess, up);
 			WARNX("%s: file truncated while reading",
 			    fl[up->cur->idx].path);
@@ -452,6 +455,7 @@ send_up_fsm_compressed(struct sess *sess, size_t *phase,
 		    !hash_fmap(fl[up->cur->idx].path, up->stat.map,
 		     up->stat.mapsz, fmd, sess)) {
 			ERRX1("hash_fmap");
+			sess->total_errors++;
 			up->stat.error = true;
 		}
 
@@ -549,11 +553,12 @@ send_up_fsm_compressed(struct sess *sess, size_t *phase,
 		 * Clear our current send file and allow the block below
 		 * to find another.
 		 */
+		uploaded = up->stat.total == 0 ? 0 :
+		    100.0 * up->stat.dirty / up->stat.total;
 		if (!sess->opts->dry_run)
 			LOG3("%s: flushed %jd KB total, %.2f%% uploaded",
 			    fl[up->cur->idx].path,
-			    (intmax_t)up->stat.total / 1024,
-			    100.0 * up->stat.dirty / up->stat.total);
+			    (intmax_t)up->stat.total / 1024, uploaded);
 		sess->total_files_xfer++;
 		sess->total_xfer_size += fl[up->cur->idx].st.size;
 		log_item_impl(xfer_log_level(sess), sess, &fl[up->cur->idx]);
@@ -582,8 +587,10 @@ send_up_fsm_compressed(struct sess *sess, size_t *phase,
 
 		assert(up->stat.fd != -1);
 		if (!blk_match(sess, up->cur->blks,
-		    fl[up->cur->idx].path, &up->stat))
+		    fl[up->cur->idx].path, &up->stat)) {
+			sess->total_errors++;
 			sender_terminate_file(sess, up);
+		}
 
 		return true;
 	case BLKSTAT_NONE:
@@ -655,6 +662,7 @@ send_up_fsm(struct sess *sess, size_t *phase, struct send_up *up,
 {
 	char		 buf[16]; /* temporary bufer */
 	unsigned char	 fmd[MD4_DIGEST_LENGTH]; /* file hash */
+	double		 uploaded; /* temporary */
 	off_t		 sz; /* temporary */
 	size_t		 pos = 0; /* position in buffer */
 	const size_t	 isz = sizeof(int32_t), /* int32 length */
@@ -683,6 +691,7 @@ send_up_fsm(struct sess *sess, size_t *phase, struct send_up *up,
 		}
 
 		if (!fmap_trap(up->stat.map)) {
+			sess->total_errors++;
 			if (!sender_terminate_file_data(sess, sz, wb,
 			    pos, wbsz, wbmax)) {
 				/* Allocation error, fatal */
@@ -735,6 +744,7 @@ send_up_fsm(struct sess *sess, size_t *phase, struct send_up *up,
 		    !hash_fmap(fl[up->cur->idx].path, up->stat.map,
 		     up->stat.mapsz, fmd, sess)) {
 			ERRX1("hash_fmap");
+			sess->total_errors++;
 			up->stat.error = true;
 		}
 
@@ -771,11 +781,12 @@ send_up_fsm(struct sess *sess, size_t *phase, struct send_up *up,
 		 * to find another.
 		 */
 
+		uploaded = up->stat.total == 0 ? 0 :
+		    100.0 * up->stat.dirty / up->stat.total;
 		if (sess->opts->dry_run != DRY_FULL)
 			LOG3("%s: flushed %jd KB total, %.2f%% uploaded",
 			    fl[up->cur->idx].path,
-			    (intmax_t)up->stat.total / 1024,
-			    100.0 * up->stat.dirty / up->stat.total);
+			    (intmax_t)up->stat.total / 1024, uploaded);
 		sess->total_files_xfer++;
 		sess->total_xfer_size += fl[up->cur->idx].st.size;
 		log_item_impl(xfer_log_level(sess), sess, &fl[up->cur->idx]);
@@ -803,8 +814,10 @@ send_up_fsm(struct sess *sess, size_t *phase, struct send_up *up,
 
 		assert(up->stat.fd != -1);
 		if (!blk_match(sess, up->cur->blks,
-		    fl[up->cur->idx].path, &up->stat))
+		    fl[up->cur->idx].path, &up->stat)) {
+			sess->total_errors++;
 			sender_terminate_file(sess, up);
+		}
 		return true;
 	case BLKSTAT_NONE:
 		break;
@@ -1111,7 +1124,8 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 			    nlinkflag, /* openat() argument */
 			    oflags, /* openat() argument */
 			    bret, /* temporary */
-			    writefd; /* switch batch/fdout */
+			    writefd, /* switch batch/fdout */
+			    ioerrors; /* ioerrors to write */
 	int32_t		    idx; /* current block index */
 	ssize_t		    ssz; /* temporary */
 	bool		    ret, /* temporary */
@@ -1191,21 +1205,24 @@ rsync_sender(struct sess *sess, int fdin, int fdout, size_t argc,
 
 	/*
 	 * Then the file list in any mode.
-	 * Finally, the IO error (always zero for us).
+	 * Finally, the IO error count.
 	 * Write: [io-error-value].
 	 */
+
+	gettimeofday(&fx_before, NULL);
+	flist_bytes = sess->total_write;
+	ioerrors = sess->total_errors > 0 ? 1 : 0;
 
 	if (!flist_send(sess, fdin, fdout, fl.flp, fl.sz)) { /* FIXME: &fl */
 		ERRX1("flist_send");
 		goto out;
-	} else if (!io_write_int(sess, fdout, 0)) {
+	} else if (!io_write_int(sess, fdout, ioerrors)) {
 		ERRX1("io_write_int");
 		goto out;
 	}
 
 	gettimeofday(&fx_after, NULL);
 	timersub(&fx_after, &fx_before, &tv);
-	flist_bytes = sess->total_write;
 	sess->flist_xfer = (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
 	sess->flist_size = sess->total_write - flist_bytes;
 
@@ -1714,6 +1731,7 @@ check_other:
 				    fl.flp[up.cur->idx].path,
 				    getcwd(buf, sizeof(buf)));
 
+				sess->total_errors++;
 				send_up_reset(&up);
 				pfd[1].fd = fdout;
 				continue;

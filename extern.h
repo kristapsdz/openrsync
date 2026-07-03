@@ -129,16 +129,17 @@ enum dryrun {
 /*
  * Rsync error codes.
  */
-#define ERR_SYNTAX	1
-#define ERR_PROTOCOL	2
-#define ERR_FILEGEN	3
-#define ERR_SOCK_IO	10
-#define ERR_FILE_IO	11
-#define ERR_WIREPROTO	12
-#define ERR_IPC		14	/* catchall for any kind of syscall error */
-#define ERR_TERMIMATED	16
-#define ERR_WAITPID	21
-#define ERR_NOMEM	22
+#define ERR_SYNTAX	1 /* command argument syntax error */
+#define ERR_PROTOCOL	2 /* protocol mismatch */
+#define ERR_FILEGEN	3 /* filename too long */
+#define ERR_SOCK_IO	10 /* socket-IO errors */
+#define ERR_FILE_IO	11 /* file-IO errors */
+#define ERR_WIREPROTO	12 /* FIXME: NOTUSED */
+#define ERR_IPC		14 /* catchall for any kind of syscall error */
+#define ERR_TERMIMATED	16 /* subprocess exited with signal */
+#define ERR_WAITPID	21 /* error waiting for subprocesses */
+#define ERR_NOMEM	22 /* out of memory */
+#define ERR_PARTIAL	23 /* not all files transferred */
 
 /*
  * Use this for --timeout.
@@ -398,6 +399,7 @@ struct	opts {
 	bool		 force_delete;		/* --force */
 	bool		 from0;			/* -0 */
 	bool		 hard_links;		/* -H */
+	bool		 ignore_errors;		/* --ignore-errors */
 	bool		 ignore_times;		/* -I */
 	bool		 keep_dirlinks;		/* -K */
 	bool		 no_motd;		/* --no-motd */
@@ -541,6 +543,7 @@ struct	sess {
 	uint64_t	   flist_build; /* time to build flist */
 	uint64_t	   flist_size; /* items on the flist */
 	uint64_t	   flist_xfer; /* time to transfer flist */
+	uint64_t	   total_errors; /* total non-fatal errors */
 	uint64_t	   total_files; /* file count */
 	uint64_t	   total_files_xfer; /* files transferred */
 	uint64_t	   total_matched; /* data we recreated */
@@ -668,7 +671,7 @@ void	rsync_errx1(const char *, ...)
 
 bool	flist_add_del(struct sess *, const char *, size_t, struct flist **,
 	    size_t *, size_t *, const struct stat *);
-void	flist_del(const struct sess *, int, const struct flist *, size_t);
+void	flist_del(struct sess *, int, const struct flist *, size_t);
 int	flist_dir_cmp(const void *, const void *);
 bool	flist_gen(struct sess *, size_t, char **, struct fl *);
 void	flist_free(struct flist *, size_t);
@@ -767,7 +770,7 @@ void		 download_free(struct sess *, struct download *);
 struct upload	*upload_alloc(const char *, int, int, int, size_t,
 		    struct flist *, size_t, size_t, mode_t);
 void		upload_free(struct upload *);
-void		upload_del(struct upload *, const struct sess *);
+void		upload_del(struct upload *, struct sess *);
 
 struct blktab	*blkhash_alloc(void);
 bool		 blkhash_set(struct blktab *, const struct blkset *);

@@ -54,6 +54,7 @@
 .Op Fl -from0 , Fl 0
 .Op Fl -group , Fl g
 .Op Fl -hard-links , Fl H
+.Op Fl -ignore-errors
 .Op Fl -ignore-times , Fl I
 .Op Fl -include-from Ns = Ns Ar file
 .Op Fl -include Ns = Ns Ar pattern
@@ -389,6 +390,10 @@ Negate with
 .Fl -no-group .
 .It Fl H , -hard-links
 Attempt to preserve hard links within the list of files transferred.
+.It Fl -ignore-errors
+Works in conjunction with
+.Fl -delete
+to delete files despite I/O errors.
 .It Fl -ignore-times , Fl I
 Do not skip based on file size and modification time.
 .It Fl -include-from Ns = Ns Ar file
@@ -875,8 +880,30 @@ is used.
 .Sh EXIT STATUS
 The
 .Nm
-utility exits 0 on success, 1 if an error occurs, or 2 if the remote
-protocol version is older than the local protocol version.
+utility exits 0 on success or one of the following errors:
+.Pp
+.Bl -tag -width "23" -compact -offset indent
+.It 1
+command argument syntax error
+.It 2
+protocol mismatch
+.It 3
+filename too long
+.It 10
+socket-IO error
+.It 11
+file-IO error
+.It 14
+catchall for any kind of syscall error
+.It 16
+subprocess exited with signal
+.It 21
+error waiting for subprocesses
+.It 22
+out of memory
+.It 23
+not all files transferred but errors were ignored
+.El
 .Sh EXAMPLES
 A common invocation of
 .Nm

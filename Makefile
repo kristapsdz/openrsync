@@ -168,7 +168,8 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test48_safe_links.test \
 		  regress/functional/test16d_symlinks.test \
 		  regress/functional/test47_keep_dirlinks.test \
-		  regress/functional/test44_temp_dir.test
+		  regress/functional/test44_temp_dir.test \
+		  regress/functional/test59_ignore_errors.test
 
 # Doesn't work (protocol < 29): regress/functional/test25_filter_basic_cvs.test
 # Doesn't work (protocol < 29): regress/functional/test25_filter_clear.test

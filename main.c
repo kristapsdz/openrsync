@@ -489,6 +489,7 @@ const struct option	 lopts[] = {
     { "group",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "hard-links",	no_argument,	NULL,			'H' },
     { "help",		no_argument,	NULL,			'h' },
+    { "ignore-errors",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "ignore-times",	no_argument,	NULL,			'I' },
     { "include",	required_argument, NULL,		OP_INCLUDE },
     { "include-from",	required_argument, NULL,		OP_INCLUDE_FROM },
@@ -591,6 +592,7 @@ usage(void)
 	    "\t[--from0, -0]\n"
 	    "\t[--group, -g]\n"
 	    "\t[--hard-links, -H]\n"
+	    "\t[--ignore-errors]\n"
 	    "\t[--ignore-times, -I]\n"
 	    "\t[--include-from=file]\n"
 	    "\t[--include]\n"
@@ -710,6 +712,8 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				opts.force_delete = true;
 			else if (strcmp(lopts[lidx].name, "group") == 0)
 				opts.preserve_gids = true;
+			else if (strcmp(lopts[lidx].name, "ignore-errors") == 0)
+				opts.ignore_errors = true;
 			else if (strcmp(lopts[lidx].name, "links") == 0)
 				opts.preserve_links = true;
 			else if (strcmp(lopts[lidx].name, "numeric-ids") == 0)

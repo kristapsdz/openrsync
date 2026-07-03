@@ -233,6 +233,7 @@ flist_fts_check(struct sess *sess, FTSENT *ent, enum fmode fmode)
 	if (ent->fts_info == FTS_DC) {
 		WARNX("%s: directory cycle", ent->fts_path);
 	} else if (ent->fts_info == FTS_DNR) {
+		sess->total_errors++;
 		errno = ent->fts_errno;
 		WARN("%s: unreadable directory", ent->fts_path);
 	} else if (ent->fts_info == FTS_DOT) {
@@ -242,8 +243,10 @@ flist_fts_check(struct sess *sess, FTSENT *ent, enum fmode fmode)
 		WARN("%s", ent->fts_path);
 	} else if (ent->fts_info == FTS_SLNONE) {
 		if (sess->opts->copy_links || sess->opts->safe_links ||
-		    sess->opts->copy_unsafe_links)
+		    sess->opts->copy_unsafe_links) {
+			sess->total_errors++;
 			return false;
+		}
 		return sess->opts->preserve_links;
 	} else if (ent->fts_info == FTS_SL) {
 		/*
@@ -269,6 +272,7 @@ flist_fts_check(struct sess *sess, FTSENT *ent, enum fmode fmode)
 		WARNX("%s: skipping special", ent->fts_path);
 	} else if (ent->fts_info == FTS_NS) {
 		errno = ent->fts_errno;
+		sess->total_errors++;
 		WARN("%s: could not stat", ent->fts_path);
 	}
 
@@ -884,6 +888,7 @@ flist_append_dirs(struct sess *sess, const char *path, struct fl *fl)
 
 		if ((stat(begin, &st)) == -1) {
 			ERR("%s: stat", begin);
+			sess->total_errors++;
 			free(begin);
 			return false;
 		}
@@ -995,6 +1000,7 @@ flist_append(struct sess *sess, const struct stat *st,
 	if (S_ISLNK(st->st_mode)) {
 		link = symlink_read(f->path, st->st_size);
 		if (link == NULL) {
+			sess->total_errors++;
 			ERRX1("symlink_read");
 			return false;
 		}
@@ -1003,6 +1009,7 @@ flist_append(struct sess *sess, const struct stat *st,
 
 	if (sess->opts->checksum && S_ISREG(f->st.mode)) {
 		if (!hash_file_by_path(AT_FDCWD, f->path, f->st.size, f->md)) {
+			sess->total_errors++;
 			ERRX1("hash_file_by_path");
 			return false;
 		}
@@ -1662,6 +1669,7 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 
 	if (ret == -1) {
 		ERR("%s: (l)stat", root);
+		sess->total_errors++;
 		return false;
 	} else if (S_ISREG(st.st_mode)) {
 		return flist_gen_dirent_file(sess, "file", root, fl,
@@ -1676,11 +1684,13 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 		if (sess->opts->copy_dirlinks ||
 		    sess->opts->copy_unsafe_links) {
 			if (stat(root, &st2) == -1) {
+				sess->total_errors++;
 				ERR("%s: stat", root);
 				return false;
 			}
 			ssz = readlink(root, buf, sizeof(buf));
 			if (ssz == -1) {
+				sess->total_errors++;
 				ERR("%s: readlink", root);
 				return false;
 			}
@@ -1752,6 +1762,7 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 		froot = froot_open(root);
 		if (froot == NULL) {
 			ERRX1("froot_open");
+			sess->total_errors++;
 			return false;
 		}
 	}
@@ -1785,6 +1796,7 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 	if (fts == NULL) {
 		if (froot != NULL)
 			froot_release(froot);
+		sess->total_errors++;
 		ERR("fts_open");
 		return false;
 	}
@@ -1825,12 +1837,14 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 				/* We did lstat, now we need stat */
 				if (stat(ent->fts_accpath, &st2) == -1) {
 					ERR("%s: stat", ent->fts_accpath);
+					sess->total_errors++;
 					continue;
 				}
 				ssz = readlink(ent->fts_accpath, buf,
 				    sizeof(buf));
 				if (ssz == -1) {
 					ERR("%s: readlink", ent->fts_accpath);
+					sess->total_errors++;
 					continue;
 				}
 				buf[ssz] = '\0';
@@ -1842,6 +1856,8 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 					ret = flist_gen_dirent(sess,
 					    fts_path, fl, stripdir,
 					    prefix, froot);
+					if (!ret)
+						sess->total_errors++;
 					continue;
 				}
 			}
@@ -1957,6 +1973,7 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 				    ent->fts_statp->st_size);
 				if (f->link == NULL) {
 					ERRX1("symlink_read");
+					sess->total_errors++;
 					fl_pop(fl);
 					continue;
 				}
@@ -1970,6 +1987,7 @@ flist_gen_dirent(struct sess *sess, const char *root, struct fl *fl,
 			    f->st.size, f->md);
 			if (rc) {
 				ERR("%s: hash_file_by_path", f->path);
+				sess->total_errors++;
 				fl_pop(fl);
 				continue;
 			}
@@ -2013,6 +2031,7 @@ flist_gen_dirs(struct sess *sess, size_t argc, char **argv,
 		if (dnamelen >= sizeof(dname)) {
 			errno = ENAMETOOLONG;
 			ERR("'%s' flist_path_normalize", dname);
+			sess->total_errors++;
 			errors++;
 			continue;
 		}
@@ -2066,6 +2085,7 @@ flist_gen_files(struct sess *sess, size_t argc, char **argv,
 		if (fnamelen >= sizeof(fname)) {
 			errno = ENAMETOOLONG;
 			ERR("'%s' flist_path_normalize", fname);
+			sess->total_errors++;
 			continue;
 		}
 
@@ -2078,6 +2098,7 @@ flist_gen_files(struct sess *sess, size_t argc, char **argv,
 			ret = rsync_lstat(fname, &st);
 
 		if (ret == -1) {
+			sess->total_errors++;
 			ERR("'%s': (l)stat", fname);
 			continue;
 		}
@@ -2314,7 +2335,7 @@ flist_gen(struct sess *sess, size_t argc, char **argv, struct fl *fl)
 	 * out.  Otherwise, we'll still proceed with what we have.
 	 */
 
-	if (!rc)
+	if (!rc && sess->total_errors == 0)
 		return false;
 
 	qsort(fl->flp, fl->sz, sizeof(struct flist), flist_cmp);
@@ -2334,18 +2355,29 @@ bool
 flist_gen_dels(struct sess *sess, const char *root, struct flist **fl,
     size_t *sz,	const struct flist *wfl, size_t wflsz)
 {
-	char		**cargv = NULL, **skipv = NULL;
-	const char	 *kpath, *topdir, *rpath;
-	int		  c;
-	FTS		 *fts = NULL;
-	FTSENT		 *ent, *perish_ent = NULL;
-	struct flist	 *f;
-	size_t		  cargvs = 0, i, j, max = 0, stripdir, dj,
-			  skipc = 0;
-	ENTRY		  hent;
-	ENTRY		 *hentp;
-	bool		  have_dotdir = false, skip_post = false,
-			  rc = false;
+	char		**cargv = NULL, /* top-level directories */
+			**skipv = NULL; /* skip directories */
+	const char	 *kpath, /* temporary path */
+		         *topdir, /* top-level being traversed */
+			 *rpath; /* normalised path */
+	int		  c, /* temporary return code */
+			  fts_flags; /* flag for fts_open() */
+	FTS		 *fts = NULL; /* fts_open() result */
+	FTSENT		 *ent, /* current fts_read() */
+			 *perish_ent = NULL; /* parent ent */
+	struct flist	 *f; /* current flist */
+	size_t		  cargvs = 0, /* size of cargv */
+			  i, /* temporary */
+			  j, /* temporary */
+			  max = 0, /* fl maximum size */
+			  stripdir, /* length of root path */
+			  dj, /* temporary */
+			  skipc = 0; /* length of skipv */
+	ENTRY		  hent; /* hsearch entry */
+	ENTRY		 *hentp; /* hsearch entry */
+	bool		  have_dotdir = false, /* top-level has dot */
+			  skip_post = false, /* skip recursing */
+			  rc = false; /* function return value */
 
 	*fl = NULL;
 	*sz = 0;
@@ -2475,7 +2507,13 @@ flist_gen_dels(struct sess *sess, const char *root, struct flist **fl,
 	 * If the directories don't exist, it's ok.
 	 */
 
-	if ((fts = fts_open(cargv, FTS_PHYSICAL, NULL)) == NULL) {
+	fts_flags = FTS_PHYSICAL;
+
+	if (sess->opts->one_file_system)
+		fts_flags |= FTS_XDEV;
+
+	if ((fts = fts_open(cargv, fts_flags, NULL)) == NULL) {
+		sess->total_errors++;
 		ERR("fts_open");
 		goto out;
 	}
@@ -2546,6 +2584,8 @@ flist_gen_dels(struct sess *sess, const char *root, struct flist **fl,
 
 		if (ent->fts_info != FTS_DP &&
 		    !flist_fts_check(sess, ent, FARGS_RECEIVER)) {
+			if (ent->fts_errno != 0)
+				sess->total_errors++;
 			ent->fts_parent->fts_number++;
 			errno = 0;
 			continue;
@@ -2713,7 +2753,7 @@ flist_add_del(struct sess *sess, const char *path, size_t stripdir,
  * If dry_run is specified, simply write what would be done.
  */
 void
-flist_del(const struct sess *sess, int root, const struct flist *fl,
+flist_del(struct sess *sess, int root, const struct flist *fl,
     size_t flsz)
 {
 	char		 buf[PATH_MAX]; /* backup file buffer */
@@ -2732,6 +2772,9 @@ flist_del(const struct sess *sess, int root, const struct flist *fl,
 	assert(sess->opts->del || sess->opts->force_delete);
 	assert(sess->opts->recursive || sess->opts->force_delete ||
 	    sess->opts->dirs);
+
+	if (sess->total_errors > 0 && !sess->opts->ignore_errors)
+		return;
 
 	begin = flsz - 1;
 	end = begin - del_limit;
@@ -2813,12 +2856,14 @@ flist_del(const struct sess *sess, int root, const struct flist *fl,
 					    fl[i].wpath,
 					    sess->opts->backup_suffix,
 					    (int)sizeof(buf));
+					sess->total_errors++;
 					continue;
 				}
 				if (!backup_to_dir(sess, root, &fl[i],
 				    buf, fl[i].st.mode)) {
 					ERR("%s: backup_to_dir: %s",
 					    fl[i].wpath, buf);
+					sess->total_errors++;
 					continue;
 				}
 			} else if (!S_ISDIR(fl[i].st.mode)) {
@@ -2833,12 +2878,14 @@ flist_del(const struct sess *sess, int root, const struct flist *fl,
 					    fl[i].wpath,
 					    sess->opts->backup_suffix,
 					    (int)sizeof(buf));
+					sess->total_errors++;
 					continue;
 				}
 				if (!backup_file(root, fl[i].wpath,
 				    root, buf, 1, &fl[i].dstat)) {
 					ERR("%s: backup_file: %s",
 					    fl[i].wpath, buf);
+					sess->total_errors++;
 					continue;
 				}
 			}
@@ -2847,6 +2894,7 @@ flist_del(const struct sess *sess, int root, const struct flist *fl,
 		if (unlinkat(root, fl[i].wpath, flag) == -1 &&
 		    errno != ENOENT) {
 			ERR("%s: unlinkat", fl[i].wpath);
+			sess->total_errors++;
 			continue;
 		}
 	}

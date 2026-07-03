@@ -1,0 +1,99 @@
+#! /bin/sh
+
+# Test that the --ignore-error option works as expected.
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+# Clean up from prior run:
+#
+mkdir -p src dst
+chmod -R a+rwx src dst
+rm -rf src dst
+
+# Create the source tree (creates src/foo/... and src/one/...):
+#
+mkdir src
+(cd src && generate_tree_1)
+
+# Create the dest tree, including extraneous files (same
+# as source tree but then moves dst/foo -> dst/extra):
+#
+mkdir dst
+(cd dst && generate_tree_1 && mv foo extra)
+
+
+# A full rsync with --delete should delete all the
+# extraneous files in dst:
+#
+$rsync -a --delete -- src/ dst/
+compare_trees -t src dst
+
+
+# A full rsync --delete-after and at least one non-readable
+# file in src/ should cause rsync to disable deletion
+# and exit 23 (i.e., dst/extra/ should not be deleted):
+#
+(cd dst && generate_tree_1 && mv foo extra)
+LC1=$(find dst/extra | wc -l)
+find src | xargs touch
+chmod 0 src/foo
+$rsync -a --delete-after -- src/ dst/ && false || [ $? -eq 23 ]
+[ -e dst/extra ]
+LC2=$(find dst/extra | wc -l)
+[ ${LC1} -eq ${LC2} ]
+
+
+# A full rsync with --delete and at least one unreadable
+# extraneous file in dst/ should cause rsync to exit 23:
+#
+chmod 755 src/foo
+chmod 0 dst/extra
+find src | xargs touch
+$rsync -a --delete -- src/ dst/ && false || [ $? -eq 23 ]
+[ -e dst/extra ]
+chmod 755 dst/extra
+rm -rf dst/extra
+touch src dst
+compare_trees -t src dst
+
+
+# A full rsync with --delete --ignore-errors and at least one
+# problem extraneous dir in dst/ should cause rsync to exit 23:
+#
+(cd dst && generate_tree_1 && mv foo extra)
+chmod 0 dst/extra
+find src | xargs touch
+$rsync -a --delete --ignore-errors -- src/ dst/ && false || [ $? -eq 23 ]
+chmod 755 dst/extra
+rm -rf dst/extra
+touch src dst
+compare_trees -t src dst
+
+
+# Trying to copy links that point to non-existent files should
+# generate an internal "general" I/O error and disable deletion
+# of extraneous files:
+#
+echo "cp 20"
+(cd dst && generate_tree_1 && mv foo extra)
+ln -s doesnotexist src/a
+ln -s /doesnotexist$$ src/z
+find src -type f -o -type d | xargs touch
+$rsync -a --copy-links --delete-after -- src/ dst/ && false || [ $? -eq 23 ]
+[ -e dst/extra ]
+rm -rf dst/extra
+(cd src && find . -type f -print0 | xargs -0 -n1 -I{} diff "{}" "../dst/{}")
+
+# Same as above, but with --ignore-errors which should allow
+# deletion of all extraneous files despite the I/O error:
+#
+echo "cp 30"
+(cd dst && generate_tree_1 && mv foo extra)
+find src -type f -o -type d | xargs touch
+$rsync -a --copy-links --delete-after --ignore-errors -- src/ dst/ && false || [ $? -eq 23 ]
+[ ! -e dst/extra ]
+(cd src && find . -type f -print0 | xargs -0 -n1 -I{} diff "{}" "../dst/{}")

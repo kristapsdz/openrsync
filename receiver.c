@@ -375,8 +375,9 @@ make_hardlinks(struct sess *sess, const struct flist *fl, size_t flsz,
 				prev_inode = 0;
 			}
 			if (f->st.inode != prev_inode && f->iflags != 0) {
-				(void)rsync_set_metadata_at(sess, 0,
-				    rootfd, f, f->path);
+				if (!rsync_set_metadata_at(sess, 0,
+				    rootfd, f, f->path))
+					sess->total_errors++;
 				prev_inode = f->st.inode;
 			}
 			continue;
@@ -397,6 +398,7 @@ make_hardlinks(struct sess *sess, const struct flist *fl, size_t flsz,
 			ERR("linkat");
 			LOG0("Error while making hard link '%s => %s'",
 			    f->path, hl_p->path);
+			sess->total_errors++;
 			continue;
 		}
 
@@ -541,8 +543,8 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 		ERRX1("io_read_int");
 		goto out;
 	} else if (ioerror != 0) {
-		ERRX1("io_error is non-zero");
-		goto out;
+		ERRX1("io_error is non-zero (%d)", ioerror);
+		sess->total_errors++;
 	}
 
 	if (flsz == 0 && !sess->opts->server) {
