@@ -759,7 +759,6 @@ int	rsync_uploader(struct upload *, struct sess *, int, int *, int *,
 	    const struct hardlinks *const);
 bool	rsync_uploader_tail(struct upload *, struct sess *);
 
-bool		 download_needs_redo(const struct download *);
 const char	*download_partial_filepath(const struct flist *);
 struct download	*download_alloc(struct sess *, int, struct flist *,
 		    size_t, int);

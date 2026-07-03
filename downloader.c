@@ -91,7 +91,6 @@ struct	download {
 	char		   *obuf; /* pre-write buffer */
 	size_t		    obufsz; /* current size of obuf */
 	size_t		    obufmax; /* max size we'll wbuffer */
-	bool		    needredo; /* needs redo phase */
 	size_t		    curtok; /* current token (compression) */
 	off_t		    fdpos; /* current pre-buffer position in file */
 };
@@ -123,7 +122,6 @@ download_reinit(struct sess *sess, struct download *p, size_t idx)
 	/* Don't touch p->fdin. */
 	/* Don't touch p->obufsz. */
 	/* Don't touch p->obufmax. */
-	/* Don't touch p->needredo. */
 	p->curtok = 0;
 	p->fdpos = 0;
 	MD4_Update(&p->ctx, &seed, sizeof(int32_t));
@@ -292,7 +290,6 @@ download_alloc(struct sess *sess, int fdin, struct flist *fl,
 	p->flsz = flsz;
 	p->rootfd = rootfd;
 	p->fdin = fdin;
-	p->needredo = false;
 	download_reinit(sess, p, 0);
 	p->obufsz = 0;
 	p->obuf = NULL;
@@ -303,12 +300,6 @@ download_alloc(struct sess *sess, int fdin, struct flist *fl,
 		return NULL;
 	}
 	return p;
-}
-
-bool
-download_needs_redo(const struct download *p)
-{
-	return p->needredo;
 }
 
 /*
@@ -705,7 +696,7 @@ protocol_token_ff_compress(struct sess *sess, struct download *p,
 		 * and trigger redo.
 		 */
 		WARNX1("%s: block at %lld outside of local file sized %zu",
-		    p->fname, off, fmap_size(p->map));
+		    p->fname, (long long int)off, fmap_size(p->map));
 		p->state = DOWNLOAD_FLUSH_REMOTE;
 		return TOKEN_NEXT;
 	} else if (!fmap_trap(p->map)) {
@@ -824,7 +815,7 @@ protocol_token_ff(struct sess *sess, struct download *p, size_t tok)
 		 * and trigger redo.
 		 */
 		WARNX1("%s: block at %lld outside of local file sized %zu",
-		    p->fname, off, fmap_size(p->map));
+		    p->fname, (long long int)off, fmap_size(p->map));
 		p->state = DOWNLOAD_FLUSH_REMOTE;
 		return TOKEN_NEXT;
 	} else if (!fmap_trap(p->map)) {
@@ -1524,7 +1515,6 @@ again:
 		}
 
 		f->flstate |= FLIST_REDO;
-		p->needredo++;
 		goto done;
 	}
 

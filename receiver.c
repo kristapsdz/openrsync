@@ -906,8 +906,7 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 					make_hardlinks(sess, fl, flsz, &hls, dfd);
 
 				LOG3("%s: receiver ready for phase %d "
-				    "data (%d to redo)", root,
-				    phase + 1, 0);
+				    "data", root, phase + 1);
 
 				sess->role->append = false;
 
