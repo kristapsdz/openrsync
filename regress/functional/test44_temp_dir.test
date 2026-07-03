@@ -1,0 +1,186 @@
+#! /bin/sh
+
+# Test that the --temp-dir option works as expected.  Note that
+# creating and deleting backup files will update the mtime on
+# the current directory so after calls to rsync we use touch(1)
+# to ensure they match before calling compare_trees().
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+# Number of regular files to create at each of the top-level
+# and one subdir of the source dir.
+#
+NUMFILES=3
+DIRTIME=$(date +%Y%m%d)0000.00
+#TMPROOT="$PWD"/tmproot
+
+#mount_tmpfs "$TMPROOT"
+#trap 'lib_cleanup' EXIT
+
+# Clean up from prior run:
+#
+rm -rf src dst tmpdir* /tmp/tmpdir*
+
+# Create the source tree:
+#
+mkdir src src/dir
+for i in $(seq ${NUMFILES}) ; do
+    jot 1 $i > src/file$i
+    jot 262144 $i > src/dir/file$i
+done
+
+# Check that a simple rsync --temp-dir works correctly with both
+# a temp dir that is on the same fs as the dest dir, and with a
+# temp dir that is on a different fs as the dest dir:
+#
+# TODO: This fails with openrsync for tests which use a different
+# fs for the temp dir than the dest dir:
+#
+# https://gitlab.klara.systems/prettybsd/documentation/-/issues/135
+#
+for td in $PWD/tmpdir$$ /tmp/tmpdir$$ ; do
+    echo "cp 10 ${td}"
+    rm -rf ${td} dst
+    mkdir -p ${td}
+
+    rsync -a --temp-dir=${td} -- src/ dst/
+    compare_trees -t src dst
+
+    X=$(find ${td} | wc -l)
+    [ "$X" -eq 1 ]
+done
+
+
+# Similar to the above, but with an existing dest dir and where
+# the data for all files in the source dir has changed:
+#
+for td in $PWD/tmpdir$$ /tmp/tmpdir$$ ; do
+    echo "cp 20 ${td}"
+    rm -rf ${td}
+    mkdir -p ${td}
+
+    for i in $(seq ${NUMFILES}) ; do
+	date >> src/file$i
+	date >> src/dir/file$i
+    done
+
+    rsync -a --temp-dir=${td} -- src/ dst/
+    compare_trees -t src dst
+
+    X=$(find ${td} | wc -l)
+    [ "$X" -eq 1 ]
+done
+
+
+# TODO: tmpfs mount (portably).
+
+## Similar to the above, but with an existing dest dir and where
+## the metadata for all files in the source dir has changed:
+##
+#for td in $TMPROOT/tmpdir$$ $PWD/tmpdir$$ /tmp/tmpdir$$ ; do
+#    echo "cp 30 ${td} $(dirname ${td})"
+#    rm -rf ${td}
+#    mkdir -p ${td}
+#
+#    set --
+#
+#    for i in $(seq ${NUMFILES}) ; do
+#	[ $# -le 0 ] && set -- $(id -G)
+#	chgrp $1 src/file$i
+#	chmod 444 src/dir/file$i
+#	shift
+#    done
+#
+#    rsync -a --temp-dir=${td} -- src/ dst/
+#    compare_trees -t src dst
+#
+#    X=$(find ${td} | wc -l)
+#    [ "$X" -eq 1 ]
+#done
+#
+#
+## Similar to the above, but with an non-existing dest dir and where
+## the the files in src/dir/* are not writable:
+##
+#for td in $TMPROOT/tmpdir$$ $PWD/tmpdir$$ /tmp/tmpdir$$ ; do
+#    echo "cp 40 ${td} $(dirname ${td})"
+#    rm -rf ${td}
+#    mkdir -p ${td}
+#
+#    for i in $(seq ${NUMFILES}) ; do
+#	touch src/file$i
+#	touch src/dir/file$i
+#    done
+#
+#    rsync -a --temp-dir=${td} -- src/ dst/
+#    compare_trees -t src dst
+#
+#    X=$(find ${td} | wc -l)
+#    [ "$X" -eq 1 ]
+#done
+
+# TODO: --delay-updates not yet supported.
+
+## Check that rsync --temp-dir --delay-updates with a non-existing
+## dest dir works correctly:
+##
+#for td in $TMPROOT/tmpdir$$ $PWD/tmpdir$$ /tmp/tmpdir$$ ; do
+#    echo "cp 50 ${td} $(dirname ${td})"
+#    rm -rf ${td} dst
+#    mkdir -p ${td}
+#
+#    rsync -a --temp-dir=${td} --delay-updates -- src/ dst/
+#    compare_trees -t src dst
+#
+#    X=$(find ${td} | wc -l)
+#    [ "$X" -eq 1 ]
+#done
+#
+#
+## Check that rsync --temp-dir --delay-updates with an existing
+## dest dir works correctly:
+##
+#for td in $TMPROOT/tmpdir$$ $PWD/tmpdir$$ /tmp/tmpdir$$ ; do
+#    echo "cp 60 ${td} $(dirname ${td})"
+#    rm -rf ${td}
+#    mkdir -p ${td}
+#
+#    for i in $(seq ${NUMFILES}) ; do
+#	date >> src/file$i
+#	touch src/dir/file$i
+#    done
+#
+#    rsync -a --temp-dir=${td} --delay-updates -- src/ dst/
+#    compare_trees -t src dst
+#
+#    X=$(find ${td} | wc -l)
+#    [ "$X" -eq 1 ]
+#done
+#
+#
+## Check that rsync --temp-dir with a non-qualified directory
+## name works correctly (i.e., the temp dir will reside within
+## the dest dir):
+##
+#td=tmpdir$$
+#echo "cp 70 ${td} $(dirname ${td})"
+#rm -rf dst/${td}
+#mkdir -p dst/${td}
+#
+#for i in $(seq ${NUMFILES}) ; do
+#    date >> src/file$i
+#    touch src/dir/file$i
+#done
+#
+#rsync -a --temp-dir=${td} --delay-updates -- src/ dst/
+#
+#X=$(find dst/${td} | wc -l)
+#[ "$X" -eq 1 ]
+#
+#rm -rf dst/${td}
+#touch src dst
+#compare_trees -t src dst

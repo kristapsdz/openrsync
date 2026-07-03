@@ -61,6 +61,7 @@ struct	upload {
 	mode_t		 oumask; /* umask for creating files */
 	char		*root; /* destination directory path */
 	int		 rootfd; /* destination directory */
+	int		 tempfd; /* temp directory */
 	size_t		 csumlen; /* checksum length */
 	int		 fdout; /* write descriptor to sender */
 	struct flist 	*fl; /* file list */
@@ -356,7 +357,9 @@ pre_symlink(struct upload *p, struct sess *sess)
 	if (rc != -1)
 		dstat_save(&st, &f->dstat);
 
-	rsync_set_metadata_at(sess, newlink, p->rootfd, f,
+	rsync_set_metadata_at(sess, newlink,
+	    newlink && sess->opts->temp_dir != NULL ?
+	        p->tempfd : p->rootfd, f,
 	    newlink && temp != NULL ? temp : f->path);
 
 	if (newlink && temp != NULL) {
@@ -637,7 +640,9 @@ pre_sock(struct upload *p, struct sess *sess)
 				ERRX1("mktemplate");
 				return -1;
 			}
-			if (mkstempsock(p->root, temp) == NULL) {
+			if (mkstempsock(sess->opts->temp_dir != NULL ?
+			    sess->opts->temp_dir : p->root, temp) == 
+			    NULL) {
 				ERR("mkstempsock");
 				free(temp);
 				return -1;
@@ -1728,8 +1733,9 @@ fixed:
  * On success, upload_free() must be called with the allocated pointer.
  */
 struct upload *
-upload_alloc(const char *root, int rootfd, int fdout, size_t clen,
-    struct flist *fl, size_t flsz, size_t chunksz, mode_t msk)
+upload_alloc(const char *root, int rootfd, int tempfd, int fdout,
+    size_t clen, struct flist *fl, size_t flsz, size_t chunksz,
+    mode_t msk)
 {
 	struct upload	*p;
 
@@ -1748,6 +1754,7 @@ upload_alloc(const char *root, int rootfd, int fdout, size_t clen,
 		return NULL;
 	}
 	p->rootfd = rootfd;
+	p->tempfd = tempfd;
 	p->csumlen = clen;
 	p->fdout = fdout;
 	p->fl = fl;

@@ -374,6 +374,7 @@ struct	opts {
 	char		*port;			/* --port */
 	char		*rsync_path;		/* --rsync-path */
 	char		*ssh_prog;		/* --rsh or -e */
+	char		*temp_dir;		/* -T */
 	enum altbasemode alt_base_mode;		/* --compare/copy/link-dest */
 	enum delmode	 del;			/* --delete */
 	enum dryrun	 dry_run;		/* -n */
@@ -761,9 +762,9 @@ bool	rsync_uploader_tail(struct upload *, struct sess *);
 
 const char	*download_partial_filepath(const struct flist *);
 struct download	*download_alloc(struct sess *, int, struct flist *,
-		    size_t, int);
+		    size_t, int, int);
 void		 download_free(struct sess *, struct download *);
-struct upload	*upload_alloc(const char *, int, int, size_t,
+struct upload	*upload_alloc(const char *, int, int, int, size_t,
 		    struct flist *, size_t, size_t, mode_t);
 void		upload_free(struct upload *);
 void		upload_del(struct upload *, const struct sess *);

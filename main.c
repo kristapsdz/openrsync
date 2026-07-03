@@ -453,7 +453,7 @@ enum {
 	OP_TIMEOUT,
 };
 
-const char rsync_shopts[] = "0468B:CDFHIJKLOPRVWabcde:f:ghklnopqrtuvxz";
+const char rsync_shopts[] = "0468B:CDFHIJKLOPRTVWabcde:f:ghklnopqrtuvxz";
 const struct option	 lopts[] = {
     { "8-bit-output",	no_argument,	NULL,			'8' },
     { "address",	required_argument, NULL,		OP_ADDRESS },
@@ -543,6 +543,7 @@ const struct option	 lopts[] = {
     { "specials",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "stats",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "suffix",		required_argument, NULL,		OP_SUFFIX },
+    { "temp-dir",	required_argument, NULL,		'T' },
     { "timeout",	required_argument, NULL,		OP_TIMEOUT },
     { "times",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "update",		no_argument,	NULL,			'u' },
@@ -636,6 +637,7 @@ usage(void)
 	    "\t[--specials]\n"
 	    "\t[--stats]\n"
 	    "\t[--suffix=suffix]\n"
+	    "\t[--temp-dir=dir, -T dir]\n"
 	    "\t[--timeout=seconds]\n"
 	    "\t[--times, -t]\n"
 	    "\t[--update, -u]\n"
@@ -857,6 +859,12 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			break;
 		case 'R':
 			opts.relative = true;
+			break;
+		case 'T':
+			free(opts.temp_dir);
+			opts.temp_dir = strdup(optarg);
+			if (opts.temp_dir == NULL)
+				errx(ERR_NOMEM, NULL);
 			break;
 		case 'V':
 			fprintf(stderr, "openrsync: protocol version %u\n",

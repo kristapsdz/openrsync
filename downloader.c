@@ -87,6 +87,7 @@ struct	download {
 	struct flist	   *fl; /* file list */
 	size_t		    flsz; /* size of file list */
 	int		    rootfd; /* destination directory */
+	int		    tempfd; /* temp directory */
 	int		    fdin; /* read descriptor from sender */
 	char		   *obuf; /* pre-write buffer */
 	size_t		    obufsz; /* current size of obuf */
@@ -119,6 +120,7 @@ download_reinit(struct sess *sess, struct download *p, size_t idx)
 	/* Don't touch p->fl. */
 	/* Don't touch p->flsz. */
 	/* Don't touch p->rootfd. */
+	/* Don't touch p->tempfd. */
 	/* Don't touch p->fdin. */
 	/* Don't touch p->obufsz. */
 	/* Don't touch p->obufmax. */
@@ -226,8 +228,19 @@ download_cleanup_partial(struct sess *sess, struct download *p)
 		}
 
 		close(pdfd);
-	} else
+	} else if (sess->opts->temp_dir != NULL &&
+	    !download_is_inplace(sess, p, false)) {
+		/* Unlink relative to temporary directory. */
+		fname = strrchr(f->path, '/');
+		if (fname == NULL)
+			fname = f->path;
+		else
+			fname++;
+		(void)unlinkat(p->tempfd, fname, 0);
+	} else {
+		/* Unlink relative to root directory. */
 		(void)unlinkat(p->rootfd, p->fname, 0);
+	}
 
 	return true;
 }
@@ -270,13 +283,15 @@ download_cleanup(struct sess *sess, struct download *p, bool cleanup)
 
 /*
  * Initial allocation of the download object using the file list "fl" of
- * size "flsz", the destination "rootfd", and the sender read "fdin".
- * Returns NULL on allocation failure.
- * On success, download_free() must be called with the pointer.
+ * size "flsz", the destination "rootfd" (and optional temporary
+ * directory "tempfd"), and the sender read "fdin".
+ *
+ * Returns NULL on allocation failure.  On success, download_free() must
+ * be called with the pointer.
  */
 struct download *
 download_alloc(struct sess *sess, int fdin, struct flist *fl,
-    size_t flsz, int rootfd)
+    size_t flsz, int rootfd, int tempfd)
 {
 	struct download	*p;
 
@@ -289,6 +304,7 @@ download_alloc(struct sess *sess, int fdin, struct flist *fl,
 	p->fl = fl;
 	p->flsz = flsz;
 	p->rootfd = rootfd;
+	p->tempfd = tempfd;
 	p->fdin = fdin;
 	download_reinit(sess, p, 0);
 	p->obufsz = 0;

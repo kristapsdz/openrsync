@@ -27,7 +27,7 @@
 .Op Fl -address Ns = Ns Ar sourceaddr
 .Op Fl -archive , Fl a
 .Op Fl -backup , Fl b
-.Op Fl -backup-dir Ns = Ns directory
+.Op Fl -backup-dir Ns = Ns dir
 .Op Fl -block-size Ns = Ns Ar size , Fl B Ar size
 .Op Fl -bwlimit Ns = Ns Ar limit
 .Op Fl -checksum , Fl c
@@ -49,7 +49,7 @@
 .Op Fl -dry-run , Fl n
 .Op Fl -exclude-from Ns = Ns Ar file
 .Op Fl -exclude Ns = Ns Ar pattern
-.Op Fl -filter Ns = Ns Ar filter , Fl f filter
+.Op Fl -filter Ns = Ns Ar filter , Fl f Ar filter
 .Op Fl -force
 .Op Fl -from0 , Fl 0
 .Op Fl -group , Fl g
@@ -92,13 +92,14 @@
 .Op Fl -quiet , Fl q
 .Op Fl -relative , Fl R
 .Op Fl -recursive , Fl r
-.Op Fl -rsh Ns = Ns Ar program , Fl e program
+.Op Fl -rsh Ns = Ns Ar program , Fl e Ar program
 .Op Fl -rsync-path Ns = Ns Ar program
 .Op Fl -safe-links
 .Op Fl -size-only
 .Op Fl -specials
 .Op Fl -stats
 .Op Fl -suffix Ns = Ns Ar suffix
+.Op Fl -temp-dir Ns = Ns Ar dir , Fl T Ar dir
 .Op Fl -timeout Ns = Ns Ar seconds
 .Op Fl -times , Fl t
 .Op Fl -update , Fl u
@@ -156,7 +157,7 @@ Make a backup of changed files with a
 .Li ~
 suffix, if not overridden with
 .Fl -suffix .
-.It Fl -backup-dir Ar directory
+.It Fl -backup-dir Ar dir
 When combined with the
 .Fl -backup
 flag,
@@ -193,18 +194,20 @@ transferred bytes after transmission, so it will not be precise.
 Use full-file checksums to determine which files have changed and should
 be transferred, rather than the usual file size and modification time
 .Dq quick check .
-.It Fl -compare-dest Ns = Ns Ar directory
-Use directory as an alternate base directory to compare files against on
-the destination machine.
+.It Fl -compare-dest Ns = Ns Ar dir
+Use
+.Ar dir
+as an alternate base directory to compare files against on the
+destination machine.
 If file in
-.Ar directory
+.Ar dir
 is found and identical to the sender's file, the file will not be
 transferred.
 Multiple
 .Fl -compare-dest
 directories may be provided.
 If
-.Ar directory
+.Ar dir
 is a relative path, it is relative to the destination directory.
 Only one of
 .Fl -compare-dest ,
@@ -421,18 +424,20 @@ but for IPv6.
 When a directory is sent, and the receiving side has a symlink to a
 directory in that place, follow that symlink and place the directory's
 contents in that symlinked dir.
-.It Fl -link-dest Ns = Ns Ar directory
-Use directory as an alternate base directory to compare files against on
+.It Fl -link-dest Ns = Ns Ar dir
+Use
+.Ar dir
+as an alternate base directory to compare files against on
 the destination machine.
 If file in
-.Ar directory
+.Ar dir
 is found and identical to the sender's file, the file will be
 hardlinked.
 Multiple
 .Fl -link-dest
 directories may be provided.
 If
-.Ar directory
+.Ar dir
 is a relative path, it is relative to the destination directory.
 .It Fl -links , Fl l
 Also transfer symbolic links.
@@ -597,6 +602,14 @@ Sets the suffix to be appended to filenames when backing up with
 .Fl b .
 Defaults to
 .Li ~ .
+.It -temp-dir Ns = Ns Ar dir , Fl T Ar dir
+Instead of creating temporarily files in the destination directory,
+create them in the specified temporary
+.Ar dir .
+If
+.Ar dir
+is on a different filesystem, that will require moving the file rather
+than renaming it into place, and is therefore not atomic.
 .It Fl -timeout Ns = Ns Ar seconds
 Set the I/O timeout in seconds.
 Exit if no data was transferred for the specified time.

@@ -436,6 +436,7 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 			 dflsz = 0, /* size of dfl */
 			 chunksz; /* max send/write size to sender */
 	int		 dfd = -1, /* delete directory fd */
+			 tfd = -1, /* temporary directory fd */
 			 phase = 0, /* metadata phase */
 			 c, /* temporary: return code */
 			 sndlowat, /* for getsockopt() */
@@ -646,20 +647,31 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 	}
 
 	/*
-	 * If we've specified an absolute backup directory, protect
-	 * against the directory now.  This is ignored in dry-run mode,
-	 * because the directory is never touched.
+	 * If we've specified an absolute backup or temporary directory,
+	 * protect against the directory now.  These are ignored in
+	 * dry-run mode, because the directories are never touched.
 	 */
 
 	if (sess->opts->backup_dir != NULL &&
 	    sess->opts->backup_dir[0] == '/' &&
 	    !sess->opts->dry_run) {
 		if (mkpath(sess->opts->backup_dir, 0755) < 0)
-			err(ERR_FILE_IO, "%s: mkatph",
+			err(ERR_FILE_IO, "%s: mkpath",
 			    sess->opts->backup_dir);
 		if (unveil(sess->opts->backup_dir, "rwc") == -1)
 			err(ERR_IPC, "%s: unveil",
 			    sess->opts->backup_dir);
+	}
+
+	if (sess->opts->temp_dir != NULL &&
+	    sess->opts->temp_dir[0] == '/' &&
+	    !sess->opts->dry_run) {
+		if (mkpath(sess->opts->temp_dir, 0755) < 0)
+			err(ERR_FILE_IO, "%s: mkpath",
+			    sess->opts->temp_dir);
+		if (unveil(sess->opts->temp_dir, "rwc") == -1)
+			err(ERR_IPC, "%s: unveil",
+			    sess->opts->temp_dir);
 	}
 
 	/*
@@ -697,6 +709,12 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 		} else if (!sess->opts->dry_run)
 			WARN("%s: open", root);
 	}
+	if (sess->opts->temp_dir != NULL) {
+		tfd = open(sess->opts->temp_dir,
+		    O_RDONLY | O_DIRECTORY, 0);
+		if (tfd == -1 && !sess->opts->dry_run)
+			WARN("%s: open", sess->opts->temp_dir);
+	}
 #else
 	if ((dfd = open(root, O_RDONLY, 0)) == -1) {
 		if (!sess->opts->dry_run && flsz != 0) {
@@ -723,6 +741,27 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 				close(dfd);
 				dfd = -1;
 			}
+		}
+	}
+	if (sess->opts->temp_dir != NULL) {
+		tfd = open(sess->opts->temp_dir, O_RDONLY, 0);
+		if (tfd == -1) {
+			if (!sess->opts->dry_run)
+				WARN("%s: open", sess->opts->temp_dir);
+		} else if (fstat(tfd, &st) == -1) {
+			if (!sess->opts->dry_run) {
+				ERR("%s: fstat", sess->opts->temp_dir);
+				goto out;
+			} else {
+				WARN("%s: fstat", sess->opts->temp_dir);
+				close(tfd);
+				tfd = -1;
+			}
+		} else if (!S_ISDIR(st.st_mode)) {
+			if (!sess->opts->dry_run)
+				WARN("%s: fstat", sess->opts->temp_dir);
+			close(tfd);
+			tfd = -1;
 		}
 	}
 #endif
@@ -798,15 +837,15 @@ rsync_receiver(struct sess *sess, int fdin, int fdout, const char *root)
 		chunksz -= sizeof(int32_t);
 	rc = false;
 
-	ul = upload_alloc(root, dfd, fdout, CSUM_LENGTH_PHASE1, fl, flsz,
-	    chunksz, oumask);
+	ul = upload_alloc(root, dfd, tfd, fdout, CSUM_LENGTH_PHASE1,
+	    fl, flsz, chunksz, oumask);
 
 	if (ul == NULL) {
 		ERRX1("upload_alloc");
 		goto out;
 	}
 
-	dl = download_alloc(sess, fdin, fl, flsz, dfd);
+	dl = download_alloc(sess, fdin, fl, flsz, dfd, tfd);
 	if (dl == NULL) {
 		ERRX1("download_alloc");
 		goto out;
@@ -970,6 +1009,8 @@ out:
 
 	if (dfd != -1)
 		close(dfd);
+	if (tfd != -1)
+		close(tfd);
 
 	flist_free(fl, flsz);
 	flist_free(dfl, dflsz);
