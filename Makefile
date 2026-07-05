@@ -133,6 +133,7 @@ regress_cunit: $(REGRESS_CU)
 
 # Doesn't work openrsync -> openrsync: regress/functional/test14c_hardlinks.test
 # Doesn't work openrsync -> openrsync: regress/functional/test14_hardlinks.test
+# Doesn't work openrsync -> openrsync (-z): regress/functional/test13b_sparse.test
 
 REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test0_noslash.test \
@@ -181,7 +182,8 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test16d_symlinks.test \
 		  regress/functional/test47_keep_dirlinks.test \
 		  regress/functional/test44_temp_dir.test \
-		  regress/functional/test59_ignore_errors.test
+		  regress/functional/test59_ignore_errors.test \
+		  regress/functional/test13_sparse.test
 
 # Doesn't work (protocol < 29): regress/functional/test25_filter_basic_cvs.test
 # Doesn't work (protocol < 29): regress/functional/test25_filter_clear.test
