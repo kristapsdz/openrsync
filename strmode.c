@@ -147,6 +147,7 @@ our_strmode(mode_t mode, char *p)
 		*p++ = 't';
 		break;
 	}
-	*p++ = ' ';
+	// FIXME: why is the extra space here?  Remove it.
+	// *p++ = ' ';
 	*p = '\0';
 }

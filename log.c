@@ -58,17 +58,22 @@
 #define LOG_FORMAT_OPERATION	(1 << 3)
 #define LOG_FORMAT_ITEMIZE_I	(1 << 4)
 
+/*
+ * If NULL (default), this will cause log messages to route into syslog.
+ * If not stdout, this will receive all log messages.
+ * If stdout, log messages will either go to stdout or stderr, depending
+ * on their severity.
+ * This should ONLY be set in rsync_set_logfile().
+ */
 static FILE *log_file;
+
+/*
+ * This must only be set by the server: it's the session connected to
+ * the client, who should be sent all messages.
+ * If NULL (default), this is assumed to be the client.
+ * This should ONLY be set in rsync_set_logfile().
+ */
 static struct sess *log_sess;
-
-static void
-log_writef(enum log_type, const char *, ...)
-    __attribute__((format(printf, 2, 3)));
-
-static const char *
-printf_doformat(const char *, int *, const struct sess *,
-    const struct flist *, struct sbuf *)
-    __attribute__((format(printf, 1, 0)));
 
 /*
  * Log a message at level "level", starting at zero, which corresponds
@@ -298,6 +303,10 @@ isit_human(char *s1, const char *s2)
 	return count;
 }
 
+/*
+ * Close out any pre-existing logfile.
+ * FIXME: remove this function.
+ */
 static void
 rsync_logfile_changed(FILE *old_logfile, FILE *new_logfile)
 {
@@ -308,20 +317,24 @@ rsync_logfile_changed(FILE *old_logfile, FILE *new_logfile)
 		fclose(old_logfile);
 }
 
+/*
+ * Set the output stream for log messages and the session for log
+ * messages.  This function can be called multiple times as the program
+ * learns its mode of operation.
+ *
+ * The session is only set for the server; clients (or if not yet sure
+ * whether a server) should pass NULL.  For the server, the logfile
+ * should be stdout; for the client, it should be the destination of the
+ * logs.
+ *
+ * If sess->opts is NULL, then we're in the daemon client handler before
+ * we've figured out the client options and we can assume that things
+ * will work out.
+ */
 void
 rsync_set_logfile(FILE *new_logfile, struct sess *sess)
 {
 	FILE *prev_logfile;
-
-	/*
-	 * Only the server should supply a non-null sess argument, which
-	 * causes log_vwritef() to send log messages to the client via
-	 * the multiplexed return channel.
-	 *
-	 * If sess->opts is NULL, then we're in the daemon client
-	 * handler before we've figured out the client options and we
-	 * can assume that things will work out.
-	 */
 
 	if (sess != NULL && sess->opts != NULL) {
 		assert(new_logfile == stdout);
@@ -354,9 +367,22 @@ log_priority(enum log_type type)
 }
 
 /*
+ * FIXME: this function is a nightmare.
+ *
  * Log the given message with the given log type.  This has a large
  * number of possible output destinations: syslog, stderr, or the remote
  * server.
+ *
+ * The behaviour of this depends upon rsync_set_logfile(), which sets
+ * whether we're the server (all messages are routed to the client) or
+ * the client, which sends its messages to specific places.
+ *
+ * If in server mode, passing a type of LT_CLIENT, LT_INFO, LT_WARNING,
+ * or LT_ERROR are routed to the client as either INFO or ERROR.  LT_LOG
+ * are dropped.
+ *
+ * If in client mode with a log file, everything goes into the log file
+ * but LT_CLIENT.  Without a log file, everything is logged but LT_LOG.
  */
 static void
 log_vwritef(enum log_type type, const char *fmt, va_list ap)
@@ -439,6 +465,11 @@ log_vwritef(enum log_type type, const char *fmt, va_list ap)
 			    n);
 		}
 
+		/*
+		 * FIXME: superfluous: we only get here if log_sess is
+		 * not NULL, so the message will be dropped below.
+		 */
+
 		if (type == LT_CLIENT)
 			return;
 	}
@@ -465,7 +496,7 @@ log_vwritef(enum log_type type, const char *fmt, va_list ap)
 /*
  * See log_vwritef().
  */
-static void
+__attribute__((format(printf, 2, 3))) static void
 log_writef(enum log_type type, const char *fmt, ...)
 {
 	va_list ap;
@@ -581,6 +612,7 @@ print_7_or_8_bit(const struct sess *sess, const char *fmt, const char *s,
  *
  * rval is expected to be initialized to zero before the first call.
  */
+__attribute__((format(printf, 1, 0)))
 static const char *
 printf_doformat(const char *fmt, int *rval, const struct sess *sess,
     const struct flist *fl, struct sbuf *sbuf)
@@ -1057,16 +1089,16 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 	return fmt;
 }
 
-static bool
+bool
 log_format_type(enum log_type type, const struct sess *sess,
     const char *format, const struct flist *fl)
 {
-	const bool do_print = (fl != NULL);
-	size_t len;
-	int end, rval = 0;
-	const char *start;
-	const char *fmt;
-	struct sbuf *sbuf;
+	const bool	 do_print = (fl != NULL);
+	size_t		 len;
+	int		 end, rval = 0;
+	const char	*start;
+	const char	*fmt;
+	struct sbuf	*sbuf;
 
 	if (format == NULL)
 		return false;

@@ -250,13 +250,14 @@ struct	fldstat {
 
 /*
  * Used for logging messages.
+ * FIXME: this enum is incredibly poorly defined.
  */
 enum log_type {
-	LT_CLIENT,
-	LT_INFO,
-	LT_LOG,
-	LT_WARNING,
-	LT_ERROR,
+	LT_CLIENT, /* debug messages */
+	LT_INFO, /* info messages */
+	LT_LOG, /* debug messages (dropped on server) */
+	LT_WARNING, /* warning messages */
+	LT_ERROR, /* error messages */
 };
 
 /*
@@ -561,13 +562,13 @@ struct	sess {
 	size_t		   token_dbufsz; /* size of token_dbuf */
 	enum fmode	   mode; /* sender or receiver */
 	int		   mplex_reads; /* multiplexing reads? */
-	int		   mplex_writes; /* multiplexing writes? */
 	int		   wbatch_fd; /* TODO */
 	int32_t		   lver; /* local version */
 	int32_t		   protocol; /* negotiated protocol version */
 	int32_t		   rver; /* remote version */
 	int32_t		   seed; /* checksum seed */
 	bool		   lreceiver; /* Receiver is local */
+	bool		   mplex_writes; /* multiplexing writes? */
 };
 
 #define TOKEN_END               0x00    /* end of sequence */
@@ -837,6 +838,8 @@ void		 our_strmode(mode_t, char *);
 void		 rsync_set_logfile(FILE *, struct sess *);
 bool		 log_item_impl(enum log_type, const struct sess *, const struct flist *);
 bool		 log_item(const struct sess *, const struct flist *);
+bool		 log_format_type(enum log_type, const struct sess *, const char *,
+	 	    const struct flist *);
 bool		 print_7_or_8_bit(const struct sess *, const char *,
 		    const char *, struct sbuf *)
 		    __attribute__((format(printf, 2, 0)));

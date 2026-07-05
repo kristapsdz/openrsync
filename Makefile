@@ -38,6 +38,10 @@ ALLOBJS	    = $(OBJS) \
 	      main.o
 UNAME 	   != uname
 
+
+REGRESS_CU  = regress/cunit/print_7_or_8_bit \
+	      regress/cunit/log_format_type
+
 LDADD_FTS  != pkg-config --libs musl-fts 2>/dev/null || echo ""
 CFLAGS_FTS != pkg-config --cflags musl-fts 2>/dev/null || echo ""
 
@@ -86,7 +90,7 @@ uninstall:
 
 clean:
 	rm -f $(ALLOBJS) openrsync
-	rm -f regress/cunit/print_7_or_8_bit
+	rm -f $(REGRESS_CU)
 
 distclean: clean
 	rm -f Makefile.configure config.h config.log
@@ -99,13 +103,21 @@ compat_humanize_number.o log.o: compat_humanize_number.h
 
 compat_sbuf.o log.o regress/cunit/print_7_or_8_bit: compat_sbuf.h
 
-rules.h: extern.h
+$(REGRESS_CU): regress/cunit/regress.h
+
+rules.h regress/cunit/regress.h: extern.h
 
 regress/cunit/print_7_or_8_bit: regress/cunit/print_7_or_8_bit.c $(OBJS)
 	$(CC) $(RCFLAGS) -o $@ regress/cunit/print_7_or_8_bit.c $(OBJS) $(RLDADD)
 
-regress_cunit: regress/cunit/print_7_or_8_bit
-	./regress/cunit/print_7_or_8_bit
+regress/cunit/log_format_type: regress/cunit/log_format_type.c $(OBJS)
+	$(CC) $(RCFLAGS) -o $@ regress/cunit/log_format_type.c $(OBJS) $(RLDADD)
+
+regress_cunit: $(REGRESS_CU)
+	for f in $(REGRESS_CU) ; \
+	do \
+		./$$f ; \
+	done
 
 # Doesn't work: regress/functional/test10b_perms.test (???)
 # Doesn't work openrsync -> rsync: regress/functional/test40_backup.test

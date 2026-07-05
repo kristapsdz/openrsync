@@ -101,7 +101,7 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 		goto out;
 	}
 
-	sess.mplex_writes = 1;
+	sess.mplex_writes = true;
 	rsync_set_logfile(stdout, &sess);
 
 	LOG3("server detected client version %d, server version %d, "
