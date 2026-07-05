@@ -12,3 +12,4 @@ config.log.old
 openrsync
 regress/cunit/print_7_or_8_bit
 regress/cunit/log_format_type
+regress/functional/mksparse

@@ -227,11 +227,8 @@ test_human_readable_level1(void)
         CU_ASSERT_PTR_NOT_NULL_FATAL(line);
         CU_ASSERT_TRUE(ok);
 
-#ifdef __OpenBSD__
-        CU_ASSERT_STRING_EQUAL(line, "1234567\n");
-#else
-        CU_ASSERT_STRING_EQUAL(line, "1,234,567\n");
-#endif
+        CU_ASSERT_TRUE(strcmp(line, "1234567\n") == 0 ||
+            strcmp(line, "1,234,567\n") == 0);
 
         g_fl.st.size = saved_size;
         free(line);

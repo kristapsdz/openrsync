@@ -623,7 +623,7 @@ io_read_flush(struct sess *sess, int fd)
 	if (tag >= IT_ERROR_XFER && tag <= IT_WARNING) {
 		if (mpbufsz > 0) {
 			mpbuf[mpbufsz] = '\0';
-			LOG0("%s", mpbuf);
+			rsync_log_tag(tag, "%s\n", mpbuf);
 		}
 		if (tag == IT_ERROR_XFER || tag == IT_ERROR) {
 			sess->total_errors++;

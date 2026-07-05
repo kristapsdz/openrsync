@@ -113,7 +113,7 @@ For each type:
 
 ```
 % make regress_functional
-% make regress_unit
+% make regress_cunit
 ```
 
 # Algorithm

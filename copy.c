@@ -48,7 +48,7 @@
  * A buffer of zero length is also considered a zero buffer.
  * FIXME: is there a faster way to do this?
  */
-static bool
+bool
 iszerobuf(const void *b, size_t len)
 {
 	const unsigned char *c = b;

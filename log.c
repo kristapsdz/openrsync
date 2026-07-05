@@ -76,234 +76,6 @@ static FILE *log_file;
 static struct sess *log_sess;
 
 /*
- * Log a message at level "level", starting at zero, which corresponds
- * to the current verbosity level opts->verbose (whose verbosity starts
- * at one).
- */
-void
-rsync_log(int level, const char *fmt, ...)
-{
-	char	*buf = NULL;
-	va_list	 ap;
-
-	if (verbose < level + 1)
-		return;
-
-	if (fmt != NULL) {
-		va_start(ap, fmt);
-		if (vasprintf(&buf, fmt, ap) == -1) {
-			va_end(ap);
-			return;
-		}
-		va_end(ap);
-	}
-
-	if (level <= 0 && buf != NULL)
-		fprintf(stderr, "%s\n", buf);
-	else if (level > 0)
-		fprintf(stderr, "%s(%d)%s%s\n", getprogname(),
-		    getpid(),
-		    (buf != NULL) ? ": " : "",
-		    (buf != NULL) ? buf : "");
-	free(buf);
-}
-
-/*
- * This reports an error---not a warning.
- * However, it is not like errx(3) in that it does not exit.
- */
-void
-rsync_errx(const char *fmt, ...)
-{
-	char	*buf = NULL;
-	va_list	 ap;
-
-	if (fmt != NULL) {
-		va_start(ap, fmt);
-		if (vasprintf(&buf, fmt, ap) == -1) {
-			va_end(ap);
-			return;
-		}
-		va_end(ap);
-	}
-
-	fprintf(stderr, "%s(%d): error%s%s\n", getprogname(),
-	    getpid(),
-	   (buf != NULL) ? ": " : "",
-	   (buf != NULL) ? buf : "");
-	free(buf);
-}
-
-/*
- * This reports an error---not a warning.
- * However, it is not like err(3) in that it does not exit.
- */
-void
-rsync_err(const char *fmt, ...)
-{
-	char	*buf = NULL;
-	va_list	 ap;
-	int	 er = errno;
-
-	if (fmt != NULL) {
-		va_start(ap, fmt);
-		if (vasprintf(&buf, fmt, ap) == -1) {
-			va_end(ap);
-			return;
-		}
-		va_end(ap);
-	}
-
-	fprintf(stderr, "%s(%d): error%s%s: %s\n", getprogname(),
-	    getpid(),
-	   (buf != NULL) ? ": " : "",
-	   (buf != NULL) ? buf : "", strerror(er));
-	free(buf);
-}
-
-/*
- * Prints a non-terminal error message, that is, when reporting on the
- * chain of functions from which the actual warning occurred.
- */
-void
-rsync_errx1(const char *fmt, ...)
-{
-	char	*buf = NULL;
-	va_list	 ap;
-
-	if (verbose < 1)
-		return;
-
-	if (fmt != NULL) {
-		va_start(ap, fmt);
-		if (vasprintf(&buf, fmt, ap) == -1) {
-			va_end(ap);
-			return;
-		}
-		va_end(ap);
-	}
-
-	fprintf(stderr, "%s(%d): error%s%s\n", getprogname(),
-	    getpid(),
-	   (buf != NULL) ? ": " : "",
-	   (buf != NULL) ? buf : "");
-	free(buf);
-}
-
-/*
- * Prints a warning message if we're running -v.
- */
-void
-rsync_warnx1(const char *fmt, ...)
-{
-	char    *buf = NULL;
-	va_list  ap;
-
-	if (verbose < 1)
-		return;
-
-	if (fmt != NULL) {
-		va_start(ap, fmt);
-		if (vasprintf(&buf, fmt, ap) == -1) {
-			va_end(ap);
-			return;
-		}
-		va_end(ap);
-	}
-
-	fprintf(stderr, "%s(%d): warning%s%s\n", getprogname(),
-	    getpid(),
-	    (buf != NULL) ? ": " : "",
-	    (buf != NULL) ? buf : "");
-	free(buf);
-}
-
-/*
- * Prints a warning message.
- */
-void
-rsync_warnx(const char *fmt, ...)
-{
-	char	*buf = NULL;
-	va_list	 ap;
-
-	if (fmt != NULL) {
-		va_start(ap, fmt);
-		if (vasprintf(&buf, fmt, ap) == -1) {
-			va_end(ap);
-			return;
-		}
-		va_end(ap);
-	}
-
-	fprintf(stderr, "%s(%d): warning%s%s\n", getprogname(),
-	    getpid(),
-	   (buf != NULL) ? ": " : "",
-	   (buf != NULL) ? buf : "");
-	free(buf);
-}
-
-/*
- * Prints a warning with an errno.
- * It uses a level detector for when to inhibit printing.
- */
-void
-rsync_warn(int level, const char *fmt, ...)
-{
-	char	*buf = NULL;
-	va_list	 ap;
-	int	 er = errno;
-
-	if (verbose < level)
-		return;
-
-	if (fmt != NULL) {
-		va_start(ap, fmt);
-		if (vasprintf(&buf, fmt, ap) == -1) {
-			va_end(ap);
-			return;
-		}
-		va_end(ap);
-	}
-
-	fprintf(stderr, "%s(%d): warning%s%s: %s\n", getprogname(),
-	    getpid(),
-	   (buf != NULL) ? ": " : "",
-	   (buf != NULL) ? buf : "", strerror(er));
-	free(buf);
-}
-
-/*
- * Cut down printf implementation taken from printf(1) in FreeBSD
- * 15-current rev 30189156d325fbcc9d1997d791daedc9fa3bed20.
- * FIXME: move to top of file.
- */
-static const char widthchars[] = "'+- 0123456789";
-
-/*
- * Copies string 2 into string 1, which is quaranteed to be at least as
- * longly allocated as string 2, omitting "'".  Returns the number of
- * "'"s.
- */
-static size_t
-isit_human(char *s1, const char *s2)
-{
-	char		*p1;
-	const char	*p2;
-	size_t		 count = 0;
-
-	for (p1 = s1, p2 = s2; *p2; p2++) {
-		if (*p2 == '\'')
-			count++;
-		else
-			*p1++ = *p2;
-	}
-	*p1 = '\0';
-
-	return count;
-}
-
-/*
  * Close out any pre-existing logfile.
  * FIXME: remove this function.
  */
@@ -349,10 +121,12 @@ rsync_set_logfile(FILE *new_logfile, struct sess *sess)
 	rsync_logfile_changed(prev_logfile, new_logfile);
 }
 
+/*
+ * Map the given log type into a syslog.h priority.
+ */
 static int
 log_priority(enum log_type type)
 {
-
 	switch (type) {
 	case LT_WARNING:
 		return LOG_WARNING;
@@ -504,6 +278,243 @@ log_writef(enum log_type type, const char *fmt, ...)
 	va_start(ap, fmt);
 	log_vwritef(type, fmt, ap);
 	va_end(ap);
+}
+
+/*
+ * Map the given iotag into an error class and log the provided message.
+ */
+void
+rsync_log_tag(enum iotag tag, const char *fmt, ...)
+{
+	enum log_type	type;
+	va_list		ap;
+
+	type = (tag == IT_ERROR_XFER) ? LT_WARNING : LT_INFO;
+
+	va_start(ap, fmt);
+	log_vwritef(type, fmt, ap);
+	va_end(ap);
+}
+
+/*
+ * Log a message at level "level", starting at zero, which corresponds
+ * to the current verbosity level opts->verbose (whose verbosity starts
+ * at one).
+ */
+void
+rsync_log(int level, const char *fmt, ...)
+{
+	char	*buf = NULL;
+	va_list	 ap;
+
+	if (verbose < level + 1)
+		return;
+
+	if (fmt != NULL) {
+		va_start(ap, fmt);
+		if (vasprintf(&buf, fmt, ap) == -1) {
+			va_end(ap);
+			return;
+		}
+		va_end(ap);
+	}
+
+	if (level <= 0 && buf != NULL)
+		log_writef(LT_INFO, "%s\n", buf);
+	else if (level > 0)
+		log_writef(LT_INFO, "%s(%d)%s%s\n", getprogname(),
+		    getpid(), (buf != NULL) ? ": " : "",
+		    (buf != NULL) ? buf : "");
+	free(buf);
+}
+
+/*
+ * This reports an error---not a warning.
+ * However, it is not like errx(3) in that it does not exit.
+ */
+void
+rsync_errx(const char *fmt, ...)
+{
+	char	*buf = NULL;
+	va_list	 ap;
+
+	if (fmt != NULL) {
+		va_start(ap, fmt);
+		if (vasprintf(&buf, fmt, ap) == -1) {
+			va_end(ap);
+			return;
+		}
+		va_end(ap);
+	}
+
+	log_writef(LT_ERROR, "%s(%d): error%s%s\n", getprogname(),
+	    getpid(), (buf != NULL) ? ": " : "",
+	    (buf != NULL) ? buf : "");
+	free(buf);
+}
+
+/*
+ * This reports an error---not a warning.
+ * However, it is not like err(3) in that it does not exit.
+ */
+void
+rsync_err(const char *fmt, ...)
+{
+	char	*buf = NULL;
+	va_list	 ap;
+	int	 er = errno;
+
+	if (fmt != NULL) {
+		va_start(ap, fmt);
+		if (vasprintf(&buf, fmt, ap) == -1) {
+			va_end(ap);
+			return;
+		}
+		va_end(ap);
+	}
+
+	log_writef(LT_ERROR, "%s(%d): error%s%s: %s\n", getprogname(),
+	    getpid(), (buf != NULL) ? ": " : "",
+	    (buf != NULL) ? buf : "", strerror(er));
+	free(buf);
+}
+
+/*
+ * Prints a non-terminal error message, that is, when reporting on the
+ * chain of functions from which the actual warning occurred.
+ */
+void
+rsync_errx1(const char *fmt, ...)
+{
+	char	*buf = NULL;
+	va_list	 ap;
+
+	if (verbose < 1)
+		return;
+
+	if (fmt != NULL) {
+		va_start(ap, fmt);
+		if (vasprintf(&buf, fmt, ap) == -1) {
+			va_end(ap);
+			return;
+		}
+		va_end(ap);
+	}
+
+	log_writef(LT_ERROR, "%s(%d): error%s%s\n", getprogname(),
+	    getpid(), (buf != NULL) ? ": " : "",
+	    (buf != NULL) ? buf : "");
+	free(buf);
+}
+
+/*
+ * Prints a warning message if we're running -v.
+ */
+void
+rsync_warnx1(const char *fmt, ...)
+{
+	char    *buf = NULL;
+	va_list  ap;
+
+	if (verbose < 1)
+		return;
+
+	if (fmt != NULL) {
+		va_start(ap, fmt);
+		if (vasprintf(&buf, fmt, ap) == -1) {
+			va_end(ap);
+			return;
+		}
+		va_end(ap);
+	}
+
+	log_writef(LT_WARNING, "%s(%d): warning%s%s\n", getprogname(),
+	    getpid(), (buf != NULL) ? ": " : "",
+	    (buf != NULL) ? buf : "");
+	free(buf);
+}
+
+/*
+ * Prints a warning message.
+ */
+void
+rsync_warnx(const char *fmt, ...)
+{
+	char	*buf = NULL;
+	va_list	 ap;
+
+	if (fmt != NULL) {
+		va_start(ap, fmt);
+		if (vasprintf(&buf, fmt, ap) == -1) {
+			va_end(ap);
+			return;
+		}
+		va_end(ap);
+	}
+
+	log_writef(LT_WARNING, "%s(%d): warning%s%s\n", getprogname(),
+	    getpid(), (buf != NULL) ? ": " : "",
+	    (buf != NULL) ? buf : "");
+	free(buf);
+}
+
+/*
+ * Prints a warning with an errno.
+ * It uses a level detector for when to inhibit printing.
+ */
+void
+rsync_warn(int level, const char *fmt, ...)
+{
+	char	*buf = NULL;
+	va_list	 ap;
+	int	 er = errno;
+
+	if (verbose < level)
+		return;
+
+	if (fmt != NULL) {
+		va_start(ap, fmt);
+		if (vasprintf(&buf, fmt, ap) == -1) {
+			va_end(ap);
+			return;
+		}
+		va_end(ap);
+	}
+
+	log_writef(LT_WARNING, "%s(%d): warning%s%s: %s\n", getprogname(),
+	    getpid(), (buf != NULL) ? ": " : "",
+	    (buf != NULL) ? buf : "", strerror(er));
+	free(buf);
+}
+
+/*
+ * Cut down printf implementation taken from printf(1) in FreeBSD
+ * 15-current rev 30189156d325fbcc9d1997d791daedc9fa3bed20.
+ * FIXME: move to top of file.
+ */
+static const char widthchars[] = "'+- 0123456789";
+
+/*
+ * Copies string 2 into string 1, which is quaranteed to be at least as
+ * longly allocated as string 2, omitting "'".  Returns the number of
+ * "'"s.
+ */
+static size_t
+isit_human(char *s1, const char *s2)
+{
+	char		*p1;
+	const char	*p2;
+	size_t		 count = 0;
+
+	for (p1 = s1, p2 = s2; *p2; p2++) {
+		if (*p2 == '\'')
+			count++;
+		else
+			*p1++ = *p2;
+	}
+	*p1 = '\0';
+
+	return count;
 }
 
 /*
@@ -1008,6 +1019,8 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 		if (sbuf != NULL) {
 			const char *path = fl->wpath;
 
+			if (sess->opts->relative)
+				path = fl->path;
 			widthstring[l + 1] = 's';
 			widthstring[l + 2] = '\0';
 			/* "(short form; trailing "/" on dir)" */

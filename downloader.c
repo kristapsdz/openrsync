@@ -94,6 +94,9 @@ struct	download {
 	size_t		    obufmax; /* max size we'll wbuffer */
 	size_t		    curtok; /* current token (compression) */
 	off_t		    fdpos; /* current pre-buffer position in file */
+	off_t		    holestart; /* start of contiguous holes */
+	size_t		    holesz; /* hole size (--sparse) */
+	bool		    holechk; /* check current block for hole */
 };
 
 
@@ -126,6 +129,9 @@ download_reinit(struct sess *sess, struct download *p, size_t idx)
 	/* Don't touch p->obufmax. */
 	p->curtok = 0;
 	p->fdpos = 0;
+	p->holestart = -1;
+	p->holesz = 0;
+	p->holechk = true;
 	MD4_Update(&p->ctx, &seed, sizeof(int32_t));
 	(void)decompress_reinit();
 }
@@ -356,6 +362,25 @@ retry:
 	return true;
 }
 
+/*
+ * Advance until after any holes in the file (at fdpos).
+ * Return true on success, false on error.
+ */
+static bool
+buf_flush_holes(struct download *p)
+{
+	if (p->holestart == -1)
+		return true;
+
+	if (lseek(p->fd, p->fdpos, SEEK_SET) == -1) {
+		ERR("%s: lseek", p->fname);
+		return false;
+	}
+
+	p->holestart = -1;
+	return true;
+}
+
 static bool
 buf_copy_chunk(struct download *p, const char **pwritebuf,
     size_t *pwritesz)
@@ -363,12 +388,58 @@ buf_copy_chunk(struct download *p, const char **pwritebuf,
 	size_t		 clipsz = (size_t)-1;
 	const char	*writebuf = *pwritebuf;
 	size_t		 writesz = *pwritesz;
+	bool		 is_hole = false;
+
+	/*
+	 * If we're checking for holes (--sparse), then we may clip the buffer
+	 * at a hole block boundary.  This may result in us returning and then
+	 * re-entering to possibly handle a hole segment.
+	 *
+	 * p->holechk is designed to deal with the scenario where our hole
+	 * size ends up being greater than our buffer size; we use it to track
+	 * whether we've seen data in this block as an optimization.
+	 */
+	if (p->holesz > 0) {
+		if (!p->holechk) {
+			/*
+			 * Once we've clipped the write down to just the
+			 * portion that we need to finish the block, we
+			 * can restart hole-checking if we will actually cross
+			 * the block boundary in this buffer.
+			 */
+			clipsz = p->holesz - (p->fdpos % p->holesz);
+			if (clipsz == 0 || clipsz == p->holesz)
+				clipsz = (size_t)-1;
+			if (clipsz <= writesz || clipsz == (size_t)-1)
+				p->holechk = true;
+		}
+
+		/*
+		 * We'll arrive here both if the holechk has been going
+		 * well, and also if it didn't go well but we ended on a
+		 * block boundary and hit the above branch.
+		 */
+		if (clipsz == (size_t)-1 && p->holechk) {
+			clipsz = MINIMUM(p->holesz, writesz);
+			is_hole = iszerobuf(writebuf, clipsz);
+			if (!is_hole)
+				p->holechk = false;
+		}
+	}
 
 	clipsz = MINIMUM(clipsz, writesz);
 	assert(clipsz != 0);
 
-	if (!downloader_write(p, writebuf, clipsz))
-		return false;
+	if (is_hole) {
+		if (p->holestart == -1)
+			p->holestart = p->fdpos;
+	} else {
+		/* FIXME: check error for buf_flush_holes. */
+		if (p->holestart != -1)
+			buf_flush_holes(p);
+		if (!downloader_write(p, writebuf, clipsz))
+			return false;
+	}
 
 	/*
 	 * If we clipped it, then we should adjust our writesz/writebuf
@@ -476,6 +547,15 @@ buf_copy(const char *buf, size_t sz, struct download *p,
 
 		curst++;
 	}
+
+	/*
+	 * If the caller is explicitly trying to flush the buffer, then
+	 * we want to go ahead and advance past any remaining holes in
+	 * the file.
+	 */
+
+	if (buf == NULL && p->holestart != -1)
+		buf_flush_holes(p);
 
 	return 1;
 }
@@ -1440,6 +1520,29 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 
 		LOG3("%s: temporary: %s", f->path, p->fname);
 
+		if (sess->opts->sparse) {
+			assert(p->fd >= 0);
+			if (fstat(p->fd, &st) == -1) {
+				p->holesz = 0;
+				WARNX("%s: fstat failed, --sparse may not work",
+				    f->path);
+				goto cacheopt;
+			}
+
+#ifdef _PC_MIN_HOLE_SIZE
+			p->holesz = fpathconf(p->fd, _PC_MIN_HOLE_SIZE);
+			if (p->holesz == (size_t)-1 || p->holesz == 0) {
+				p->holesz = 0;
+				WARN("%s: fpathconf, --sparse may not work",
+				    f->path);
+				goto cacheopt;
+			}
+#endif
+			if ((size_t)st.st_blksize > p->holesz)
+				p->holesz = st.st_blksize;
+		}
+
+cacheopt:
 		p->state = DOWNLOAD_READ_REMOTE;
 		return 1;
 	}

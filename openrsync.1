@@ -97,6 +97,7 @@
 .Op Fl -rsync-path Ns = Ns Ar program
 .Op Fl -safe-links
 .Op Fl -size-only
+.Op Fl -sparse , Fl S
 .Op Fl -specials
 .Op Fl -stats
 .Op Fl -suffix Ns = Ns Ar suffix
@@ -594,6 +595,13 @@ Skip any symlinks that are unsafe (absolute symlinks or where the target
 is outside the copied tree).
 .It Fl -size-only
 Skip files based only on size, don't check timestamp.
+.It Fl -sparse , Fl S
+Attempt to efficiently handle sparse files.
+Combining
+.Fl S
+and
+.Fl -inplace
+is not valid.
 .It Fl -specials
 Also transfer fifo and unix domain socket files.
 Negate with

@@ -1,0 +1,51 @@
+#! /bin/sh
+
+set -e
+set -u
+
+if [ $(uname) = "OpenBSD" ] || [ $(uname) = "NetBSD" ]
+then
+	echo "not supported on openbsd/netbsd"
+	exit 0
+fi
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+mksparse=${tstdir-.}/mksparse
+
+rm -rf dir1 dir2 dir3 sparsefile sparsefile.report
+
+# make the copy-from-here tree
+mkdir dir1
+# Actually write(2) nulls so that the file shouldn't be sparse unless
+# compressed.
+$mksparse -n -c -d 4 -h 8192 -d 2 -h 8192 -d 1 dir1/sparsefile
+
+# We'll also stash off a copy that we sparsify to compare hole reports against.
+cp dir1/sparsefile .
+$mksparse sparsefile
+$mksparse -r sparsefile > sparsefile.report
+if [ ! -s sparsefile.report ]; then
+	1>&2 echo "Failed to sparsify our initial file"
+	exit 1
+fi
+
+# make the tree we want to compare to
+mkdir dir2
+$mksparse -c -d 4 -h 8192 -d 2 -h 8192 -d 1 dir1/sparsefile
+
+mkdir dir3
+
+# On modern filesystems, it's sometimes hard to avoid it implicitly compressing
+# zeroes in files as they're being written, so we don't even try to confirm that
+# rsync *without* --sparse isn't writing holes out.  We also won't try to do a
+# 1:1 comparison of holes in the two files; instead, we'll just count the number
+# of contiguous set of holes.
+$rsync -a --sparse -- dir1/ dir3
+$mksparse -r dir3/sparsefile > dir3/sparsefile.report
+
+# Avoiding filenames in our output
+cat sparsefile.report | wc -l > sparsefile.holeseries
+cat dir3/sparsefile.report | wc -l > dir3/sparsefile.holeseries
+cmp sparsefile.holeseries dir3/sparsefile.holeseries

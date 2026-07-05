@@ -420,6 +420,7 @@ struct	opts {
 	bool		 sender;		/* --sender */
 	bool		 server;		/* --server */
 	bool		 size_only;		/* --size-only */
+	bool		 sparse;		/* --sparse */
 	bool		 specials;		/* --specials */
 	bool		 stats;			/* --stats */
 	bool		 update;		/* -u */
@@ -655,6 +656,8 @@ extern int verbose;
 #define ERRX(_fmt, ...) \
 	rsync_errx( (_fmt), ##__VA_ARGS__)
 
+void	rsync_log_tag(enum iotag tag, const char *fmt, ...)
+			__attribute__((format(printf, 2, 3)));
 void	rsync_log(int, const char *, ...)
 			__attribute__((format(printf, 2, 3)));
 void	rsync_warn(int, const char *, ...)
@@ -849,6 +852,7 @@ void		 rsync_progress(struct sess *, uint64_t, uint64_t, bool,
 		    size_t, size_t);
 enum log_type	 xfer_log_level(const struct sess *);
 bool		 is_unsafe_link(const char *, const char *, const char *);
+bool		 iszerobuf(const void *, size_t);
 
 
 #endif /*!EXTERN_H*/

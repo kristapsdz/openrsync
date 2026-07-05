@@ -453,7 +453,7 @@ enum {
 	OP_TIMEOUT,
 };
 
-const char rsync_shopts[] = "0468B:CDFHIJKLOPRTVWabcde:f:ghklnopqrtuvxz";
+const char rsync_shopts[] = "0468B:CDFHIJKLOPRSTVWabcde:f:ghklnopqrtuvxz";
 const struct option	 lopts[] = {
     { "8-bit-output",	no_argument,	NULL,			'8' },
     { "address",	required_argument, NULL,		OP_ADDRESS },
@@ -541,6 +541,7 @@ const struct option	 lopts[] = {
     { "sender",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "server",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "size-only",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "sparse",		no_argument,	NULL,			'S' },
     { "specials",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "stats",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "suffix",		required_argument, NULL,		OP_SUFFIX },
@@ -636,6 +637,7 @@ usage(void)
 	    "\t[--rsync-path=program]\n"
 	    "\t[--safe-links]\n"
 	    "\t[--size-only]\n"
+	    "\t[--sparse, -S]\n"
 	    "\t[--specials]\n"
 	    "\t[--stats]\n"
 	    "\t[--suffix=suffix]\n"
@@ -863,6 +865,9 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			break;
 		case 'R':
 			opts.relative = true;
+			break;
+		case 'S':
+			opts.sparse = true;
 			break;
 		case 'T':
 			free(opts.temp_dir);

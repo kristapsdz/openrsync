@@ -90,7 +90,7 @@ uninstall:
 
 clean:
 	rm -f $(ALLOBJS) openrsync
-	rm -f $(REGRESS_CU)
+	rm -f $(REGRESS_CU) regress/functional/mksparse
 
 distclean: clean
 	rm -f Makefile.configure config.h config.log
@@ -201,7 +201,10 @@ RSYNC_VERBOSE	=
 
 #OPENRSYNC=/home/kristaps/checkedout/apple/rsync/openrsync/openrsync ; \
 
-regress_functional:: all
+regress/functional/mksparse: regress/functional/mksparse.c 
+	$(CC) -o $@ regress/functional/mksparse.c
+
+regress_functional:: all regress/functional/mksparse
 	@OPENRSYNC=`readlink -f openrsync`; \
 	umask 022 ; \
 	OPWD=`pwd` ; \
