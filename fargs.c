@@ -226,9 +226,11 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		/* --devices is sent as -D --no-specials */
 		addargs(&args, "--no-specials");
 	if (sess->opts->max_size >= 0)
-		addargs(&args, "--max-size=%lld", (long long)sess->opts->max_size);
+		addargs(&args, "--max-size=%lld",
+		    (long long)sess->opts->max_size);
 	if (sess->opts->min_size >= 0)
-		addargs(&args, "--min-size=%lld", (long long)sess->opts->min_size);
+		addargs(&args, "--min-size=%lld",
+		    (long long)sess->opts->min_size);
 	if (sess->opts->relative)
 		addargs(&args, "--relative");
 	if (sess->opts->bit8)
@@ -241,6 +243,9 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "--safe-links");
 	if (f->mode == FARGS_SENDER && sess->opts->ignore_times)
 		addargs(&args, "--ignore-times");
+	if (sess->opts->out_format != NULL && f->mode == FARGS_SENDER)
+		if (!verbose)
+			addargs(&args, "--log-format=X");
 
 	if (sess->opts->bit8)
 		addargs(&args, "-8");

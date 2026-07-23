@@ -51,12 +51,11 @@
 
 #include "extern.h"
 
-/* FIXME: document */
 #define LOG_FORMAT_SUCCESS	(1 << 0)
-#define LOG_FORMAT_ITEMIZE	(1 << 1)
+// #define LOG_FORMAT_ITEMIZE	(1 << 1)
 #define LOG_FORMAT_LATEPRINT	(1 << 2)
-#define LOG_FORMAT_OPERATION	(1 << 3)
-#define LOG_FORMAT_ITEMIZE_I	(1 << 4)
+// #define LOG_FORMAT_OPERATION	(1 << 3)
+// #define LOG_FORMAT_ITEMIZE_I	(1 << 4)
 
 /*
  * If NULL (default), this will cause log messages to route into syslog.
@@ -617,9 +616,13 @@ print_7_or_8_bit(const struct sess *sess, const char *fmt, const char *s,
 }
 
 /*
+ * Format the escape at the first position of "fmt" and add its output
+ * to "sbuf".  Returns the new position of the format string (the "fmt"
+ * input).
+ *
  * rval is filled with whether there is any argument that requires
  * late printing or whether itemization is requested.  See the
- * LOG_FORMAT_* flags.
+ * LOG_FORMAT_* flags.  (FIXME: currently not supported.)
  *
  * rval is expected to be initialized to zero before the first call.
  */
@@ -628,28 +631,38 @@ static const char *
 printf_doformat(const char *fmt, int *rval, const struct sess *sess,
     const struct flist *fl, struct sbuf *sbuf)
 {
-	static const char skip1[] = "'-+ 0";
-	const char *fmt_orig = fmt;
-	char convch;
-	size_t l;
-	char widthstring[8192];
-	size_t humanlevel = 0;
-	char buf[8192];
+	static const char skip1[] = "'-+ 0"; /* field width chars */
+	char		  widthstring[8192]; /* format string */
+	char		  buf[8192]; /* temporary buffer */
+	uint64_t	  bytes_transferred = 0; /* as it looks */
+	const char	 *fmt_orig = fmt, /* "fmt" at start */
+			 *path = fl->path, /* path alias */
+			 *Lfmt = " -> %s"; /* %L format */
+	char		 *cooked; /* temporary */
+	time_t		  now; /* %t printing */
+	size_t		  l, /* temporary */
+			  humanlevel = 0; /* "human" 0-3 level */
+	char		  convch; /* format escape */
 
 	fmt++;
 
 	widthstring[0] = '%';
 	l = strspn(fmt, widthchars);
-	/* We need a reserve of 4 chars for substitutions below, plus lead */
+
+	/*
+	 * We need a reserve of 4 chars for substitutions below, plus
+	 * lead.
+	 */
+
 	if (l + 5u > sizeof(widthstring)) {
 		ERRX("Insufficient buffer for width format");
 		return NULL;
 	}
+
 	strlcpy(widthstring + 1, fmt, l + 1);
 
 	if (strchr(widthstring, '\'')) {
-		char *cooked = malloc(strlen(widthstring));
-
+		cooked = malloc(strlen(widthstring));
 		if (cooked == NULL) {
 			ERR("malloc");
 			return NULL;
@@ -660,10 +673,11 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 		free(cooked);
 	}
 
-	/* skip to field width */
-	while (*fmt && strchr(skip1, *fmt) != NULL) {
+	/* Skip to field width. */
+
+	while (*fmt && strchr(skip1, *fmt) != NULL)
 		fmt++;
-	}
+
 	if (*fmt == '\0') {
 		if (sbuf != NULL) {
 			sbuf_putc(sbuf, fmt_orig[0]);
@@ -671,35 +685,28 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 		}
 		return fmt_orig + 1;
 	}
-	while (isdigit(*fmt)) {
+
+	while (isdigit((unsigned char)*fmt))
 		fmt++;
-	}
 
 	convch = *fmt;
 	fmt++;
 
 	switch (convch) {
 	case 'a':	/* Remote address (daemon) */
-	case 'h': {	/* Remote host (daemon) */
+	case 'h':	/* Remote host (daemon) */
 		break;	/* Nop in non-daemon mode. */
 		/* FALLTHROUGH */
-	}
 	case 'm':	/* Module */
 	case 'P':	/* Module path */
-	case 'u': {	/* Auth username */
-		const char *rolestr = "";
-
+	case 'u':  	/* Auth username */
 		if (sbuf != NULL) {
 			widthstring[l + 1] = 's';
 			widthstring[l + 2] = '\0';
-			sbuf_printf(sbuf, widthstring, rolestr);
+			sbuf_printf(sbuf, widthstring, "");
 		}
-
 		break;
-	}
-	case 'b': {
-		uint64_t bytes_transferred = 0;
-
+	case 'b':
 		*rval |= LOG_FORMAT_LATEPRINT;
 
 		if (sbuf == NULL)
@@ -743,8 +750,7 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 			break;
 		}
 		break;
-	}
-	case 'B': {
+	case 'B':
 		/* Print mode human-readable */
 
 		if (sbuf != NULL) {
@@ -754,8 +760,7 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 			sbuf_printf(sbuf, widthstring, buf);
 		}
 		break;
-	}
-	case 'c': {
+	case 'c':
 		/* "%c the total size of the block checksums received for the
 		   basis file (only when sending)" */
 		/*
@@ -764,7 +769,6 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 		 */
 		*rval |= LOG_FORMAT_LATEPRINT;
 		break;
-	}
 #if 0
 	case 'C': {
 
@@ -784,29 +788,26 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 		break;
 	}
 #endif
-	case 'f': {
+	case 'f':
 		/*
 		 * "the filename (long form on sender; no trailing "/")"
 		 */
 		if (sbuf != NULL) {
-			const char *path = fl->path;
-
+			path = fl->path;
 			if (sess->opts->relative)
 				path = fl->wpath;
-
 			while (*path == '/')
 				path++;
-
 			widthstring[l + 1] = 's';
 			widthstring[l + 2] = '\0';
-			if (!print_7_or_8_bit(sess, widthstring, path, sbuf)) {
+			if (!print_7_or_8_bit(sess, widthstring, path,
+			    sbuf)) {
 				ERRX("print_7_or_8_bit");
 				return NULL;
 			}
 		}
 		break;
-	}
-	case 'G': {
+	case 'G':
 		/* FIXME this is incorrect since gid 0 is also root */
 		if (sbuf != NULL) {
 			if (fl->st.gid) {
@@ -820,7 +821,7 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 			}
 		}
 		break;
-	}
+#if 0
 	case 'I':
 		*rval |= LOG_FORMAT_ITEMIZE_I;
 		break;
@@ -930,9 +931,9 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 		}
 		break;
 	}
-	case 'l': {
+#endif
+	case 'l':
 		/* File length */
-
 		if (sbuf != NULL) {
 			switch (humanlevel) {
 			case 0:
@@ -968,8 +969,7 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 			}
 		}
 		break;
-	}
-	case 'L': {
+	case 'L':
 #if 0
 		/*
 		 * Use "late print" here.  Theoretically late print is
@@ -982,13 +982,11 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 
 		if (sbuf != NULL) {
 			if (fl->link != NULL &&
-			    (fl->iflags & IFLAG_BASIS_FOLLOWS) == 0) {
-				const char *fmt = " -> %s";
+			    !(fl->iflags & IFLAG_BASIS_FOLLOWS)) {
+				if (fl->iflags & IFLAG_HLINK_FOLLOWS)
+					Lfmt = " => %s";
 
-				if ((fl->iflags & IFLAG_HLINK_FOLLOWS) != 0)
-					fmt = " => %s";
-
-				snprintf(buf, sizeof(buf), fmt, fl->link);
+				snprintf(buf, sizeof(buf), Lfmt, fl->link);
 				widthstring[l + 1] = 's';
 				widthstring[l + 2] = '\0';
 				if (!print_7_or_8_bit(sess, widthstring, buf,
@@ -999,10 +997,8 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 			}
 		}
 		break;
-	}
-	case 'M': {
+	case 'M':
 		/* Modification time of item */
-
 		if (sbuf != NULL) {
 			/* 2024/01/30-16:23:29 */
 			strftime(buf, sizeof(buf), "%Y/%m/%d-%H:%M:%S",
@@ -1012,13 +1008,10 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 			sbuf_printf(sbuf, widthstring, buf);
 		}
 		break;
-	}
-	case 'n': {
+	case 'n':
 		/* Alternate file name print */
-
 		if (sbuf != NULL) {
-			const char *path = fl->wpath;
-
+			path = fl->wpath;
 			if (sess->opts->relative)
 				path = fl->path;
 			widthstring[l + 1] = 's';
@@ -1034,7 +1027,7 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 			}
 		}
 		break;
-	}
+#if 0
 	case 'o': {
 		*rval |= LOG_FORMAT_OPERATION;
 
@@ -1053,7 +1046,8 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 		}
 		break;
 	}
-	case 'p': {
+#endif
+	case 'p':
 		/* PID as a number */
 		if (sbuf != NULL) {
 			widthstring[l + 1] = 'd';
@@ -1062,11 +1056,8 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 			sbuf_printf(sbuf, widthstring, getpid());
 		}
 		break;
-	}
 	case 't': {
 		/* Current machine time */
-		time_t now;
-
 		if (sbuf != NULL) {
 			time(&now);
 			strftime(buf, sizeof(buf), "%Y/%m/%d-%H:%M:%S",
@@ -1077,7 +1068,7 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 		}
 		break;
 	}
-	case 'U': {
+	case 'U':
 		/* FIXME this is incorrect since uid 0 is also root */
 		if (sbuf != NULL) {
 			if (fl->st.uid) {
@@ -1091,7 +1082,6 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 			}
 		}
 		break;
-	}
 	default:
 		if (sbuf != NULL) {
 			sbuf_putc(sbuf, fmt_orig[0]);
@@ -1099,35 +1089,39 @@ printf_doformat(const char *fmt, int *rval, const struct sess *sess,
 		}
 		break;
 	}
+
 	return fmt;
 }
 
-bool
+/*
+ * Step through a format string "format" and format "fl" and "sess"
+ * according to "type".  Escapes in the format string are routed through
+ * into print_doformat(), which does most of the work here.
+ * Returns a bit-field of LOG_FORMAT_xxx values or zero on failure.
+ */
+int
 log_format_type(enum log_type type, const struct sess *sess,
     const char *format, const struct flist *fl)
 {
-	const bool	 do_print = (fl != NULL);
-	size_t		 len;
-	int		 end, rval = 0;
-	const char	*start;
-	const char	*fmt;
-	struct sbuf	*sbuf;
+	const char	*start, /* start of word */
+			*fmt = format; /* current word pos */
+	struct sbuf	*sbuf = NULL; /* output sbuf */
+	size_t	 	 len; /* length of format */
+	int		 rval = 0; /* rc of print_doformat */
+	const bool	 do_print = (fl != NULL); /* has printable */
 
 	if (format == NULL)
-		return false;
+		return 0;
 
-	sbuf = NULL;
 	if (do_print) {
 		sbuf = sbuf_new_auto();
 		if (sbuf == NULL) {
 			ERR("sbuf_new_auto");
-			return false;
+			return 0;
 		}
 	}
 
-	fmt = format;
-	len = strlen(fmt);
-	rval = end = 0;
+	len = strlen(format);
 
 	for (; *fmt;) {
 		start = fmt;
@@ -1145,17 +1139,10 @@ log_format_type(enum log_type type, const struct sess *sess,
 					    fl, sbuf);
 					if (fmt == NULL || *fmt == '\0')
 						goto out;
-					end = 0;
 				}
 				start = fmt;
 			} else
 				fmt++;
-		}
-		if (end == 1) {
-			ERRX("missing format character");
-			if (sbuf != NULL)
-				sbuf_delete(sbuf);
-			return false;
 		}
 		if (do_print)
 			sbuf_bcat(sbuf, start, fmt - start);
@@ -1168,7 +1155,7 @@ out:
 		if (sbuf_finish(sbuf) != 0) {
 			ERR("sbuf_finish");
 			sbuf_delete(sbuf);
-			return false;
+			return 0;
 		}
 
 		log_writef(type, "%s", sbuf_data(sbuf));
@@ -1177,8 +1164,29 @@ out:
 		assert(sbuf == NULL);
 	}
 
-	return (rval | LOG_FORMAT_SUCCESS);
+	return rval | LOG_FORMAT_SUCCESS;
 }
+
+/*
+ * Study the logformat and outformat strings and set whether this
+ * session will have late printing.
+ */
+void
+log_format_init(struct sess *sess)
+{
+	int	flags; /* flags fom out_format */
+
+	flags = log_format_type(LT_INFO, sess, sess->opts->out_format,
+	    NULL);
+
+	if (flags & LOG_FORMAT_SUCCESS) {
+		sess->lateprint = (flags & LOG_FORMAT_LATEPRINT) != 0;
+	}
+
+	if (sess->opts->server)
+		sess->lateprint = true;
+}
+
 
 /*
  * Print a number into the provided buffer depending on the current
@@ -1216,7 +1224,7 @@ bool
 log_item_impl(enum log_type type, const struct sess *sess,
     const struct flist *f)
 {
-	const char	*outformat = NULL,
+	const char	*outformat = sess->opts->out_format,
 			*logformat = NULL;
 	bool		 ok = true;
 
@@ -1250,7 +1258,7 @@ log_item(const struct sess *sess, const struct flist *f)
 	if (verbose > 1 && f->iflags == 0 &&
 	    sess->mode == FARGS_RECEIVER) {
 		if (S_ISDIR(f->st.mode))
-			return 1;
+			return true;
 		return print_7_or_8_bit(sess, "%s is uptodate\n",
 		    f->wpath, NULL);
 	}
@@ -1263,11 +1271,7 @@ log_item(const struct sess *sess, const struct flist *f)
 	 */
 
 	if (sess->opts->server) {
-		if (log_file == stdout || sess->opts->dry_run)
-			return 1;
-		if (!(sig || verbose > 1))
-			return 1;
-		type = LT_LOG;
+		return true;
 	} else {
 		if (visible || local)
 			filtered = false;
@@ -1286,8 +1290,8 @@ log_item(const struct sess *sess, const struct flist *f)
 		 */
 
 		if (filtered)
-			return 1;
-		else if (sig)
+			return true;
+		else if (!sig)
 			type = LT_CLIENT;
 	}
 

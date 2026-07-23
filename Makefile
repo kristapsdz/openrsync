@@ -114,8 +114,9 @@ regress/cunit/log_format_type: regress/cunit/log_format_type.c $(OBJS)
 	$(CC) $(RCFLAGS) -o $@ regress/cunit/log_format_type.c $(OBJS) $(RLDADD)
 
 regress_cunit: $(REGRESS_CU)
-	for f in $(REGRESS_CU) ; \
+	@for f in $(REGRESS_CU) ; \
 	do \
+		echo $$f ; \
 		./$$f ; \
 	done
 
@@ -190,6 +191,7 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 # Doesn't work (protocol < 29): regress/functional/test25_filter_default.test
 # Doesn't work (protocol < 29): regress/functional/test25_filter_dir.test
 # Doesn't work (???): regress/functional/test16_symlinks.test
+# Doesn't work (protocol < 29): regress/functional/test77_8_bit_output.test
 
 REGRESS_FAIL 	= regress/functional/test12d_inex.test \
 		  regress/functional/test25_filter_basic_cvs.test \
@@ -198,13 +200,13 @@ REGRESS_FAIL 	= regress/functional/test12d_inex.test \
 		  regress/functional/test25_filter_dir.test \
 		  regress/functional/test25_filter_merge_cvs.test \
 		  regress/functional/test16_symlinks.test
-REGRESS_MANUAL 	= 
+REGRESS_MANUAL 	=
 RSYNC_VERBOSE	=
-
-#OPENRSYNC=/home/kristaps/checkedout/apple/rsync/openrsync/openrsync ; \
 
 regress/functional/mksparse: regress/functional/mksparse.c 
 	$(CC) -o $@ regress/functional/mksparse.c
+
+#OPENRSYNC=/home/kristaps/checkedout/apple/rsync/openrsync/openrsync ; \
 
 regress_functional:: all regress/functional/mksparse
 	@OPENRSYNC=`readlink -f openrsync`; \

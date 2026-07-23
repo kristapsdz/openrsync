@@ -1351,7 +1351,7 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 			return 1;
 		}
 
-		if (sess->opts->dry_run)
+		if (!sess->lateprint || sess->opts->dry_run)
 			log_item_impl(LT_CLIENT, sess, f);
 
 		/*

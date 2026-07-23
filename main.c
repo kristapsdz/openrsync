@@ -444,6 +444,7 @@ enum {
 	OP_LINK_DEST,
 	OP_MAX_SIZE,
 	OP_MIN_SIZE,
+	OP_OUT_FORMAT,
 	OP_PORT,
 	OP_PROTOCOL,
 	OP_RSYNCPATH,
@@ -498,6 +499,8 @@ const struct option	 lopts[] = {
     { "keep-dirlinks",	no_argument, NULL,			'K' },
     { "link-dest",	required_argument, NULL,		OP_LINK_DEST },
     { "links",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    /* Deprecated, same as --out-format */
+    { "log-format",	required_argument, NULL,		OP_OUT_FORMAT },
     { "max-size",	required_argument, NULL,		OP_MAX_SIZE },
     { "min-size",	required_argument, NULL,		OP_MIN_SIZE },
     { "no-J",		no_argument,	NULL, 			OP_SET_BOOL_FALSE }, /* XXX */
@@ -526,6 +529,7 @@ const struct option	 lopts[] = {
     { "omit-dir-times",	no_argument,	NULL,			'O' },
     { "omit-link-times", no_argument,	NULL,			'J' },
     { "one-file-system", no_argument,	NULL,			'x' },
+    { "out-format",	required_argument, NULL,		OP_OUT_FORMAT },
     { "owner",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "partial",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "perms",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
@@ -602,6 +606,7 @@ usage(void)
 	    "\t[--keep-dirlinks, -k]\n"
 	    "\t[--link-dest=dir]\n"
 	    "\t[--links, -l]\n"
+	    "\t[--log-format=format]\n"
 	    "\t[--max-size=size]\n"
 	    "\t[--min-size=size]\n"
 	    "\t[--no-devices]\n"
@@ -624,6 +629,7 @@ usage(void)
 	    "\t[--omit-dir-times, -O]\n"
 	    "\t[--omit-link-times, -J]\n"
 	    "\t[--one-file-system, -x]\n"
+	    "\t[--out-format=format]\n"
 	    "\t[--owner, -o]\n"
 	    "\t[--partial]\n"
 	    "\t[--perms, -p]\n"
@@ -1047,6 +1053,12 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				errx(ERR_SYNTAX, "--min-size=%s: "
 				    "invalid numeric value", optarg);
 			opts.min_size = tmpint;
+			break;
+		case OP_OUT_FORMAT:
+			free(opts.out_format);
+		        opts.out_format = strdup(optarg);
+			if (opts.out_format == NULL)
+				errx(ERR_NOMEM, NULL);
 			break;
 		case OP_PORT:
 			opts.port = optarg;

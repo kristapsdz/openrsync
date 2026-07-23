@@ -70,6 +70,8 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 	sess.mode = sess.opts->sender ? FARGS_SENDER : FARGS_RECEIVER;
 	sess.wbatch_fd = -1;
 
+	log_format_init(&sess);
+
 	/* Begin by making descriptors non-blocking. */
 
 	if (!fcntl_nonblock(fdin) ||
@@ -115,7 +117,8 @@ rsync_server(const struct opts *opts, size_t argc, char *argv[])
 	for (i = 0; argv[i] != NULL; i++)
 		LOG3("exec[%zu] = %s", i, argv[i]);
 
-	LOG4("Printing(%d): itemize %d late %d", getpid(), 0, 0);
+	LOG4("Printing(%d): itemize %d late %d", getpid(), 0,
+	    sess.lateprint);
 
 	if (sess.opts->sender) {
 		LOG3("server starting sender");

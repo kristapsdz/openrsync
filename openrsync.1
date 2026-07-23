@@ -84,6 +84,7 @@
 .Op Fl -omit-dir-times , Fl O
 .Op Fl -omit-link-times , Fl J
 .Op Fl -one-file-system , Fl x
+.Op Fl -out-format Ns = Ns Ar format
 .Op Fl -owner , Fl o
 .Op Fl -partial
 .Op Fl -perms , Fl p
@@ -498,6 +499,89 @@ If this option is repeated, all mount point directories from the copy
 are omitted.
 Otherwise, it includes an empty directory at each mount point it
 encounters.
+.It Fl -out-format Ns = Ns Ar format
+The output format on the client for updates.
+The
+.Ar format
+argument may contain any number of escapes, like
+.Dq %i ,
+with special meaning.
+The following escapes are defined for daemon mode, but are also accepted
+for normal
+.Nm
+usage:
+.Bl -tag -width "%L"
+.It \&%a
+The client's remote IP address.
+.It \&%h
+The client's hostname.
+.It \&%m
+The module requested by the client.
+.It \&%P
+The path to the module requested by the client.
+.It \&%u
+The username that the client has authenticated as.
+.El
+.Pp
+These tokens are globally defined:
+.Bl -tag -width "%L"
+.It \&%b
+The number of bytes transferred.
+.It \&%B
+The file mode, in a human-readable format.
+.It \&%c
+The size of block checksums received for the source file.
+This is not currently implemented by this implementation, but will be accepted.
+.It \&%f
+The long-form filename without a trailing
+.Dq /
+indicator.
+.It \&%G
+The group of the file in decimal format, or
+.Dq DEFAULT
+when the group is
+.Li 0 .
+.\" .It \&%I
+.\" The itemized list of updates including unchanged files, as if
+.\" .Fl -itemize-changes
+.\" was specified twice.
+.\" .It \&%i
+.\" The itemized list of updates, as if
+.\" .Fl -itemize-changes
+.\" was specified.
+.It \&%l
+The length of the file.
+.It \&%L
+An indicator of the file being a symlink or a hardlink.
+For hardlinks, this token is replaced with
+.Dq => FILENAME .
+For symlinks, this token is replaced with
+.Dq => FILENAME .
+For non-links, this token is replaced with the empty string.
+.It \&%M
+The mtime of the file, in full date-time format.
+.It \&%n
+The short-form filename with a trailing
+.Dq /
+indicator.
+.\" .It \&%o
+.\" The operation conducted on the file.
+.\" This can be one of
+.\" .Dq send ,
+.\" .Dq recv ,
+.\" or
+.\" .Dq del.
+.\" .Pq including the full-stop .
+.It \&%p
+The PID of the rsync client.
+.It \&%t
+The current time, in date-time format.
+.It \&%U
+The user of the file in decimal format, or
+.Dq DEFAULT
+when the user is
+.Li 0 .
+.El
 .It Fl -owner , Fl o
 Set the user name to match the source, with similar matching logic as for
 .Fl g .

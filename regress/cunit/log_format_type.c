@@ -346,10 +346,9 @@ main(void)
                 }
         }
 
-        CU_basic_set_mode(CU_BRM_VERBOSE);
-
         rsync_set_logfile(stdout, NULL);
 
+        CU_basic_set_mode(CU_BRM_SILENT);
         CU_basic_run_tests();
 
         int failures = CU_get_number_of_failures();

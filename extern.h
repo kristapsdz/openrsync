@@ -373,6 +373,7 @@ struct	opts {
 	char		*backup_dir;		/* --backup-dir */
 	char		*backup_suffix;		/* --suffix */
 	char		*basedir[MAX_BASEDIR];	/* --compare/copy/link-dest */
+	char		*out_format;		/* --out-format */
 	char		*port;			/* --port */
 	char		*rsync_path;		/* --rsync-path */
 	char		*ssh_prog;		/* --rsh or -e */
@@ -568,6 +569,7 @@ struct	sess {
 	int32_t		   protocol; /* negotiated protocol version */
 	int32_t		   rver; /* remote version */
 	int32_t		   seed; /* checksum seed */
+	bool		   lateprint; /* output format contains late print flag */
 	bool		   lreceiver; /* Receiver is local */
 	bool		   mplex_writes; /* multiplexing writes? */
 };
@@ -841,8 +843,11 @@ void		 our_strmode(mode_t, char *);
 void		 rsync_set_logfile(FILE *, struct sess *);
 bool		 log_item_impl(enum log_type, const struct sess *, const struct flist *);
 bool		 log_item(const struct sess *, const struct flist *);
-bool		 log_format_type(enum log_type, const struct sess *, const char *,
+#define LOG_FORMAT_SUCCESS	(1 << 0) /* formatting success */
+#define LOG_FORMAT_LATEPRINT	(1 << 2) /* "late-print" flag */
+int		 log_format_type(enum log_type, const struct sess *, const char *,
 	 	    const struct flist *);
+void		 log_format_init(struct sess *);
 bool		 print_7_or_8_bit(const struct sess *, const char *,
 		    const char *, struct sbuf *)
 		    __attribute__((format(printf, 2, 0)));

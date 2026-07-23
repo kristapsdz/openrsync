@@ -1737,7 +1737,9 @@ check_other:
 				continue;
 			}
 			pfd[2].fd = up.stat.fd;
-			log_item_impl(LT_CLIENT, sess, f);
+
+			if (!sess->lateprint)
+				log_item_impl(LT_CLIENT, sess, f);
 		}
 	}
 

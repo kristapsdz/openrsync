@@ -1,0 +1,113 @@
+#! /bin/sh
+
+# Test that the --8-bit-output option works as expected.
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+# Create the source tree with file names consisting of various
+# combinations of control, 8-bit, and printable ASCII characters:
+#
+rm -rf src
+mkdir src
+date > src/foo
+
+for i in 01 02 03 037 060 071 0101 0176 ; do
+    echo "chk 10 [$i]"
+    fmt=$(printf "src/\\\\%03ofilex" $i)
+    echo $i > "$(printf ${fmt})"
+
+    fmt=$(printf "src/xdir\\\\%03o" $i)
+    mkdir "$(printf ${fmt})"
+
+    fmt=$(printf "src/\\\\%03osymlink\\\\%03o" $i $i)
+    ln -s foo "$(printf ${fmt})"
+done
+
+
+# Not all file systems allow creation of file names
+# containing 8-bit characters (e.g., APFS on macOS).
+#
+for i in 0200 0255 ; do
+    echo "chk 15 [$i]"
+    fmt=$(printf "src/\\\\%03ofilex" $i)
+    echo $i > "$(printf ${fmt})" || break
+
+    fmt=$(printf "src/xdir\\\\%03o" $i)
+    mkdir "$(printf ${fmt})"
+
+    fmt=$(printf "src/\\\\%03osymlink\\\\%03o" $i $i)
+    ln -s foo "$(printf ${fmt})"
+done
+
+for opt in " " "-v" "-8" "-8vvv" "--8-bit-output" "-888 --8-bit-output" ; do
+    echo "chk 20 [${opt}]"
+    rm -rf dst log log2
+    $rsync -a ${opt} --out-format='OUTFMT: %n' -- src/ dst/ 2>&1 | tee log2
+    grep OUTFMT log2 > log
+
+    #(cd src && find . -type f | xargs -n1 -I{} cmp "{}" "../dst/{}")
+    compare_trees -t src dst
+
+    # Check that all control characters in file names are escaped
+    # regardless of the --8-bit-output option:
+    #
+    for i in 01 02 03 037 ; do
+	echo "chk 30 [${opt}] [$i]"
+        fmt=$(printf "\\\\#%03ofilex" $i)
+        echo "fmt1 ${fmt} ${opt}"
+	cat log
+        echo grep -qF \"OUTFMT: ${fmt}\" log
+        grep -qF "OUTFMT: ${fmt}" log
+
+        fmt=$(printf "xdir\\\\#%03o" $i)
+        echo grep -qF \"OUTFMT: ${fmt}\" log
+        grep -qF "OUTFMT: ${fmt}" log
+
+        fmt=$(printf "\\\\#%03osymlink\\\\#%03o" $i $i)
+        echo grep -qF \"OUTFMT: ${fmt}\" log
+        grep -qF "OUTFMT: ${fmt}" log
+    done
+
+
+    # Check that printable ACSII characters are never escaped
+    # regardless of the --8-bit-output option:
+    #
+    for i in 0 9 A \~ ; do
+	echo "chk 40 [${opt}] [$i]"
+        fmt=$(printf "%cfilex" $i)
+        echo "fmt2 ${fmt} ${opt}"
+        grep -qF "OUTFMT: ${fmt}" log
+
+        fmt=$(printf "xdir%c" $i)
+        grep -qF "OUTFMT: ${fmt}" log
+
+        fmt=$(printf "%csymlink%c" $i $i)
+        grep -qF "OUTFMT: ${fmt}" log
+    done
+
+
+    # If ${opt} contains an "8" character then check that all 8-bit
+    # characters in file names are escaped.  Otherwise, check that
+    # all 8-bit characters in file names are not escaped:
+    #
+    invert=$(echo -n "${opt}" | sed -En 's/.*8.*/-v/p')
+
+    for i in 0200 0255 ; do
+	echo "chk 50 [${opt}] [$i]"
+	fmt=$(printf "\\\\%03ofilex" $i)
+	test -e "$(printf src/${fmt})" || break
+
+        fmt=$(printf "\\\\#%03ofilex" $i)
+        grep -qF ${invert} "OUTFMT: ${fmt}" log
+
+        fmt=$(printf "xdir\\\\#%03o" $i)
+        grep -qF ${invert} "OUTFMT: ${fmt}" log
+
+        fmt=$(printf "\\\\#%03osymlink\\\\#%03o" $i $i)
+        grep -qF ${invert} "OUTFMT: ${fmt}" log
+    done
+done

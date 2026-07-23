@@ -152,7 +152,10 @@ rsync_client(const struct opts *opts, int fd, const struct fargs *f)
 	sess.lver = sess.protocol = RSYNC_PROTOCOL;
 	sess.wbatch_fd = -1;
 
-	LOG4("Printing(%d): itemize %d late %d", getpid(), 0, 0);
+	log_format_init(&sess);
+
+	LOG4("Printing(%d): itemize %d late %d", getpid(), 0,
+	    sess.lateprint);
 
 	if (!io_write_int(&sess, fd, sess.lver)) {
 		ERRX1("io_write_int");
