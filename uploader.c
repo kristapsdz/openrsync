@@ -1218,6 +1218,11 @@ check_file(int rootfd, struct flist *f, struct stat *st,
 
 	if (fstatat(rootfd, path, st, AT_SYMLINK_NOFOLLOW) == -1) {
 		if (errno == ENOENT) {
+			if (sess->opts->ignore_non_existing) {
+				LOG1("Skip non existing '%s'", f->path);
+				return 0;
+			}
+
 			if (sess->opts->hard_links) {
 				/*
 				 * We don't need the leader's stat info,
@@ -1288,6 +1293,11 @@ check_file(int rootfd, struct flist *f, struct stat *st,
 
 	if (sess->opts->update && st->st_mtime > f->st.mtime) {
 		LOG1("Skip newer '%s'", f->path);
+		return 4;
+	}
+
+	if (sess->opts->ignore_existing) {
+		LOG1("Skip existing '%s'", f->path);
 		return 4;
 	}
 
@@ -1600,7 +1610,8 @@ pre_file(struct upload *p, int *filefd, off_t *size, struct sess *sess,
 	 */
 
 	if (rc >= 0 && rc < 3) {
-		fix_metadata = !dry_run;
+		fix_metadata = (rc != 0 || !sess->opts->ignore_non_existing) &&
+		    !dry_run;
 
 		/*
 		 * If the file is a hardlink to another file (or will

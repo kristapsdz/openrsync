@@ -484,6 +484,7 @@ const struct option	 lopts[] = {
     { "dry-run",	no_argument,	NULL,			'n' },
     { "exclude",	required_argument, NULL,		OP_EXCLUDE },
     { "exclude-from",	required_argument, NULL,		OP_EXCLUDE_FROM },
+    { "existing",	no_argument, NULL,			OP_SET_BOOL_TRUE },
     { "filter",		required_argument, NULL,		'f' },
     { "force",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     { "from0",		no_argument,	NULL,			'0' },
@@ -491,6 +492,8 @@ const struct option	 lopts[] = {
     { "hard-links",	no_argument,	NULL,			'H' },
     { "help",		no_argument,	NULL,			'h' },
     { "ignore-errors",	no_argument,	NULL,			OP_SET_BOOL_TRUE },
+    { "ignore-existing", no_argument, NULL,			OP_SET_BOOL_TRUE },
+    { "ignore-non-existing", no_argument, NULL,			OP_SET_BOOL_TRUE },
     { "ignore-times",	no_argument,	NULL,			'I' },
     { "include",	required_argument, NULL,		OP_INCLUDE },
     { "include-from",	required_argument, NULL,		OP_INCLUDE_FROM },
@@ -598,6 +601,8 @@ usage(void)
 	    "\t[--group, -g]\n"
 	    "\t[--hard-links, -H]\n"
 	    "\t[--ignore-errors]\n"
+	    "\t[--ignore-existing]\n"
+	    "\t[--ignore-non-existing]\n"
 	    "\t[--ignore-times, -I]\n"
 	    "\t[--include-from=file]\n"
 	    "\t[--include]\n"
@@ -716,12 +721,18 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 				opts.del_excl = true;
 			else if (strcmp(lopts[lidx].name, "devices") == 0)
 				opts.devices = true;
+			else if (strcmp(lopts[lidx].name, "existing") == 0)
+				opts.ignore_non_existing = true;
 			else if (strcmp(lopts[lidx].name, "force") == 0)
 				opts.force_delete = true;
 			else if (strcmp(lopts[lidx].name, "group") == 0)
 				opts.preserve_gids = true;
 			else if (strcmp(lopts[lidx].name, "ignore-errors") == 0)
 				opts.ignore_errors = true;
+			else if (strcmp(lopts[lidx].name, "ignore-existing") == 0)
+				opts.ignore_existing = true;
+			else if (strcmp(lopts[lidx].name, "ignore-non-existing") == 0)
+				opts.ignore_non_existing = true;
 			else if (strcmp(lopts[lidx].name, "links") == 0)
 				opts.preserve_links = true;
 			else if (strcmp(lopts[lidx].name, "numeric-ids") == 0)

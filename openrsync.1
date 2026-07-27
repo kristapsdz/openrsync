@@ -55,6 +55,8 @@
 .Op Fl -group , Fl g
 .Op Fl -hard-links , Fl H
 .Op Fl -ignore-errors
+.Op Fl -ignore-existing
+.Op Fl -ignore-non-existing
 .Op Fl -ignore-times , Fl I
 .Op Fl -include-from Ns = Ns Ar file
 .Op Fl -include Ns = Ns Ar pattern
@@ -396,6 +398,12 @@ Attempt to preserve hard links within the list of files transferred.
 Works in conjunction with
 .Fl -delete
 to delete files despite I/O errors.
+.It Fl -ignore-existing
+Ignore files that already exist.
+.It Fl -ignore-non-existing , Fl -existing
+Ignore files that do not already exist (do not create them).
+The legacy flag for this is
+.Fl -existing .
 .It Fl -ignore-times , Fl I
 Do not skip based on file size and modification time.
 .It Fl -include-from Ns = Ns Ar file
@@ -582,6 +590,9 @@ The user of the file in decimal format, or
 when the user is
 .Li 0 .
 .El
+.Pp
+This legacy flag for this is
+.Fl -log-format .
 .It Fl -owner , Fl o
 Set the user name to match the source, with similar matching logic as for
 .Fl g .

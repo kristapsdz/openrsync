@@ -55,14 +55,21 @@ bool
 rsync_set_metadata_at(const struct sess *sess, bool newfile, int rootfd,
     const struct flist *f, const char *path)
 {
-	struct timespec	 ts[2];
-	uid_t		 uid = (uid_t)-1;
-	gid_t		 gid = (gid_t)-1;
-	mode_t		 mode;
+	struct timespec	 ts[2]; /* time to apply */
+	uid_t		 uid = (uid_t)-1; /* uid to apply */
+	gid_t		 gid = (gid_t)-1; /* gid to apply */
+	mode_t		 mode; /* mode to apply */
+	struct stat      st; /* temporary file stat */
 	int		 serrno; /* temporary */
+	bool		 pres_exec = false; /* NOTYET */
 
 	if (sess->opts->dry_run || (f->flstate & FLIST_SKIP_METADATA))
 		return true;
+
+	if (pres_exec || sess->opts->ignore_non_existing)
+		if (fstatat(rootfd, f->path, &st, AT_SYMLINK_NOFOLLOW) == -1)
+			if (errno == ENOENT)
+				return true;
 
 	/* Conditionally adjust file modification time. */
 
@@ -216,6 +223,8 @@ build_for_hardlinks(const struct sess *sess, struct hardlink *hl,
 		    AT_SYMLINK_NOFOLLOW) == 0) {
 			if (sess->opts->update &&
 			    st.st_mtime > fl[i].st.mtime)
+				continue;
+			if (sess->opts->ignore_existing)
 				continue;
 
 			hl[hlsz].st_dev = st.st_dev;

@@ -402,6 +402,8 @@ struct	opts {
 	bool		 from0;			/* -0 */
 	bool		 hard_links;		/* -H */
 	bool		 ignore_errors;		/* --ignore-errors */
+	bool		 ignore_existing;	/* --ignore-existing */
+	bool		 ignore_non_existing;	/* --[ignore-non-]existing */
 	bool		 ignore_times;		/* -I */
 	bool		 keep_dirlinks;		/* -K */
 	bool		 no_motd;		/* --no-motd */

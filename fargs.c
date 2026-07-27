@@ -214,6 +214,10 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "--suffix");
 		addargs(&args, "%s", sess->opts->backup_suffix);
 	}
+	if (sess->opts->ignore_existing)
+		addargs(&args, "--ignore-existing");
+	if (sess->opts->ignore_non_existing)
+		addargs(&args, "--ignore-non-existing");
 	if (sess->opts->one_file_system > 1)
 		addargs(&args, "-x");
 	if (sess->opts->one_file_system > 0)
