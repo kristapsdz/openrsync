@@ -687,6 +687,19 @@ main(void)
 	return !LE_32(23);
 }
 #endif /* TEST_SYS_BYTEORDER_H */
+#if TEST_SYS_CDEFS_H
+/*
+ * OmniOS doesn't have this header file.
+ */
+
+#include <sys/cdefs.h>
+
+int
+main(void)
+{
+	return 0;
+}
+#endif /* TEST_SYS_CDEFS_H */
 #if TEST_SYS_ENDIAN_H
 #include <sys/endian.h>
 

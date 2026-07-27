@@ -2,7 +2,17 @@
 
 The main branch of this repository is being **actively developed**.
 While issues are accepted, please make sure they're against the current
-code.  Pull requests are welcome.
+code, and actual issues with the code.  Any issues should have at a
+minimum:
+
+- your operating system
+- the `openrsync` command used that prompted the issue
+- if applicable, what the remote host was running rsync-wise
+
+Pull requests are welcome!
+
+If you have an issue with portability, please post it to the
+[oconfigure](https://github.com/kristapsdz/oconfigure) repository.
 
 # Introduction
 
@@ -60,6 +70,9 @@ On an up-to-date UNIX system, simply download and run:
 % make
 # make install
 ```
+
+If you have additional `LDFLAGS` or such, pass them as arguments to
+`./configure`.
 
 On some systems (Linux, mostly) this currently requires BSD make, which
 is usually installed as `bmake`.
