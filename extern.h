@@ -140,6 +140,7 @@ enum dryrun {
 #define ERR_WAITPID	21 /* error waiting for subprocesses */
 #define ERR_NOMEM	22 /* out of memory */
 #define ERR_PARTIAL	23 /* not all files transferred */
+#define ERR_DEL_LIMIT	25 /* reached limit of max delete files */
 
 /*
  * Use this for --timeout.
@@ -385,6 +386,7 @@ struct	opts {
 	int		 compression_level;	/* --compress-level */
 	long		 block_size;		/* -B */
 	size_t		 human_readable;	/* --human-readable, -h NOTYET */
+	ssize_t		 max_delete;		/* --max-delete */
 	size_t		 one_file_system;	/* -x */
 	char		 ipf;			/* 0 (unspec), 4 (IPV4), 6 (IPV6) */
 	bool		 backup;		/* -b */
@@ -564,6 +566,7 @@ struct	sess {
 	size_t		   token_bufsz; /* used for protocol token processing */
 	size_t		   token_cbufsz; /* size of token_dbuf */
 	size_t		   token_dbufsz; /* size of token_dbuf */
+	size_t		   total_deleted; /* total files deleted */
 	enum fmode	   mode; /* sender or receiver */
 	int		   mplex_reads; /* multiplexing reads? */
 	int		   wbatch_fd; /* TODO */
@@ -571,6 +574,7 @@ struct	sess {
 	int32_t		   protocol; /* negotiated protocol version */
 	int32_t		   rver; /* remote version */
 	int32_t		   seed; /* checksum seed */
+	bool		   err_del_limit; /* --max-delete limit exceeded */
 	bool		   lateprint; /* output format contains late print flag */
 	bool		   lreceiver; /* Receiver is local */
 	bool		   mplex_writes; /* multiplexing writes? */

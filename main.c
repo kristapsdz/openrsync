@@ -442,6 +442,7 @@ enum {
 	OP_INCLUDE,
 	OP_INCLUDE_FROM,
 	OP_LINK_DEST,
+	OP_MAX_DELETE,
 	OP_MAX_SIZE,
 	OP_MIN_SIZE,
 	OP_OUT_FORMAT,
@@ -504,6 +505,7 @@ const struct option	 lopts[] = {
     { "links",		no_argument,	NULL,			OP_SET_BOOL_TRUE },
     /* Deprecated, same as --out-format */
     { "log-format",	required_argument, NULL,		OP_OUT_FORMAT },
+    { "max-delete",	required_argument, NULL,		OP_MAX_DELETE },
     { "max-size",	required_argument, NULL,		OP_MAX_SIZE },
     { "min-size",	required_argument, NULL,		OP_MIN_SIZE },
     { "no-J",		no_argument,	NULL, 			OP_SET_BOOL_FALSE }, /* XXX */
@@ -612,6 +614,7 @@ usage(void)
 	    "\t[--link-dest=dir]\n"
 	    "\t[--links, -l]\n"
 	    "\t[--log-format=format]\n"
+	    "\t[--max-delete=count]\n"
 	    "\t[--max-size=size]\n"
 	    "\t[--min-size=size]\n"
 	    "\t[--no-devices]\n"
@@ -1050,6 +1053,13 @@ rsync_getopt(int argc, char *argv[], rsync_option_filter *filter,
 			opts.alt_base_mode = BASE_MODE_LINK;
 			basedir_cnt = rsync_getopt_xxxdest(optarg,
 			    lopts[lidx].name, basedir_cnt);
+			break;
+		case OP_MAX_DELETE:
+			opts.max_delete = strtonum(optarg, -1, SSIZE_MAX,
+			    &errstr);
+			if (errstr != NULL)
+				errx(ERR_SYNTAX, "--max-delete=%s: %s",
+				    optarg, errstr);
 			break;
 		case OP_MAX_SIZE:
 			if (scan_scaled(optarg, &tmpint) == -1 ||

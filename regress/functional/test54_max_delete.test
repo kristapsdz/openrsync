@@ -1,0 +1,101 @@
+#! /bin/sh
+
+# Test that the --max-delete option works as expected.
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+# Clean up from prior run:
+#
+mkdir -p src dst
+chmod -R a+rwx src dst
+rm -rf src dst
+
+# Create the source tree (creates src/foo/... and src/one/...):
+#
+mkdir src
+(cd src && generate_tree_1)
+
+# Create the dest tree, including extraneous files (same
+# as source tree but then moves dst/foo -> dst/extra):
+#
+mkdir dst
+(cd dst && generate_tree_1 && mv foo extra)
+
+
+# A full rsync with --delete should delete all the
+# extraneous files in dst:
+#
+$rsync -a --delete -- src/ dst/
+compare_trees -t src dst
+
+
+# Iterate over the file count of dst/extra, setting --max-delete
+# to the iteration count.  For each iteration less than the number
+# of files in dst/extra, rsync should exit 25 and leave behind
+# the appropriate number of files.  When the iteration reaches
+# the number of files in dst/extra then rsync should exit 0
+# and have entirely removed dst/extra.
+#
+rm -rf dst && mkdir dst
+(cd dst && generate_tree_1 && mv foo extra)
+LCMAX=$(find dst/extra | wc -l)
+
+# FIXME: add back in all protocols
+
+for proto in 27 ; do
+    for i in $(seq ${LCMAX}) ; do
+        if [ "$i" -lt "${LCMAX}" ] ; then
+            $rsync -a --protocol=${proto} --delete --max-delete=$i -- src/ dst/ && false || [ $? -eq 25 ]
+            [ -d dst/extra ]
+            LC1=$(find dst/extra | wc -l)
+        else
+            $rsync -a --delete --max-delete=$i -- src/ dst/
+            [ ! -d dst/extra ]
+            LC1=0
+        fi
+
+        LC2=$(expr ${LCMAX} - $i) || true
+        [ "${LC1}" -eq "${LC2}" ]
+        rm -rf dst && mkdir dst
+        (cd dst && generate_tree_1 && mv foo extra)
+    done
+done
+
+
+# Same as above, but this time the dest dir is not removed
+# before each iteration:
+#
+for proto in 27 ; do
+    for i in $(seq ${LCMAX}) ; do
+        if [ "$i" -lt "${LCMAX}" ] ; then
+            $rsync -a --protocol=${proto} --delete --max-delete=$i -- src/ dst/ && false || [ $? -eq 25 ]
+            [ -d dst/extra ]
+            LC1=$(find dst/extra | wc -l)
+        else
+            $rsync -a --protocol=${proto} --delete --max-delete=$i -- src/ dst/
+            [ ! -d dst/extra ]
+            LC1=0
+        fi
+
+        LC2=$(expr ${LCMAX} - $i) || true
+        [ "${LC1}" -eq "${LC2}" ]
+        rm -rf dst/extra
+        (cd dst && generate_tree_1 && mv foo extra)
+    done
+done
+
+
+# Setting --max-delete to numbers higher than the number
+# of files in dst/extra should cause rsync to exit 0
+# and fully delete dst/extra:
+#
+for i in $(seq 3) ; do
+    LCMAX=$(expr ${LCMAX} + 1)
+    $rsync -a --delete-after --max-delete=${LCMAX} -- src/ dst/
+    [ ! -d dst/extra ]
+    (cd dst && generate_tree_1 && mv foo extra)
+done

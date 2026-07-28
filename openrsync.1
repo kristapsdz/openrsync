@@ -65,6 +65,7 @@
 .Op Fl -keep-dirlinks , Fl K
 .Op Fl -link-dest Ns = Ns Ar dir
 .Op Fl -links , Fl l
+.Op Fl -max-delete Ns = Ns count
 .Op Fl -max-size Ns = Ns Ar size
 .Op Fl -min-size Ns = Ns Ar size
 .Op Fl -no-devices
@@ -460,6 +461,14 @@ The link is transferred as a standalone file: if the destination does
 not exist, it will be broken.
 Negate with
 .Fl -no-links .
+.It Fl -max-delete Ar count
+If >0, once
+.Ar count
+files have been deleted, do not delete any more files.
+If <0, delete no files.
+If 0, delete all matching files.
+Using 0 does not have consistent behaviour between implementations and
+should not be used.
 .It Fl -max-size Ns = Ns Ar size
 Don't transfer any file that is larger than
 .Ar size
@@ -1006,6 +1015,10 @@ error waiting for subprocesses
 out of memory
 .It 23
 not all files transferred but errors were ignored
+.It 25
+the
+.Fl -max-delete
+limit was reached
 .El
 .Sh EXAMPLES
 A common invocation of

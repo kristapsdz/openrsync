@@ -199,6 +199,9 @@ fargs_cmdline(struct sess *sess, const struct fargs *f, size_t *skip)
 		addargs(&args, "-v");
 	if (verbose < 0)
 		addargs(&args, "-q");
+	if (sess->opts->max_delete)
+		addargs(&args, "--max-delete=%zd",
+		    sess->opts->max_delete);
 	if (sess->opts->whole_file)
 		addargs(&args, "-W");
 	if (sess->opts->backup)

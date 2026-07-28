@@ -2776,6 +2776,36 @@ flist_del(struct sess *sess, int root, const struct flist *fl,
 	if (sess->total_errors > 0 && !sess->opts->ignore_errors)
 		return;
 
+	/*
+	 * (max_delete == 0) attempt to delete all files in flist
+	 * (max_delete > 0)  attempt to delete at most max_delete files
+	 * (max_delete < 0)  delete no files
+	 */
+
+	if (sess->opts->max_delete < 0)
+		return;
+
+	if (sess->opts->max_delete > 0) {
+		if (sess->total_deleted >=
+		    (size_t)sess->opts->max_delete ||
+		    sess->err_del_limit)
+			return;
+
+		/*
+		 * If the number of files deleted so far plus the number
+		 * to be deleted in this pass exceeds max_delete then
+		 * limit the number of files to be deleted to the
+		 * difference of the two.
+		 */
+
+		if (sess->total_deleted + flsz >
+		    (size_t)sess->opts->max_delete) {
+			del_limit = (size_t)sess->opts->max_delete -
+			    sess->total_deleted;
+			sess->err_del_limit = true;
+		}
+	}
+
 	begin = flsz - 1;
 	end = begin - del_limit;
 	inc = -1;
@@ -2836,6 +2866,7 @@ flist_del(struct sess *sess, int root, const struct flist *fl,
 			continue;
 
 		assert(root != -1);
+		sess->total_deleted++;
 		flag = S_ISDIR(fl[i].st.mode) ? AT_REMOVEDIR : 0;
 
 		if (sess->opts->backup) {
@@ -2898,4 +2929,8 @@ flist_del(struct sess *sess, int root, const struct flist *fl,
 			continue;
 		}
 	}
+
+	if (del_limit < flsz)
+		LOG0("Deletions stopped due to --max-delete limit "
+		    "(%zu skipped)", flsz - del_limit);
 }
