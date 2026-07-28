@@ -51,10 +51,11 @@ CFLAGS_Z   != pkg-config --cflags zlib 2>/dev/null || echo ""
 LDADD_CU   != pkg-config --libs cunit 2>/dev/null || echo ""
 CFLAGS_CU  != pkg-config --cflags cunit 2>/dev/null || echo ""
 
-# Darwin and FreeBSD have these helpful functions.
-# Provide compat implementations, if not.
+# FreeBSD has these helpful functions.
+# Darwin does as well on newer builds, but not all, so default to using
+# the compat one unless explicitly given when `configure` is invoked.
 
-.if $(UNAME) == "Darwin" || $(UNAME) == "FreeBSD"
+.if $(UNAME) == "FreeBSD"
 LDADD	  += -lsbuf
 CFLAGS	  += -DHAVE_SBUF
 .endif
