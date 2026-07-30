@@ -1197,7 +1197,6 @@ check_path(int rootfd, const char *path)
  *     1 if file exists and is possible match
  *     2 if file exists but quick check failed
  *     3 if file does not exist
- *     3 if file does not exist
  *     4 if file exists but should be ignored
  * The stat pointer st is only valid for 0, 1, and 2 returns.
  */

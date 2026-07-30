@@ -1411,6 +1411,7 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 			 * assemble a likely incorrect file and fail the
 			 * checksum at the end to trigger a redo.
 			 */
+
 			if (fstat(p->ofd, &st) == -1 ) {
 				ERR("%s: fstat", f->path);
 				close(p->ofd);
@@ -1428,6 +1429,15 @@ rsync_downloader(struct download *p, struct sess *sess, int *ofd)
 		}
 
 		/* Fall-through: there's no file. */
+
+		/*
+		 * FIXME: this is required IFF using protocol 27, as the
+		 * fact that a file is new is not transmitted using the
+		 * iflag convention until later protocol versions.
+		 */
+
+		f->iflags |= IFLAG_NEW;
+
 	}
 
 	/*

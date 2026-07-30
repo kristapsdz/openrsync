@@ -121,7 +121,6 @@ regress_cunit: $(REGRESS_CU)
 		./$$f ; \
 	done
 
-# Doesn't work: regress/functional/test10b_perms.test (???)
 # Doesn't work openrsync -> rsync: regress/functional/test40_backup.test
 # Doesn't work openrsync -> rsync: regress/functional/test25_filter_merge.test
 # Doesn't work openrsync -> rsync: regress/functional/test25_filter_merge_mods.test
@@ -129,7 +128,6 @@ regress_cunit: $(REGRESS_CU)
 # Doesn't work openrsync -> rsync: regress/functional/test25_filter_mods.test
 # Doesn't work (protocol/filter rules issue): regress/functional/test25_filter_sender.test
 # Doesn't work: regress/functional/test27_checksum.test
-# Doesn't work (in Apple as well): regress/functional/test16a_symlinks.test
 
 # Partially works (protocol version mismatches): regress/functional/test64_noimpdirs.test
 
@@ -186,7 +184,12 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test44_temp_dir.test \
 		  regress/functional/test59_ignore_errors.test \
 		  regress/functional/test13_sparse.test \
-		  regress/functional/test54_max_delete.test
+		  regress/functional/test54_max_delete.test \
+		  regress/functional/test15a_tofile.test \
+		  regress/functional/test15b_tofile.test \
+		  regress/functional/test16b_symlinks.test \
+		  regress/functional/test16a_symlinks.test \
+		  regress/functional/test10b_perms.test
 
 # Doesn't work (protocol < 29): regress/functional/test25_filter_basic_cvs.test
 # Doesn't work (protocol < 29): regress/functional/test25_filter_clear.test
@@ -202,7 +205,7 @@ REGRESS_FAIL 	= regress/functional/test12d_inex.test \
 		  regress/functional/test25_filter_dir.test \
 		  regress/functional/test25_filter_merge_cvs.test \
 		  regress/functional/test16_symlinks.test
-REGRESS_MANUAL 	=
+REGRESS_MANUAL 	= 
 RSYNC_VERBOSE	=
 
 regress/functional/mksparse: regress/functional/mksparse.c 
