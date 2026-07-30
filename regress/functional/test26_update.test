@@ -1,0 +1,74 @@
+#! /bin/sh
+
+# Test that the update option (-u) prevents newer destination
+# files from being updated.
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+
+# Create the source tree:
+mkdir dir1
+echo one > dir1/one
+echo two > dir1/two
+touch -t 202308252015.01 dir1/two
+
+# Create the reference tree identical to the source tree,
+# with the exception that "dir2/two" is one second younger
+# and contains different data than "dir1/two" (but is the
+# exact same size):
+#
+cp -a dir1 dir2
+echo owt > dir2/two
+touch -t 202308252015.02 dir2/two
+
+# Create the destination tree:
+cp -a dir2 dir3
+
+# Ensure both dir1's and dir2's mtime and access times
+# match so that compare_trees doesn't miscompare them.
+#
+touch -t 202308252015.01 dir1
+touch -t 202308252015.01 dir2
+
+# Check that the reference and dest trees are identical
+# after running rsync with --update:
+#
+$rsync -a -u -- dir1/ dir3
+compare_trees -t dir2 dir3
+
+# Same for --update option:
+#
+$rsync -a --update -- dir1/ dir3
+compare_trees -t dir2 dir3
+
+# Check that the source and dest trees are identical
+# after running rsync without the update option:
+#
+$rsync -a -- dir1/ dir3
+compare_trees -t dir1 dir3
+
+# Change the the reference file dir2/two from a regular
+# file to a directory, then recreate the dest dir from
+# a copy of the reference dir.  rsync of the source to
+# dest dir should not update dir3/two (i.e., at the
+# end of the test dir1/two should be a regular file
+# and dir3/two should be a directory).
+#
+rm -rf dir3
+rm dir2/two
+mkdir dir2/two
+cp -a dir2 dir3
+
+# Ensure both dir1's and dir2's mtime and access times
+# match so that compare_trees doesn't miscompare them.
+#
+touch -t 202308252015.01 dir1
+touch -t 202308252015.01 dir2
+
+$rsync -a -u -- dir1/ dir3
+compare_trees -t dir2 dir3

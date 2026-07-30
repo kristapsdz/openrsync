@@ -189,7 +189,13 @@ REGRESS_SUCCESS = regress/functional/test00_simple.test \
 		  regress/functional/test15b_tofile.test \
 		  regress/functional/test16b_symlinks.test \
 		  regress/functional/test16a_symlinks.test \
-		  regress/functional/test10b_perms.test
+		  regress/functional/test10b_perms.test \
+		  regress/functional/test16c_symlinks.test \
+		  regress/functional/test17_existing.test \
+		  regress/functional/test17a_existing.test \
+		  regress/functional/test17b_existing.test \
+		  regress/functional/test18_nop.test \
+		  regress/functional/test26_update.test
 
 # Doesn't work (protocol < 29): regress/functional/test25_filter_basic_cvs.test
 # Doesn't work (protocol < 29): regress/functional/test25_filter_clear.test

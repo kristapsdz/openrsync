@@ -1,0 +1,36 @@
+#! /bin/sh
+
+# make sure that --ignore-existing does not update the
+# timestamps on those existing files.
+
+set -e
+set -u
+
+. ${tstdir-.}/lib.sh
+. ${tstdir-.}/conf.sh
+
+rm -rf dir1 dir2 dir3
+# make the copy-from-here tree
+mkdir dir1
+cd dir1
+echo one > one
+echo two > two
+touch -t 202308252015.15 two
+# make the tree we want to compare to
+mkdir ../dir2
+cd ../dir2
+echo one > one
+echo oneone > two
+touch -t 202308252015.17 one
+touch -t 202308252015.17 two
+mkdir ../dir3
+cd ../dir3
+echo one > one
+echo oneone > two
+touch -t 202308252015.17 one
+touch -t 202308252015.17 two
+
+cd ..
+touch -t 202308252300 dir1 dir2
+$rsync -v -v -a --ignore-existing -- dir1/ dir3
+compare_trees -t dir2 dir3
