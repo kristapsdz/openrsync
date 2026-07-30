@@ -1,7 +1,7 @@
 #! /bin/sh
 
-set -e
-set -u
+# test "target is a file" while renaming the file
+# Test b - no subdirectory
 
 . ${tstdir-.}/lib.sh
 . ${tstdir-.}/conf.sh
@@ -10,19 +10,15 @@ rm -rf dir1 dir2 dir3
 # make the copy-from-here tree
 mkdir dir1
 cd dir1
-mkdirfile foo
-ln foo bar
+genfile_stdout_1m > foo
 # make the tree we want to compare to
 mkdir ../dir2
 cd ../dir2
-mkdirfile foo
-ln foo bar
-
-mkdir ../dir3
-cd ../dir3
-mkdirfile foo
-mkdirfile bar
-
+genfile_stdout_1m > bar
 cd ..
-$rsync -a -H --ignore-times -- dir1/ dir3
+mkdir dir3
+cd dir3
+
+$rsync -a -- ../dir1/foo bar
+cd ..
 compare_trees dir2 dir3
